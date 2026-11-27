@@ -43,7 +43,8 @@
   function build(data) {
     const box = el('div', 'pk-mpeek');
     box.id = 'pk-mpeek';
-    box.setAttribute('role', 'tooltip');
+    // 不设 role="tooltip"（同 laolao-metre-cite.js）：Metre 皮肤给所有 [role="tooltip"] 强制铺反色，摘要字和底同色消失
+    // （pr-shots run 46034579951：摘要对比度 1）。链接的 aria-describedby 照样指到这里，读屏照读。
     box.append(el('div', 'pk-mpeek__title', data.name));
     box.append(el('div', 'pk-mpeek__text' + (data.preview ? '' : ' is-empty'), data.preview || '还没有消息'));
     const meta = el('div', 'pk-mpeek__meta');

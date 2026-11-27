@@ -133,7 +133,11 @@ test('悬停延迟弹出：停够 450ms 才出；卡片有会话名、摘要（�
   const c = e.card();
   assert.ok(c, '停够了就出');
   assert.equal(c.parent, e.body, '卡片挂在 body 上，不动侧栏的节点');
-  assert.equal(c.getAttribute('role'), 'tooltip');
+  // 复发防护（pr-shots run 46034579951）：Metre 皮肤给 :is([role="tooltip"], .tooltip, .laolao-tooltip) 强制铺反色，
+  // 卡片若被它选中，摘要字和底同色（对比度 1）整行看不见。卡片不能落进这条规则（同 laolao-metre-cite.js 的引用卡）。
+  assert.match(read('laolao-metre-skin.css'), /:is\(\[role="tooltip"\], \.tooltip, \.laolao-tooltip\) \{ background: var\(--metre-text\) !important;/, '前提：皮肤里那条 tooltip 反色规则还在');
+  assert.equal(c.getAttribute('role'), null, '卡片不带 role="tooltip"');
+  assert.ok(!c.has('tooltip') && !c.has('laolao-tooltip'), '卡片也不带 .tooltip / .laolao-tooltip');
   assert.deepEqual(e.texts(), ['修登录页按钮', '按钮已经改成蓝色， 测试 12 个全过。', 'MiniMax-M2', '3 分钟前']);
   assert.equal(c.children[2].children[1].tagName, 'TIME');
   assert.equal(c.style.left, '246px', '侧栏右边 238 + 8');
