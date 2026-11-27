@@ -458,7 +458,7 @@
       const scale = Math.min(2, 8000 / Math.max(w, h)), canvas = document.createElement('canvas');
       canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((resolve, reject) => canvas.toBlob(v => (v ? resolve(v) : reject(new Error('没导出来'))), 'image/png'));
+      const blob = await (await import(new URL((window.__pinkieAsset || (p => p))('./laolao-rich-chart.js'), document.baseURI).href)).pngOf(canvas);
       const d = new Date(), pad2 = n => String(n).padStart(2, '0');
       const a = el('a');
       a.href = URL.createObjectURL(blob);

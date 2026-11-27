@@ -136,3 +136,40 @@ test('错题怪一出生就在后台备好下一次讨伐的变体；讨伐时�
   const h2 = await game.modules.monsters.huntStart({requestId: 'p2', sessionKey: KEY});
   assert.equal(h2.items[0].variant.source, 'local');
 });
+
+test('后台起名时写盘出错不漏成 unhandledRejection；没记上 nameTried，下次还会再起', async t => {
+  const {game} = gameFixture(t);
+  const unhandled = [];
+  const onUnhandled = error => unhandled.push(error);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  game.requestModel = fakeModel();
+  // 只让起名那一次「记 nameTried」的写盘失败（在 fn 改完、写盘之前抛）；出变体的写盘照常。
+  const realMutate = game.mutate.bind(game);
+  let broken = false;
+  game.mutate = fn => realMutate(state => {
+    const result = fn(state);
+    if (broken && Object.values(state.monsters?.list || {}).some(m => m.nameTried)) { broken = false; throw new Error('EIO: i/o error, write'); }
+    return result;
+  });
+  bornWrong(game, 's1', 'k7');
+  const monsters = game.modules.monsters;
+  // spawn 里那次起名是在 mutate 还没写盘时开跑的，读不到新怪就直接结束了；等它收尾，再显式起一次。
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(monsters.naming, null);
+  broken = true;
+  monsters.kickNaming();
+  assert.ok(monsters.naming);
+  // 不去 await monsters.naming：kickNaming 的调用方也不 await 它，要看的就是没人接时会不会漏出去。
+  for (let i = 0; i < 200 && monsters.naming; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(broken, false, '写盘故障应该真的触发过');
+  assert.deepEqual(unhandled, []);
+  assert.equal(monsters.naming, null);
+  const m = Object.values(game.read().monsters.list)[0];
+  assert.equal(m.named, 'local');
+  assert.equal(m.nameTried, undefined);
+  monsters.kickNaming();
+  await monsters.naming;
+  assert.equal(Object.values(game.read().monsters.list)[0].named, 'model');
+});
