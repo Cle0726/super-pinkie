@@ -13,7 +13,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar {
   position: relative;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .4) 78%, rgba(255, 255, 255, .22)),
-    linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--accent) 8%, transparent)) !important;
+    linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--accent) 8%, transparent)) var(--sb-base, transparent) !important;
   border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -230,7 +230,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-
 }
 
 /* S4/S5/K7: the selected row and the four session states share theme tokens. */
-html .sidebar { --sb-x:12px; --sb-active:rgba(217,80,141,.10); --sb-status-waiting:#e0a030; --sb-status-error:#d9534f; --sb-status-running:#d9508d; --sb-status-contrast:#fff; }
+html .sidebar { --sb-x:12px; --sb-active:rgba(217,80,141,.10); --sb-status-waiting:#e0a030; --sb-status-error:#d9534f; --sb-status-running:#d9508d; --sb-status-contrast:#fff; } /* B11·S5：≤850 抽屉压在 rgba(0,0,0,.52) 遮罩上，半透明白底只剩约 rgb(174,158,165)，高亮行时间 2.97:1；抽屉打开时末层垫 --pk-solid 实底（夜间 laolao-night.css 自己的底不读这个变量）。 */ @media (max-width: 850px) { html:not([data-laolao-plain-composer]):not([data-r2-off]) .shell--nav-drawer-open > .shell-nav .sidebar { --sb-base:var(--pk-solid); } }
 html[data-pinkie-night] .sidebar { --sb-active:rgba(255,140,190,.14); --sb-status-waiting:#f2b84b; --sb-status-error:#ff6b6b; --sb-status-running:#ff8cbe; --sb-status-contrast:#241b23; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .laolao-group__head { padding-inline:var(--sb-x) !important; }
 html .sidebar #laolao-session-manager .pinkie-project-heading .laolao-group__add-project:not(#_sb) { opacity:0 }
