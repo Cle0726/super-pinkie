@@ -80,11 +80,14 @@ try {
           const drawer = await openDrawer(page);
           await page.waitForSelector('aside.sidebar .session-row-host[data-session-key] .pk-ml-act[aria-label="归档"]', {state: 'attached', timeout: 15_000});
           // 归档一行不是当前会话的，免得 followAfterSessionLeaves 去开新会话
+          // 只挑屏幕上看得见的行（折叠分组 / 最近页之外的行在 DOM 里但不可见，hover 会一直等）
           const key = await page.evaluate(() => {
-            const rows = [...document.querySelectorAll('aside.sidebar .session-row-host[data-session-key]')].filter((n) => n.querySelector('.pk-ml-act[aria-label="归档"]'));
+            const seen = (n) => { const r = n.getBoundingClientRect(); return n.getClientRects().length > 0 && r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight; };
+            const rows = [...document.querySelectorAll('aside.sidebar .session-row-host[data-session-key]')].filter((n) => n.querySelector('.pk-ml-act[aria-label="归档"]') && seen(n));
             const row = rows.find((n) => !n.classList.contains('sidebar-recent-session--active')) || rows[0];
             return row?.dataset.sessionKey || '';
           });
+          if (!key) throw new Error('侧栏里没有看得见、带「归档」小键的会话行');
           const row = page.locator(`aside.sidebar .session-row-host[data-session-key="${key}"]`).first();
           await row.hover();
           await row.locator('.pk-ml-act[aria-label="归档"]').click({force: true});
@@ -94,8 +97,8 @@ try {
           await shoot(page, base);
           await shoot(page, `${base}-undo`, '.pinkie-archive-undo');
           // 键盘焦点：Tab 到「撤销」键再拍一张，看钴蓝焦点框
+          await page.keyboard.press('Shift');   // 先有一次键盘操作，再聚焦，:focus-visible 才会出来
           await page.focus('.pinkie-archive-undo button');
-          await page.keyboard.press('Shift');
           await shoot(page, `${base}-undo-focus`, '.pinkie-archive-undo');
           report.push({scene: 'metre', theme, width, drawer, archivedKey: key, bar: await measureBar(page), pageErrors});
         } catch (error) {
