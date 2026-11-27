@@ -1,0 +1,350 @@
+// K2 dual-core manifest, SHA-256 verification, and build/install contract tests.
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { pathToFileURL } from 'node:url';
+import {
+  DEFAULT_REPO_ROOT,
+  fetchCleCoreTarball,
+  loadCoreManifest,
+  resolveCoreSelection,
+  sha256File,
+  verifyTarballSha256,
+} from '../tools/core/manifest.mjs';
+import { buildInstallLock, envWithoutTokens, installLockedTarball } from '../tools/core/locked-install.mjs';
+import { compareCores } from '../tools/core/verify-equivalence.mjs';
+
+const read = (rel) => fs.readFileSync(path.join(DEFAULT_REPO_ROOT, rel), 'utf8');
+
+test('core-manifest.json defaults to openclaw and stays synced with legacy runtime-manifest.json', () => {
+  const manifest = loadCoreManifest(DEFAULT_REPO_ROOT);
+  const legacy = JSON.parse(read('desktop/windows/runtime-manifest.json'));
+  assert.equal(manifest.default, 'openclaw');
+  assert.match(manifest.node, /^24\./);
+  assert.equal(manifest.openclaw.version, '2026.7.1-2');
+  assert.equal(legacy.node, manifest.node);
+  assert.equal(legacy.openclaw, manifest.openclaw.version);
+  assert.match(manifest.cle.version, /^2026\.7\.1-2-c\./);
+  assert.match(manifest.cle.url, /^https:\/\/github\.com\/Cle0726\/cle-core\/releases\/download\//);
+  assert.match(manifest.cle.sha256, /^[0-9a-f]{64}$/);
+});
+
+test('resolveCoreSelection defaults to manifest.default and honors PINKIE_CORE=openclaw|cle', () => {
+  const manifest = loadCoreManifest(DEFAULT_REPO_ROOT);
+  const prevEnv = process.env.PINKIE_CORE;
+  delete process.env.PINKIE_CORE;
+  try {
+    assert.equal(resolveCoreSelection(manifest, undefined).core, 'openclaw');
+    assert.equal(resolveCoreSelection(manifest, '').core, 'openclaw');
+    assert.equal(resolveCoreSelection(manifest, 'openclaw').core, 'openclaw');
+    assert.equal(resolveCoreSelection(manifest, 'cle').core, 'cle');
+    assert.equal(resolveCoreSelection(manifest, 'CLE').core, 'cle');
+    assert.throws(() => resolveCoreSelection(manifest, 'unknown-core'), /Unsupported PINKIE_CORE/);
+  } finally {
+    if (prevEnv !== undefined) process.env.PINKIE_CORE = prevEnv;
+  }
+});
+
+test('K2-2: SHA-256 verification succeeds on exact match and hard-fails on 1-char mismatch', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-k2-sha-'));
+  try {
+    const fakeTarball = path.join(tmpDir, 'cle-core-v2026.7.1-2-c.1.tgz');
+    fs.writeFileSync(fakeTarball, Buffer.from('synthetic-cle-core-tarball-payload-k2'));
+    const realSha = sha256File(fakeTarball);
+    assert.equal(realSha, crypto.createHash('sha256').update('synthetic-cle-core-tarball-payload-k2').digest('hex'));
+
+    // Exact match passes
+    assert.equal(verifyTarballSha256(fakeTarball, realSha), realSha);
+
+    const fakeRepo = path.join(tmpDir, 'repo');
+    fs.mkdirSync(fakeRepo, { recursive: true });
+    const goodManifest = {
+      default: 'openclaw',
+      node: '24.20.0',
+      openclaw: { version: '2026.7.1-2' },
+      cle: {
+        version: '2026.7.1-2-c.1',
+        url: pathToFileURL(fakeTarball).href,
+        sha256: realSha,
+      },
+    };
+    fs.writeFileSync(path.join(fakeRepo, 'core-manifest.json'), JSON.stringify(goodManifest, null, 2));
+
+    const okRes = await fetchCleCoreTarball({
+      repoRoot: fakeRepo,
+      cacheDir: path.join(tmpDir, 'cache'),
+      localOverride: '',
+      token: '',
+    });
+    assert.equal(okRes.sha256, realSha);
+
+    // Flip ONE hex character in cle.sha256 -> must fail closed
+    const flippedFirst = realSha[0] === '0' ? '1' : '0';
+    const badSha = flippedFirst + realSha.slice(1);
+    const badManifest = {
+      ...goodManifest,
+      cle: { ...goodManifest.cle, sha256: badSha },
+    };
+    fs.writeFileSync(path.join(fakeRepo, 'core-manifest.json'), JSON.stringify(badManifest, null, 2));
+
+    await assert.rejects(
+      () => fetchCleCoreTarball({
+        repoRoot: fakeRepo,
+        cacheDir: path.join(tmpDir, 'cache-bad'),
+        localOverride: '',
+        token: '',
+      }),
+      /SHA-256 mismatch/,
+    );
+    // Even with localOverride, SHA-256 mismatch MUST still be rejected
+    await assert.rejects(
+      () => fetchCleCoreTarball({
+        repoRoot: fakeRepo,
+        cacheDir: path.join(tmpDir, 'cache-bad-local'),
+        localOverride: fakeTarball,
+        token: '',
+      }),
+      /SHA-256 mismatch/,
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('K2-1: Windows/Mac build and install scripts read core-manifest.json and Mac build never reads host openclaw', () => {
+  const buildWin = read('build-win.ps1');
+  const buildMac = read('desktop/macos/build.sh');
+  const installSh = read('install.sh');
+  const installPs1 = read('install.ps1');
+  const applyWin = read('installer/windows/apply-theme.ps1');
+  const applyMac = read('installer/macos/apply-theme.sh');
+
+  assert.match(buildWin, /core-manifest\.json/);
+  assert.match(buildWin, /tools\\core\\manifest\.mjs/);
+  assert.match(buildMac, /tools\/core\/manifest\.mjs/);
+  assert.doesNotMatch(buildMac, /command -v openclaw/, 'desktop/macos/build.sh must never read host-installed OpenClaw');
+  assert.match(installSh, /tools\/core\/manifest\.mjs/);
+  assert.match(installPs1, /tools\\core\\manifest\.mjs/);
+  assert.match(applyWin, /tools\\core\\manifest\.mjs/);
+  assert.match(applyMac, /tools\/core\/manifest\.mjs/);
+});
+
+test('K2-7: CI defines the C.le. core job running with PINKIE_CORE=cle', () => {
+  const ci = read('.github/workflows/ci.yml');
+  assert.match(ci, /cle-core-checks:/);
+  assert.match(ci, /PINKIE_CORE:\s*cle/);
+  assert.match(ci, /tools\/core\/manifest\.mjs/);
+  assert.match(ci, /tests\/visual-baseline\.test\.mjs/);
+});
+
+test('cle install lock nests every dependency and swaps in the vendored @openclaw/ai', () => {
+  const pkg = { name: 'openclaw', version: '1.0.0-2', dependencies: { left: '1.0.0', '@openclaw/ai': '1.0.0-2' } };
+  const shrinkwrap = {
+    version: '1.0.0-2',
+    packages: {
+      '': {},
+      'node_modules/left': { version: '1.0.0', integrity: 'sha512-left', dependencies: { right: '2.0.0' } },
+      'node_modules/right': { version: '2.0.5', os: ['darwin'], cpu: ['x64'] },
+      'node_modules/@openclaw/ai': { version: '1.0.0-2', resolved: 'https://registry/ai.tgz', integrity: 'sha512-npm' },
+    },
+  };
+  const core = { resolved: 'file:.cle-core/openclaw.tgz', integrity: 'sha512-core' };
+  const ai = { resolved: 'file:.cle-core/openclaw-ai.tgz', integrity: 'sha512-own' };
+  const { packages } = buildInstallLock({ pkg, shrinkwrap, core, ai }).lock;
+
+  assert.equal(packages['node_modules/left'], undefined, 'dependencies must not be hoisted');
+  assert.equal(packages['node_modules/openclaw/node_modules/left'].integrity, 'sha512-left');
+  assert.equal(packages['node_modules/openclaw/node_modules/left'].dependencies.right, '2.0.5', 'the pin beats a conflicting exact range');
+  assert.equal(packages['node_modules/openclaw/node_modules/@openclaw/ai'].integrity, 'sha512-own');
+  assert.equal(packages['node_modules/openclaw/node_modules/@openclaw/ai'].resolved, ai.resolved);
+
+  assert.deepEqual(packages['node_modules/openclaw/node_modules/right'], { version: '2.0.5' }, 'no platform filtering');
+  assert.throws(() => buildInstallLock({ pkg: { ...pkg, version: '1.0.0' }, shrinkwrap, core, ai }), /does not match/);
+  const escaping = { ...shrinkwrap, packages: { ...shrinkwrap.packages, 'node_modules/../../outside': {} } };
+  assert.throws(() => buildInstallLock({ pkg, shrinkwrap: escaping, core, ai }), /invalid path/);
+});
+
+test('cle install refuses to empty a node_modules it does not own', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-k2-prefix-'));
+  try {
+    fs.mkdirSync(path.join(tmp, 'node_modules', 'someone-elses-package'), { recursive: true });
+    const runNpm = () => assert.fail('npm must not run');
+    assert.throws(
+      () => installLockedTarball({ tarball: 'unused', prefixDir: tmp, coreVersion: 'x', runNpm, registry: '' }),
+      /not a dedicated core prefix/,
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('install scripts never receive repository tokens', () => {
+  const env = envWithoutTokens({ CLE_CORE_TOKEN: 'a', GH_TOKEN: 'b', GITHUB_TOKEN: 'c', KEEP: 'd' });
+  assert.deepEqual(env, { KEEP: 'd' });
+});
+
+test('equivalence check catches changed bytes, renamed chunks and hoisted dependencies', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-k2-equal-'));
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+  };
+  const make = (prefix, { body = 'same', chunk = 'index-AAAA.js', hoist = false } = {}) => {
+    const root = path.join(prefix, 'node_modules/openclaw');
+    write(path.join(root, 'package.json'), '{"name":"openclaw","version":"1.0.0"}');
+    write(path.join(root, 'dist/run.js'), body);
+    write(path.join(root, 'dist/control-ui/assets', chunk), 'ui');
+    write(path.join(root, 'node_modules/@openclaw/ai/package.json'), '{"version":"1.0.0"}');
+    write(path.join(root, 'node_modules/@openclaw/ai/dist/index.mjs'), 'ai');
+    write(path.join(hoist ? prefix : root, 'node_modules/left/package.json'), '{"version":"1.0.0"}');
+    return prefix;
+  };
+  try {
+    const official = make(path.join(tmp, 'official'));
+    const problems = (name, options) => compareCores(official, make(path.join(tmp, name), options)).problems.join('\n');
+    assert.equal(problems('same'), '');
+    assert.match(problems('bytes', { body: 'other' }), /changed dist\/run\.js/);
+    assert.match(problems('chunk', { chunk: 'index-BBBB.js' }), /missing dist\/control-ui\/assets\/index-AAAA\.js/);
+    assert.match(problems('hoisted', { hoist: true }), /dependency .*node_modules\/left/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('K2-7: the C.le. CI job fails closed and really compares the two cores', () => {
+  const ci = read('.github/workflows/ci.yml');
+  const job = ci.slice(ci.indexOf('cle-core-checks:'));
+  assert.doesNotMatch(job, /skipping private|exit 0/);
+  assert.match(job, /CLE_CORE_TOKEN is not configured[\s\S]{0,120}exit 1/);
+  assert.equal(job.match(/verify-equivalence\.mjs/g).length, 2, 'compare before and after patches');
+});
+
+test("Windows build keeps the build machine's real user folders out of core install, skin and patches", () => {
+  const buildWin = read('build-win.ps1');
+  const isolate = buildWin.indexOf('$isolatedHome = Join-Path $RepoRoot "build\\home"');
+  const install = buildWin.indexOf('& $node $coreHelper install');
+  const theme = buildWin.indexOf('& ".\\installer\\windows\\apply-theme.ps1"');
+  const patch = buildWin.indexOf('from app.super_pinkie import apply_patch');
+  const cleared = buildWin.indexOf('Remove-Item Env:PINKIE_SKIP_RUNTIME_PATCHES');
+  const restore = buildWin.indexOf('Restore-BuildUserEnv\n', cleared);
+  assert.ok(isolate > 0, 'isolated home is defined');
+  assert.ok(isolate < install && install < theme && theme < patch && patch < restore, 'install, skin and patches run inside the isolated span');
+  for (const name of ['HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'OPENCLAW_HOME', 'OPENCLAW_STATE_DIR']) {
+    assert.match(buildWin, new RegExp(`\\n    ${name} = Join-Path \\$isolatedHome `));
+  }
+  assert.match(buildWin, /\ntrap \{ if \(\$savedUserEnv\) \{ foreach \(\$name in @\(\$savedUserEnv\.Keys\)\) \{ \[Environment\]::SetEnvironmentVariable\(/, 'a failed build still restores the caller environment');
+});
+
+test("macOS build keeps the build machine's real user folders out of core install, Cua staging, skin and patches", () => {
+  const buildMac = read('desktop/macos/build.sh');
+  const isolate = buildMac.indexOf('OPENCLAW_BUILD_HOME="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-home.XXXXXX")"');
+  const helper = buildMac.indexOf('run_with_isolated_home() {');
+  const install = buildMac.indexOf('run_with_isolated_home env PATH="$(dirname "$NODE_BIN"):$PATH"');
+  const pack = buildMac.indexOf('archive="$(run_with_isolated_home "$NODE_BIN" "$NPM_ROOT/bin/npm-cli.js" pack');
+  const theme = buildMac.indexOf('/bin/bash "$REPO_ROOT/installer/macos/apply-theme.sh"');
+  const managedSkills = buildMac.indexOf('run_with_isolated_home env OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw"');
+  assert.ok(isolate > 0 && helper > isolate, 'isolated home and helper are defined');
+  assert.ok(helper < install && install < pack && pack < theme && theme < managedSkills, 'core install, Cua pack, apply-theme, and managed-skills patch run after helper definition');
+  for (const name of ['HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'OPENCLAW_HOME', 'OPENCLAW_STATE_DIR', 'PINKIE_STATE_ROOT']) {
+    assert.match(buildMac, new RegExp(`\\b${name}="\\$OPENCLAW_BUILD_HOME/`));
+  }
+  assert.match(buildMac, /npm_config_userconfig="\$BUILD_NPM_USERCONFIG"/, 'preserves host .npmrc when present');
+  assert.match(buildMac, /run_with_isolated_home env \\\n[\s\S]{0,400}\/bin\/bash "\$REPO_ROOT\/installer\/macos\/apply-theme\.sh"/, 'apply-theme runs inside isolated home');
+  assert.match(buildMac, /super-pinkie-home\.\*/, 'cleanup trap removes temporary build home');
+});
+
+test('core CLI helpers still execute when invoked through a symlinked directory (macOS /tmp -> /private/tmp)', () => {
+  const realBase = fs.realpathSync(os.tmpdir());
+  const tmp = fs.mkdtempSync(path.join(realBase, 'pinkie-k2-symlink-'));
+  try {
+    const linkDir = path.join(tmp, 'sym-tools');
+    fs.symlinkSync(path.join(DEFAULT_REPO_ROOT, 'tools', 'core'), linkDir, 'junction');
+    const infoRes = spawnSync(
+      process.execPath,
+      [path.join(linkDir, 'manifest.mjs'), 'field', 'core', '--root', DEFAULT_REPO_ROOT],
+      { encoding: 'utf8', env: { ...process.env, PINKIE_CORE: '' } },
+    );
+    assert.equal(infoRes.status, 0, infoRes.stderr);
+    assert.equal(infoRes.stdout, 'openclaw');
+
+    const eqRes = spawnSync(
+      process.execPath,
+      [path.join(linkDir, 'verify-equivalence.mjs')],
+      { encoding: 'utf8' },
+    );
+    assert.equal(eqRes.status, 2, 'verify-equivalence CLI must run and reject missing flags instead of silently exiting 0');
+    assert.match(eqRes.stderr, /--openclaw-prefix <dir> is required/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('installLockedTarball resolves symlinked --prefix before npm ci (macOS $TMPDIR -> /private/var/folders)', () => {
+  const realBase = fs.realpathSync(os.tmpdir());
+  const tmp = fs.mkdtempSync(path.join(realBase, 'pinkie-k2-symprefix-'));
+  try {
+    // Build a minimal valid lock-installable tarball
+    const pkgRoot = path.join(tmp, 'src', 'package');
+    fs.mkdirSync(path.join(pkgRoot, 'cle-vendor'), { recursive: true });
+    fs.writeFileSync(path.join(pkgRoot, 'package.json'), JSON.stringify({ name: 'openclaw', version: '2026.7.1-2' }));
+    fs.writeFileSync(path.join(pkgRoot, 'cle-vendor/openclaw-ai.tgz'), 'ai-bytes');
+    fs.writeFileSync(
+      path.join(pkgRoot, 'npm-shrinkwrap.json'),
+      JSON.stringify({
+        version: '2026.7.1-2',
+        packages: { '': {}, 'node_modules/@openclaw/ai': { version: '2026.7.1-2' } },
+      }),
+    );
+    const tgz = path.join(tmp, 'cle.tgz');
+    // Relative names: GNU tar on Windows reads "C:" in absolute paths as a remote host.
+    const tarRes = spawnSync('tar', ['-czf', '../cle.tgz', 'package'], { cwd: path.join(tmp, 'src'), encoding: 'utf8' });
+    assert.equal(tarRes.status, 0, tarRes.stderr);
+
+    const realTarget = path.join(tmp, 'real-prefix');
+    fs.mkdirSync(realTarget, { recursive: true });
+    const symlinkPrefix = path.join(tmp, 'symlink-prefix');
+    fs.symlinkSync(realTarget, symlinkPrefix, 'junction');
+
+    let capturedArgs = null;
+    installLockedTarball({
+      tarball: tgz,
+      prefixDir: symlinkPrefix,
+      coreVersion: '2026.7.1-2-c.3',
+      registry: 'https://registry.example.test',
+      runNpm: (args) => { capturedArgs = args; },
+    });
+    assert.ok(Array.isArray(capturedArgs), 'runNpm must be called');
+    const prefixIdx = capturedArgs.indexOf('--prefix');
+    assert.equal(capturedArgs[prefixIdx + 1], fs.realpathSync(realTarget), 'npm ci --prefix must receive realpath');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('K4 deferred install/build scripts use C.le. in user-visible messages without touching technical names', () => {
+  for (const rel of ['install.ps1', 'install.sh', 'installer/windows/apply-theme.ps1']) {
+    assert.doesNotMatch(read(rel), /CLE Kk/, `${rel} must not display legacy CLE Kk brand`);
+  }
+  assert.doesNotMatch(read('installer/windows/apply-theme.ps1'), /\.Replace\(['"]OpenClaw['"]/);
+  const applyMacNonComments = read('installer/macos/apply-theme.sh')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n');
+  assert.doesNotMatch(applyMacNonComments, /CLE Kk/, 'apply-theme.sh user-visible output must use C.le.');
+  assert.doesNotMatch(read('build-win.ps1'), /内置 OpenClaw 传输补丁失败/);
+  assert.match(read('desktop/macos/build.sh'), /tools\/ui-parity\/sw_cache\.py/, 'macOS bundle ships sw_cache.py beside bundle.py');
+  assert.match(
+    read('installer/macos/apply-theme.sh'),
+    /\[\[ -z "\$OPENCLAW_ROOT" && \( "\$SKIP_APP_BUNDLES" != "1" \|\| -n "\$\{PINKIE_APP_PATH:-\}" \) \]\]/,
+    'apply-theme.sh never mutates /Applications unsealed when SKIP_APP_BUNDLES=1',
+  );
+  assert.match(
+    read('installer/macos/apply-theme.sh'),
+    /NFSHomeDirectory/,
+    'apply-theme.sh skips host launchctl bootstrap when running inside an isolated HOME',
+  );
+});

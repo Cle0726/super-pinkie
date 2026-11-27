@@ -369,18 +369,14 @@ def openclaw_config_path():
     return Path(config_name) if config_name else Path.home() / ".openclaw" / "openclaw.json"
 
 
-_POWERSHELL_SINGLE_QUOTES = re.compile("['\u2018\u2019\u201a\u201b]")
+# PowerShell ends a '...' string at any of these, not only at the ASCII quote
+# (B33: a profile under C:\Users\O’Brien broke the -Command below).
+PS_SINGLE_QUOTES = "'\u2018\u2019\u201a\u201b"
 
 
-def powershell_single_quoted(value):
-    """``value`` as a PowerShell single-quoted literal, quotes included.
-
-    PowerShell ends a '...' string at any of ' \u2018 \u2019 \u201a \u201b, not just the
-    ASCII one, and each is escaped by doubling it. Doubling only ' left a
-    profile like C:\\Users\\O\u2019Brien (Word's apostrophe) with an unterminated
-    string, so the whole command failed to parse.
-    """
-    return "'" + _POWERSHELL_SINGLE_QUOTES.sub(lambda match: match.group(0) * 2, str(value)) + "'"
+def ps_single_quoted(value):
+    """Return value as a PowerShell single-quoted literal that cannot end early."""
+    return "'" + "".join(ch * 2 if ch in PS_SINGLE_QUOTES else ch for ch in str(value)) + "'"
 
 
 def cleanup_orphan_webview(storage):
@@ -391,7 +387,7 @@ def cleanup_orphan_webview(storage):
     # -like treats [ ] in a folder name as a character class; escape them so
     # the path matches itself.
     script = (
-        "$root=[Management.Automation.WildcardPattern]::Escape(" + powershell_single_quoted(path) + "); "
+        "$root=[Management.Automation.WildcardPattern]::Escape(" + ps_single_quoted(path) + "); "
         "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | "
         "Where-Object { $_.CommandLine -and $_.CommandLine -like ('*--user-data-dir=*' + $root + '*') } | "
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"

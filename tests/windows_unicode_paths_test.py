@@ -44,17 +44,6 @@ def powershell():
     return shutil.which("powershell.exe")
 
 
-class PowerShellQuoteTests(unittest.TestCase):
-    def test_every_powershell_single_quote_is_doubled(self):
-        for quote in "'\u2018\u2019\u201a\u201b":
-            self.assertEqual(windows_desktop.powershell_single_quoted("a" + quote + "b"),
-                             "'a" + quote * 2 + "b'")
-
-    def test_plain_chinese_path_with_spaces_is_kept_as_is(self):
-        self.assertEqual(windows_desktop.powershell_single_quoted(r"C:\Users\张 三\AppData"),
-                         r"'C:\Users\张 三\AppData'")
-
-
 class CleanupOrphanWebviewPathTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

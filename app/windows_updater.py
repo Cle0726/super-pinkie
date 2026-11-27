@@ -762,7 +762,9 @@ function Register-RestoreAtLogon {
   try {
     if ((Test-Path -LiteralPath $TargetDir) -or -not (Test-Path -LiteralPath $Backup)) { return }
     $restore = Join-Path $UpdateRoot ('restore-' + $Token + '.ps1')
-    $target = $TargetDir.Replace("'", "''"); $backupPath = $Backup.Replace("'", "''"); $log = $LogPath.Replace("'", "''")
+    # PowerShell also ends '...' at ‘ ’ ‚ ‛, so double those too (B33).
+    $quotes = "['\u2018-\u201B]"
+    $target = $TargetDir -replace $quotes, '$0$0'; $backupPath = $Backup -replace $quotes, '$0$0'; $log = $LogPath -replace $quotes, '$0$0'
     @(
       "if (-not (Test-Path -LiteralPath '$target') -and (Test-Path -LiteralPath '$backupPath')) {",
       "  try { Move-Item -LiteralPath '$backupPath' -Destination '$target' -ErrorAction Stop; `$message = 'previous version restored at sign-in' }",
@@ -1188,11 +1190,37 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 process.terminate()
             except (OSError, AttributeError):
                 pass
-        for name in (f"progress-{token}.json", f"progress-{token}.ps1", f"repair-{token}.ps1"):
+        for name in (f"progress-{token}.json", f"progress-{token}.json.shown", f"progress-{token}.ps1",
+                     f"repair-{token}.ps1"):
             try:
                 (update_root / name).unlink()
             except OSError:
                 pass
+
+    STALE_MARKER_SECONDS = 24 * 3600
+
+    @classmethod
+    def _sweep_stale_progress_markers(cls, update_root, now=None):
+        """Delete progress-*.json.shown left by earlier updates.
+
+        The window writes the marker before it shows itself and the App only
+        reads it in the three seconds after starting the window, but nothing
+        removed it afterwards, so <state>/updates gained one file per update
+        (B19). A day-old marker belongs to no running update."""
+        now = time.time() if now is None else now
+        try:
+            markers = list(Path(update_root).glob("progress-*.json.shown"))
+        except OSError:
+            return 0
+        removed = 0
+        for marker in markers:
+            try:
+                if now - marker.stat().st_mtime > cls.STALE_MARKER_SECONDS:
+                    marker.unlink()
+                    removed += 1
+            except OSError:
+                pass
+        return removed
 
     def launch_replacer(self, elevated=False):
         with self.lock:
@@ -1206,6 +1234,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             update_root = state_root() / "updates"
             health_root = update_root / "health"
             health_root.mkdir(parents=True, exist_ok=True)
+            self._sweep_stale_progress_markers(update_root)
             # Windows PowerShell 5.1 reads a .ps1 without a BOM in the ANSI code
             # page (GBK on Chinese Windows), which garbled the hard-coded
             # 超級碧琪 folder name: every portable update failed its layout
