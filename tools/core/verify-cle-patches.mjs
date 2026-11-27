@@ -24,6 +24,7 @@ const RUNTIME_PATCHES = [
   'patch/apply-same-session-recovery.mjs',
   'patch/apply-steer-fallback-wait.mjs',
   'patch/apply-retry-single-user.mjs',
+  'patch/apply-noop-write-continue.mjs',
   'patch/apply-loopback-model-reliability.mjs',
   'patch/apply-local-unrestricted-policy.mjs',
   'patch/apply-work-thinking.mjs',
