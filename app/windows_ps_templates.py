@@ -282,6 +282,7 @@ $timer.Start()
 try { Set-Content -LiteralPath ($Status + '.shown') -Value '1' -Encoding ascii } catch {}
 [void]$window.ShowDialog()
 Remove-Item -LiteralPath $Status -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath ($Status + '.shown') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 

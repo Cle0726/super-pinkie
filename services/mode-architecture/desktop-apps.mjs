@@ -28,7 +28,10 @@ export function safeAppName(raw, limit = APP_LIMITS.nameChars) {
   let name = String(raw || '').replace(/\.(html?|htm)$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
   name = [...name].slice(0, limit).join('').replace(/^[.\s]+|[.\s]+$/g, '');
   if (!name) name = '作品';
-  if (RESERVED.test(name)) name = name + ' 作品';
+  // Windows 按第一个点之前的主干认保留设备名（con.txt 也不行），后缀插在主干后、点之前，扩展名原样保留。
+  const dot = name.indexOf('.');
+  const stem = dot < 0 ? name : name.slice(0, dot);
+  if (RESERVED.test(stem)) name = stem + ' 作品' + name.slice(stem.length);
   return name;
 }
 
@@ -118,11 +121,15 @@ export function navGuardScript(origins) {
 }
 
 // 没勾读文件：在作品自己的脚本之前把文件选择框挡掉（file input 的点击、File System Access API）。
+// 点击走 composedPath：影子树里的 input 在事件上被换成宿主，closest 够不着。
+// showPicker 不走 click，也不走上面三个选择器 API，单独包一层。
 export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMException("这个应用没有读文件的权限","NotAllowedError"));'
   + 'for(const k of ["showOpenFilePicker","showDirectoryPicker","showSaveFilePicker"])try{Object.defineProperty(window,k,{value:no,configurable:false})}catch{}'
-  + 'addEventListener("click",e=>{const t=e.target&&e.target.closest&&e.target.closest("input[type=file],label");'
-  + 'const i=t&&(t.matches("input")?t:t.control);if(i&&i.type==="file"){e.preventDefault();e.stopImmediatePropagation()}},true);'
-  + 'const c=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(){if(this.type==="file")return;return c.call(this)}})()</script>';
+  + 'const fileInput=n=>!!(n&&n.tagName==="INPUT"&&String(n.type).toLowerCase()==="file");'
+  + 'addEventListener("click",e=>{const p=typeof e.composedPath==="function"?e.composedPath():[e.target];'
+  + 'for(const n of p){if(fileInput(n)||(n&&n.tagName==="LABEL"&&fileInput(n.control))){e.preventDefault();e.stopImmediatePropagation();return}}},true);'
+  + 'const proto=HTMLInputElement.prototype;const c=proto.click;proto.click=function(){if(String(this.type).toLowerCase()==="file")return;return c.call(this)};'
+  + 'if(typeof proto.showPicker==="function"){const s=proto.showPicker;proto.showPicker=function(){if(String(this.type).toLowerCase()==="file")throw new DOMException("这个应用没有读文件的权限","NotAllowedError");return s.call(this)}}})()</script>';
 
 // 文档开头「解析器还没开始建内容」的那一段：空白、BOM、注释（按 HTML 规范收尾：<!-->、<!--->、--> 或 --!>）、
 // <!…> / <?…> / </> 这类假注释、doctype、<html>、<head>（属性按引号读，引号里的 > 不算结尾）。
@@ -321,7 +328,8 @@ export class DesktopApps {
     const used = new Set(needsOf(html).network);
     const origins = cleanOrigins(network).filter(origin => used.has(origin));
     const dir = this.dirOf(appId);
-    const staging = `${dir}.staging-${process.pid}-${this.now()}`;
+    const stamp = `${process.pid}-${this.now()}`;
+    const staging = `${dir}.staging-${stamp}`;
     fs.rmSync(staging, {recursive: true, force: true});
     fs.mkdirSync(staging, {recursive: true, mode: 0o700});
     try {
@@ -331,8 +339,21 @@ export class DesktopApps {
         fs.writeFileSync(path.join(staging, 'icon.ico'), icoFromPng(png));
         fs.writeFileSync(path.join(staging, 'icon.icns'), icnsFromPng(png));
       }
-      fs.rmSync(dir, {recursive: true, force: true});
-      fs.renameSync(staging, dir);
+      // 换目录不先删旧版本：旧目录先挪成备份，新版本挪进来之后才删备份；挪不进来就把备份挪回去（回滚出错不盖住原错误）。
+      // 备份名跟暂存目录同一个戳（进程号 + 时钟），不会撞上别的安装；万一撞上，挪备份那一步就失败，旧版本原地不动。
+      // Windows 上旧目录被占用时也是挪备份那一步失败：什么都没动，只清暂存目录、原错误往上抛。
+      const backup = fs.existsSync(dir) ? `${dir}.backup-${stamp}` : '';
+      if (backup) fs.renameSync(dir, backup);
+      try {
+        fs.renameSync(staging, dir);
+      } catch (error) {
+        if (backup) {
+          try { fs.rmSync(dir, {recursive: true, force: true}); } catch { /* 尽力清掉挪了一半的目录 */ }
+          try { fs.renameSync(backup, dir); } catch { /* 回滚尽力而为，抛原来的错误 */ }
+        }
+        throw error;
+      }
+      if (backup) try { fs.rmSync(backup, {recursive: true, force: true}); } catch { /* 新版本已就位，备份删不掉不算失败 */ }
     } catch (error) {
       fs.rmSync(staging, {recursive: true, force: true});
       throw error;
@@ -346,13 +367,15 @@ export class DesktopApps {
   }
 
   // 只删碧琪数据目录里的副本和记录；入口（快捷方式 / .app）由原生端先删。
+  // 先删目录、删干净了再删记录：删目录抛错（文件被锁 / 没权限）时记录保留、错误往上抛，
+  // 不会留下“记录没了、目录还在”的孤儿目录，用户还能再点一次卸载。
   remove(appId) {
     const data = this.load();
     const app = data.apps[String(appId || '')];
     if (!app) return {ok: true, removed: false};
+    fs.rmSync(this.dirOf(app.id), {recursive: true, force: true});
     delete data.apps[app.id];
     this.save();
-    fs.rmSync(this.dirOf(app.id), {recursive: true, force: true});
     return {ok: true, removed: true, name: app.name};
   }
 }

@@ -41,6 +41,9 @@ export function speciesFor(key, region) {
   return {species: pick[0], speciesName: pick[1]};
 }
 const clean = (v, n = 400) => String(v ?? '').replace(/\u0000/g, '').trim().slice(0, n);
+// 种子题要容得下「文章（真题最多 1200 字）+ 空行 + 题干（真题最多 2500 字）」：旧上限 800 会把题干整段切掉，
+// 讨伐出变体、离线退回原题时都只剩半篇文章、看不到问的是什么。
+export const SEED_QUESTION_MAX = 4000;
 
 export class GameMonsters {
   constructor(game) {
@@ -71,7 +74,7 @@ export class GameMonsters {
       existing.state = 'lurking';
       existing.sources.push({...source, at: now});
       existing.sources = existing.sources.slice(-8);
-      if (question) existing.seed = {question: clean(question, 800), answer: clean(answer, 300), options: Array.isArray(options) ? options.map(o => clean(o, 200)).slice(0, 6) : null};
+      if (question) existing.seed = {question: clean(question, SEED_QUESTION_MAX), answer: clean(answer, 300), options: Array.isArray(options) ? options.map(o => clean(o, 200)).slice(0, 6) : null};
       return existing;
     }
     const region = regionOf(`${subject} ${topic} ${question}`);
@@ -82,7 +85,7 @@ export class GameMonsters {
       id, key: k, species: sp.species, name: `${shortTopic} · ${sp.speciesName}`, blurb: `它藏着「${shortTopic}」的一个小坑，过几天回来找你。`, named: 'local',
       level: 1, evolved: 0, region, node, subject: clean(subject, 40), topic: clean(topic, 60), bornAt: now, dueAt: now + lurk[0] * DAY, stage: 0,
       wins: [], state: 'lurking', sources: [{...source, at: now}],
-      seed: {question: clean(question, 800), answer: clean(answer, 300), options: Array.isArray(options) ? options.map(o => clean(o, 200)).slice(0, 6) : null},
+      seed: {question: clean(question, SEED_QUESTION_MAX), answer: clean(answer, 300), options: Array.isArray(options) ? options.map(o => clean(o, 200)).slice(0, 6) : null},
     };
     box.list[id] = m;
     this.kickNaming();

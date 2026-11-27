@@ -132,13 +132,27 @@ class RelayPortIdentityTests(unittest.TestCase):
         return port
 
     def wait_health(self, url, timeout=30):
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             identity = http_identity(url)
             if identity:
                 return identity
             time.sleep(0.25)
         return {}
+
+    @staticmethod
+    def wait_for_log_line(path, needle, timeout=5):
+        """Poll a log file until it contains ``needle``; return its text either way."""
+        deadline = time.monotonic() + timeout
+        text = ""
+        while True:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                text = ""
+            if needle in text or time.monotonic() >= deadline:
+                return text
+            time.sleep(0.05)
 
     def start_foreign_proxy(self):
         port = self.free_port()
@@ -171,7 +185,8 @@ class RelayPortIdentityTests(unittest.TestCase):
         )
         self.addCleanup(stop, relay)
         url = f"http://127.0.0.1:{port}/health"
-        self.wait_health(url)
+        if not self.wait_health(url):
+            self.fail(f"{script.name} did not answer {url} within 30s (exit code {relay.poll()})")
         return url
 
     def test_bundled_relay_identifies_itself_on_health(self):
@@ -212,7 +227,8 @@ class RelayPortIdentityTests(unittest.TestCase):
             with mock.patch.object(windows_desktop, "state_root", return_value=Path(directory)):
                 services = LocalServices(runtime=mock.Mock(root=self.ROOT))
                 services._start_relay(port, self.free_port())
-                time.sleep(0.3)
+                # Wait for the launcher's verdict instead of a fixed pause.
+                self.wait_for_log_line(Path(directory) / "logs" / "launcher.log", "relay port busy")
 
             self.assertIsNone(services.relay, "the bundled relay must not be started")
             log = (Path(directory) / "logs" / "launcher.log").read_text(encoding="utf-8")

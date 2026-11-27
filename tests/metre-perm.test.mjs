@@ -2,7 +2,7 @@
 // （按键行、openclaw-exec-approval 卡片）、假网关请求函数和本批两个文件。
 // 改前（a4d141bf）：没有这两个文件，Metre 下没有放手程度 / 先出方案 / 状态键，审批卡是原生英文标题、只露第一条，
 // Metre 会话的审批不提醒（laolao-run-notify.js 的会话正则没有 metre），额度用完不会到点接着做——下面每条都失败。
-import {test} from 'node:test';
+import {after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -11,7 +11,39 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 const inj = (f) => fileURLToPath(new URL('../ui/injections/' + f, import.meta.url));
 const read = (f) => fs.readFileSync(inj(f), 'utf8');
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-const launch = () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+// CI 提速：整个文件只起一个浏览器，各测试共用。每个测试仍自己开 context（viewport / 时区跟原来的 newPage 一样），结束就关。
+// 起不来就跟以前一样让这个测试失败，不改成跳过。
+let sharedBrowserPromise = null;
+function sharedBrowser() {
+  sharedBrowserPromise ??= playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  return sharedBrowserPromise;
+}
+const launch = async () => {
+  const browser = await sharedBrowser();
+  const opened = [];
+  return {
+    async newPage(options) {
+      const context = await browser.newContext(options);
+      opened.push(context);
+      const page = await context.newPage();
+      const closePage = page.close.bind(page);
+      page.close = async (...args) => {
+        try { return await closePage(...args); }
+        finally { await context.close().catch(() => {}); }
+      };
+      return page;
+    },
+    async close() {
+      await Promise.all(opened.map((context) => context.close().catch(() => {})));
+      opened.length = 0;
+    },
+  };
+};
+after(async () => {
+  if (!sharedBrowserPromise) return;
+  const browser = await sharedBrowserPromise.catch(() => null);
+  if (browser) await browser.close();
+});
 const SK = 'agent:metre:dashboard:t1';
 
 // Metre 的日夜变量（laolao-metre-skin.css 第 1036、1122、1244 行起的原值）
@@ -732,6 +764,29 @@ async function foldToDots(p) {
   assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.fold), '3', '前提：收到「⋯」');
   assert.equal(await p.textContent('.pk-perm-chip--stat'), '⋯');
 }
+// 页面上当前那个「⋯」键的宽：等到它挂在文档里、宽 > 0 再取（有上限，超时报清楚现状，不放宽断言）。
+// 不用 p.$eval：按 Playwright 服务端 evalOnSelector 的写法，它是先查到元素拿句柄、再另一次求值去量，两步之间页面的定时器能插进来。
+// 点「⋯」时页面第一次 pointerup 排了 fitSoon（60 / 400 / 1500ms 再量），收拢档位 ≠ 0 时每次 fit() 都用 build() 重建
+// .pk-perm-chips、换掉旧节点——插进来的话量到的就是已经摘掉的旧节点，宽 0（CI 上「打开前后键宽不变」actual 0、expected 27.15625）。
+// 查和量放在页面里同一次同步执行里，就不会量到旧节点。轮询在 Node 这边做：装了假时钟以后页面里的 waitForFunction 轮询会停
+// （见上面 until()），这里不依赖页面的定时器；这是有上限的条件等待，不是固定等。
+async function statKeyWidth(p, what, timeout = 5000) {
+  const probe = () => {
+    const k = document.querySelector('.pk-perm-chip--stat');
+    if (!k) return {found: false};
+    return {found: true, text: k.textContent, connected: k.isConnected, w: k.getBoundingClientRect().width,
+      display: getComputedStyle(k).display, fold: k.closest('.pk-perm-chips')?.dataset.fold ?? null};
+  };
+  const deadline = Date.now() + timeout;
+  let now = null;
+  for (;;) {
+    now = await p.evaluate(probe);
+    if (now.found && now.connected && now.w > 0) return now.w;
+    if (Date.now() >= deadline) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`${what}：${timeout}ms 内没等到「⋯」键渲染出来且宽 > 0（现状 ${JSON.stringify(now)}）`);
+}
 
 test(`the collapsed ⋯ key has a ring at least 3:1 without changing its width, and at night its dots use the text colour (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
@@ -750,10 +805,12 @@ test(`the collapsed ⋯ key has a ring at least 3:1 without changing its width, 
       assert.ok(ratio(r.ring, r.bg) >= 3, `${tag}：描边 ${ratio(r.ring, r.bg).toFixed(2)}（${JSON.stringify(r)}）`);
       assert.ok(r.inset && r.border === '0px', `${tag}：描边是内阴影，不加边框、不占宽度（${JSON.stringify(r)}）`);
       if (night) assert.ok(ratio(r.dots, r.bg) >= 12, `夜：点色 ${r.dots} 对底 ${ratio(r.dots, r.bg).toFixed(2)}`);
-      // 打开再关上，宽度不变
+      // 打开再关上，宽度不变（两头都等到「⋯」键在文档里、宽 > 0 再量，见 statKeyWidth）
+      const before = await statKeyWidth(p, `${tag}：打开前`);
+      assert.equal(before, r.w, `${tag}：打开前量到的键宽和上面描边那次一致`);
       await p.clock.resume();
       await p.click('.pk-perm-chip--stat'); await p.waitForSelector('.pk-perm-pop--detail'); await p.keyboard.press('Escape');
-      assert.equal(await p.$eval('.pk-perm-chip--stat', (e) => e.getBoundingClientRect().width), r.w, `${tag}：打开前后键宽不变`);
+      assert.equal(await statKeyWidth(p, `${tag}：打开后`), before, `${tag}：打开前后键宽不变`);
       await p.close();
     }
   } finally { await browser.close(); }

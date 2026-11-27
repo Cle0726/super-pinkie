@@ -18,11 +18,13 @@
 // - PINKIE_VISUAL_REPORT=1  : print a JSON summary line
 // - PINKIE_VISUAL_ENGINE=chromium|chrome|msedge : override the per-platform engine
 // Failing or missing scenes write <name>.actual.png (+ .diff.png) to tests/visual/diff-real/.
+import './visual/lib/empty-upstream-env.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {allBaselineNames} from './visual/lib/harness.mjs';
+import {installRealCaptureFontFreeze} from './visual/lib/real-capture-freeze.mjs';
 import {
   REPO_ROOT,
   THEMES,
@@ -108,15 +110,24 @@ test('real-page visual scenes render deterministically on real Control UI and st
   skip: HAS_PLATFORM_BASELINES ? false : `no real-page baseline set for ${PLATFORM} (only ${BASELINE_PLATFORMS.join(', ')})`,
 }, async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  const browser = await launchRealBrowser();
-  const summary = [];
-
+  let server = null;
+  let browser = null;
+  // Cleanup is registered before anything can fail: when the browser cannot
+  // launch (e.g. the pinned headless shell is missing), the fake server must
+  // still close, or node never exits and the CI job hangs until its timeout.
   t.after(async () => {
-    await browser.close();
-    await server.close();
-    installed.cleanup();
+    try { await browser?.close(); }
+    finally {
+      try { await server?.close(); }
+      finally { installed.cleanup(); }
+    }
   });
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  browser = await launchRealBrowser();
+  // Fonts still loading after settle used to consume the screenshot's own 30s
+  // budget (real-scene home-learning-night, run 45748757225). Settle them first.
+  installRealCaptureFontFreeze(browser);
+  const summary = [];
 
   if (UPDATE_MODE) {
     fs.mkdirSync(REAL_BASELINE_DIR, {recursive: true});

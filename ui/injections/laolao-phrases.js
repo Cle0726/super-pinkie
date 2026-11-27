@@ -130,9 +130,9 @@
     ["Gateway 状态：在线", "网关状态：在线"],
     ["Close navigation", "收起导航"],
     ["Open session menu", "打开会话菜单"],
-    ["Color mode: System", "配色：跟随系统"],
-    ["Color mode: Light", "配色：浅色"],
-    ["Color mode: Dark", "配色：深色"],
+    ["Color mode: System", "配色：跟随系统"], ["颜色模式：系统", "配色：跟随系统"],
+    ["Color mode: Light", "配色：浅色"], ["颜色模式：浅睡", "配色：浅色"], ["顏色模式：淺層", "顏色模式：淺色"],
+    ["Color mode: Dark", "配色：深色"], ["颜色模式：深色", "配色：深色"],
     ["Other models", "其他模型"],
     ["Mm models", "Mm 模型"],
     ["Use default reasoning (Off)", "使用默认思考强度（关闭）"],
@@ -181,6 +181,7 @@
     ["Failed", "发送失败"],
     ["The active run ended before the steer message was accepted.", "这轮刚结束，这轮结束后发送。"],
     ["Steer failed before it reached the run; try again.", "追加没有送达，这轮结束后发送。"],
+    ["No scheduled jobs yet.", "还没有定时任务。"], ["Create one from a plain-language prompt; advanced fields can wait.", "用一句话说清要做什么就能建一个，高级选项以后再填。"], ["Clear or change filters to see scheduled jobs.", "清除或修改筛选条件，就能看到定时任务。"], ["Browser enabled", "启用浏览器"], ["Tool profile", "工具档位"], // B12：上游 zh-CN 漏译（/cron 空状态、设置弹层安全卡）
   ]);
 
   // These short words are also ordinary setting labels (for example
@@ -188,8 +189,7 @@
   // part of a real progress/status surface. Tool chrome has its own narrower
   // scope so a settings row can never turn into a pony status message.
   const statusExactPhrases = new Set([
-    "Thinking", "Thinking…", "Thinking...", "Running", "Waiting…", "Waiting...",
-    "Retry", "Retrying…", "Retrying...", "Interrupted", "Stopped", "Cancelled",
+    "Thinking", "Thinking…", "Thinking...", "Running", "Waiting…", "Waiting...", "Retry", "Retrying…", "Retrying...", "Interrupted", "Stopped", "Cancelled",
     "Aborted", "Error rendering content", "An error occurred:",
   ]);
   const toolExactPhrases = new Set([
@@ -213,7 +213,7 @@
     if (statusExactPhrases.has(phrase)) return isStatusContext(element);
     if (toolExactPhrases.has(phrase)) return isToolContext(element);
     if (queueExactPhrases.has(phrase)) return isQueueContext(element);
-    return true;
+    return !/^(?:颜色|顏色)模式：/.test(phrase) || Boolean(element?.closest?.('.theme-mode-toggle'));
   };
 
   const localizedChromeValue = (value, element) => {
@@ -227,9 +227,7 @@
     const reply = element?.closest?.('.chat-reply-pill__label, .chat-reply-preview__label') && value.match(/^Replying to(?: (.+))?$/i); if (reply) return reply[1] === 'current message' ? '回复当前消息' : reply[1] ? `回复 ${reply[1]}` : '回复';
     if (value === '% ctx' && element?.closest?.('.msg-meta__ctx')) return '% 上下文';
     const rowSummary = value.match(/^(\d+)\s*-\s*(\d+)\s+of\s+(\d+)\s+rows?$/i);
-    if (rowSummary && element?.closest?.('.data-table-wrapper')) {
-      return `显示第 ${rowSummary[1]}–${rowSummary[2]} 条，共 ${rowSummary[3]} 条`;
-    }
+    if (rowSummary && element?.closest?.('.data-table-wrapper')) return `显示第 ${rowSummary[1]}–${rowSummary[2]} 条，共 ${rowSummary[3]} 条`;
     return value;
   };
 
@@ -453,6 +451,8 @@
         const value=element.getAttribute(name)||'';
         const next=localizedChromeValue(value,element).replace(/OpenClaw/g,'C.le.');
         if(next!==value)setLocalizedAttribute(element,name,next);
+        // The colour-mode tooltip portal is built from tip.content outside openclaw-app, so the observer never sees it.
+        const tip=name==='aria-label'&&element.matches?.('.theme-mode-toggle')&&element.closest?.('openclaw-tooltip'); if(tip&&tip.content!==element.getAttribute(name))tip.content=element.getAttribute(name);
       }
     });
     ownOrDescendants(scope,'button, [role="button"]').forEach(element=>{

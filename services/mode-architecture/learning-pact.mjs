@@ -276,11 +276,6 @@ export function dayInZone(instant, timeZone = 'Asia/Shanghai') {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function clockInZone(instant, timeZone) {
-  const formatter = new Intl.DateTimeFormat('en-GB', {timeZone: timeZone || 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
-  return formatter.format(new Date(Number(instant) || 0));
-}
-
 function addDays(date, delta) {
   const [year, month, day] = date.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day + delta)).toISOString().slice(0, 10);
@@ -988,4 +983,4 @@ export function registerLearningPactGateway(api, pact) {
   return pact;
 }
 
-export {INTENSITIES, CHANNEL_KINDS, sanitizePact, validDate, validTime, validTimezone, clockInZone, clockLabel};
+export {INTENSITIES, CHANNEL_KINDS, sanitizePact, validDate, validTime, validTimezone, clockLabel};
