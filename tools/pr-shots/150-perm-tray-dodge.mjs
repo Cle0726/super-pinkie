@@ -47,9 +47,11 @@ const probe = (force) => {
   const stat = box?.querySelector('.pk-perm-chip--stat');
   const input = box?.closest('.agent-chat__input');
   if (!stat) return {found: false};
-  const saved = force ? {dodge: box.dataset.dodge, pad: box.style.paddingLeft} : null;
+  // 让位距离现在加在第一个键的 margin-left 上、记在 data-shift（clearCover 的 setShift）：force 时一并清掉，量完原样还原
+  const first = box.querySelector('.pk-perm-chip');
+  const saved = force ? {dodge: box.dataset.dodge, pad: box.style.paddingLeft, shift: box.dataset.shift, firstMl: first?.style.marginLeft || ''} : null;
   // force 是数字时再临时加这么多 px 的 padding-left，看真页面（父级 display: contents、本截是输入框 grid 的子项）里让位到底推不推得动「⋯」
-  if (force) { box.dataset.dodge = '1'; box.style.paddingLeft = typeof force === 'number' ? force + 'px' : ''; }
+  if (force) { box.dataset.dodge = '1'; box.style.paddingLeft = typeof force === 'number' ? force + 'px' : ''; delete box.dataset.shift; first?.style.removeProperty('margin-left'); }
   try {
     const r = stat.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const top = document.elementFromPoint(cx, cy);
@@ -80,7 +82,7 @@ const probe = (force) => {
     }
     const inlineStyle = box.getAttribute('style');
     const controls = box.parentElement?.getBoundingClientRect();
-    return {found: true, forced: Boolean(force), fold: box.dataset.fold ?? null, dodge: box.dataset.dodge ?? null, padLeft: box.style.paddingLeft || null, label: stat.textContent.trim(),
+    return {found: true, forced: Boolean(force), fold: box.dataset.fold ?? null, dodge: box.dataset.dodge ?? null, padLeft: box.style.paddingLeft || null, shift: box.dataset.shift ?? null, firstMl: first?.style.marginLeft || null, label: stat.textContent.trim(),
       stat: R(r), center: [cx, cy], statHit: Boolean(top && stat.contains(top)), top: name(top),
       stack: document.elementsFromPoint(cx, cy).slice(0, 6).map(name), coveredBy, floats: floats.map(({el, rect}) => ({el, rect})),
       chips: R(box.getBoundingClientRect()), controls: controls ? R(controls) : null, controlsRight: controls ? Math.round(controls.right) : null,
@@ -93,6 +95,8 @@ const probe = (force) => {
     if (saved) {
       if (saved.dodge === undefined) delete box.dataset.dodge; else box.dataset.dodge = saved.dodge;
       box.style.paddingLeft = saved.pad;
+      if (saved.shift === undefined) delete box.dataset.shift; else box.dataset.shift = saved.shift;
+      if (first) first.style.marginLeft = saved.firstMl;
     }
   }
 };
@@ -162,7 +166,8 @@ try {
         const loaded = await page.evaluate(async () => {
           const src = [...document.scripts].map((s) => s.src).find((u) => /laolao-metre-perm\.js/.test(u)) || null;
           if (!src) return {src: null, hasFix: null};
-          try { const t = await (await fetch(src)).text(); return {src, hasFix: /c\.width > 0 \? c\.right : input\.getBoundingClientRect\(\)\.right/.test(t)}; }
+          // hasFix：display: contents 兜底（af7ac0a2）和第一个键 margin-left 让位（setShift）都在
+          try { const t = await (await fetch(src)).text(); return {src, hasFix: /c\.width > 0 \? c\.right : input\.getBoundingClientRect\(\)\.right/.test(t) && /setShift\(box, shiftOf\(box\) \+ need\)/.test(t)}; }
           catch (e) { return {src, hasFix: null, error: String(e)}; }
         });
         // 放宽：回到原位
@@ -170,7 +175,7 @@ try {
         await page.evaluate(() => window.PinkieMetrePerm?.fit?.());
         await page.waitForTimeout(1800);
         const wide = await page.evaluate(probe);
-        report.push({theme, width, row: rec, opened, refit, forced, forcedPad, shifts, loaded, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, statHit: wide.statHit}, pageErrors});
+        report.push({theme, width, row: rec, opened, refit, forced, forcedPad, shifts, loaded, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, shift: wide.shift, statHit: wide.statHit}, pageErrors});
       } catch (error) {
         report.push({theme, width, error: error.message, pageErrors});
       } finally {
@@ -190,14 +195,14 @@ for (const r of report) {
   if (r.error) console.log(`pr-shots: ${r.theme} ${r.width} 出错：${r.error}`);
   else {
     const cov = (p) => (p?.coveredBy?.length ? p.coveredBy.join('+') : '-');
-    console.log(`pr-shots: ${r.theme} ${r.width} fold=${r.row.fold} dodge=${r.row.dodge} pad=${r.row.padLeft} statHit=${r.row.statHit} top=${r.row.top} coveredBy=${cov(r.row)} opened=${r.opened}`
-      + ` | refit dodge=${r.refit?.dodge} pad=${r.refit?.padLeft} statHit=${r.refit?.statHit} top=${r.refit?.top} coveredBy=${cov(r.refit)}`
+    console.log(`pr-shots: ${r.theme} ${r.width} fold=${r.row.fold} dodge=${r.row.dodge} pad=${r.row.padLeft} shift=${r.row.shift} firstMl=${r.row.firstMl} stat=${JSON.stringify(r.row.stat)} statHit=${r.row.statHit} top=${r.row.top} coveredBy=${cov(r.row)} opened=${r.opened}`
+      + ` | refit dodge=${r.refit?.dodge} pad=${r.refit?.padLeft} shift=${r.refit?.shift} firstMl=${r.refit?.firstMl} stat=${JSON.stringify(r.refit?.stat)} statHit=${r.refit?.statHit} top=${r.refit?.top} coveredBy=${cov(r.refit)}`
       + ` | forced stat=${JSON.stringify(r.forced?.stat)} coveredBy=${cov(r.forced)} controlsRight=${r.forced?.controlsRight} inputRight=${r.forced?.inputRight}`
       + ` | pad40 stat=${JSON.stringify(r.forcedPad?.stat)} chips=${JSON.stringify(r.forcedPad?.chips)} coveredBy=${cov(r.forcedPad)} statHit=${r.forcedPad?.statHit}`
       + ` | loaded hasFix=${r.loaded?.hasFix} src=${r.loaded?.src ? r.loaded.src.replace(/^.*\//, '') : null}`
       + ` | pad40 boxCss=${JSON.stringify(r.forcedPad?.boxCss)} statCss=${JSON.stringify(r.forcedPad?.statCss)} statParent=${r.forcedPad?.statParent}`
       + ` | pad40 inlineStyle=${JSON.stringify(r.forcedPad?.inlineStyle)} padRules=${JSON.stringify(r.forcedPad?.padRules)}`
       + ` | shifts=${JSON.stringify(r.shifts)}`
-      + ` | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft}`);
+      + ` | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft} shift=${r.wide.shift}`);
   }
 }

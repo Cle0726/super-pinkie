@@ -434,7 +434,18 @@
     return [...box.querySelectorAll('.pk-perm-chip')].some((k) => { const a = k.getBoundingClientRect(); return floats.some((r) => overlaps(a, r)); });
   }
   // 「⋯」自己占一行、排到行首以后还被盖住（托盘键就浮在行首）：按键往右让，让过盖住它的那个控件再留 4px，直到不被盖住；
-  // 让到超出这一行还盖着就算让不开（返回 false，调用方挪回来）。让的距离记在按键这一截的 padding-left 上，每次重量先清掉。
+  // 让到超出这一行还盖着就算让不开（返回 false，调用方挪回来）。让的距离加在第一个键的 margin-left 上、记在 data-shift，每次重量先清掉。
+  // 不用按键这一截的 padding-left：真页面上它推不动「⋯」（#273 pr-shots run 45950069956：内联 padding-left 40px 计算值仍是 0、「⋯」停在 x=27；
+  // 第一个键 margin-left 才把「⋯」推到 x=67、中心点下去是它自己）。
+  const shiftOf = (box) => parseFloat(box.dataset.shift) || 0;
+  function setShift(box, px) {
+    const k = box.querySelector('.pk-perm-chip');
+    if (k) k.style.removeProperty('margin-left');
+    if (!k || !px) { delete box.dataset.shift; return; }
+    const base = parseFloat(getComputedStyle(k).marginLeft) || 0;
+    k.style.marginLeft = (base + px) + 'px';
+    box.dataset.shift = String(px);
+  }
   function clearCover(box, input, controls) {
     // 真页面主题里按键行是 display: contents（laolao-theme.css 5024–5027），自己没有盒子、量出来 right 是 0，
     // 拿它当行宽就永远「让不开」（#273 pr-shots run 45929551714：forced controlsRight=0）：没有盒子时退到输入框的右沿
@@ -446,7 +457,7 @@
       for (const a of keys) for (const r of floats) if (overlaps(a, r)) need = Math.max(need, Math.ceil(r.right - a.left) + 4);
       if (!need) return true;
       if (Math.max(...keys.map((a) => a.right)) + need > room) return false;
-      box.style.paddingLeft = ((parseFloat(box.style.paddingLeft) || 0) + need) + 'px';
+      setShift(box, shiftOf(box) + need);
     }
     return !covered(box, input);
   }
@@ -509,7 +520,7 @@
     box.style.display = 'none'; const h0 = h(); box.style.display = '';
     squeeze(model, null);
     let cur = box;
-    delete cur.dataset.dodge; cur.style.removeProperty('padding-left');   // 上次为躲麦克风挪到行首（再为躲托盘键往右让）的，先回原位再量
+    delete cur.dataset.dodge; setShift(cur, 0);   // 上次为躲麦克风挪到行首（再为躲托盘键往右让）的，先回原位再量
     const ok = () => h() <= h0 + 1 && !covered(cur, input);
     if (fold === 0 && Number(cur.dataset.fold) === 0 && ok()) return;
     for (let f = 0; f <= 3; f++) {
@@ -524,7 +535,7 @@
     cur.dataset.dodge = '1';
     for (const w of tries) { squeeze(model, w); if (!covered(cur, input)) return; }
     // 挪到行首还被盖住（mac2：320 宽真实页面，行首正好是浮着的托盘键）：在这一行里往右让过它；让不开才挪回来
-    for (const w of tries) { squeeze(model, w); if (clearCover(cur, input, controls)) return; cur.style.removeProperty('padding-left'); }
+    for (const w of tries) { squeeze(model, w); if (clearCover(cur, input, controls)) return; setShift(cur, 0); }
     delete cur.dataset.dodge;
   }
   // 原生模型名是后到的、思考档位键第一次点页面会变宽：画完以后隔一会儿再量几次（一次性的 setTimeout，不加循环定时器和观察器）

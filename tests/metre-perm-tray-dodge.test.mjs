@@ -58,19 +58,21 @@ function layout(w) {
     const box = c.classList.contains('pk-perm-chips');
     const ml = !box && c.classList.contains('pk-eng-chip') ? G.ml : 0;
     const keys = box ? c.children.filter((k) => k.classList.contains('pk-perm-chip')) : [];
-    const pad = box ? parseFloat(c.style.paddingLeft) || 0 : 0;
-    const inner = keys.reduce((s, k, i) => s + (i ? G.chipGap : 0) + G.ml + chipW(k), 0);
+    // 和真页面一样：按键这一截的 padding-left 不推动里面的键（#273 pr-shots run 45950069956：内联 padding-left 40px、「⋯」仍在 x=27），
+    // 只有键自己的 margin-left 算数（第一个键 margin-left 50px 把「⋯」推到 x=67）
+    const km = (k) => (k.style.marginLeft ? parseFloat(k.style.marginLeft) : G.ml);
+    const inner = keys.reduce((s, k, i) => s + (i ? G.chipGap : 0) + km(k) + chipW(k), 0);
     const dodge = box && c.dataset.dodge != null;   // laolao-metre-perm.css：[data-dodge] { flex-basis: 100% }
-    const outer = dodge ? CW : box ? pad + inner : ml + c._w;
+    const outer = dodge ? CW : box ? inner : ml + c._w;
     if (count && (dodge || x + G.gap + outer > CW)) { line++; x = 0; count = 0; }
     if (count) x += G.gap;
     const top = ct + line * G.step;
     rects.set(c, R(cl + x + ml, top, outer - ml, G.line));
     if (box) {
-      let kx = cl + x + pad;
+      let kx = cl + x;
       keys.forEach((k, i) => {
         if (i) kx += G.chipGap;
-        kx += G.ml;
+        kx += km(k);
         const kw = chipW(k);
         rects.set(k, R(kx, top, kw, G.line));
         const name = k.querySelector('.pk-eng-chip__name'); if (name) rects.set(name, R(kx + 6, top + 7, kw - 12, 16));
@@ -146,7 +148,8 @@ function row(w) {
   const r = stat.getBoundingClientRect(), c = w.controls.getBoundingClientRect(), center = [r.left + r.width / 2, r.top + r.height / 2];
   const top = hit(w, ...center);
   const under = w.floats.filter((b) => { const f = b.getBoundingClientRect(); return f.width && Math.min(r.right, f.right) - Math.max(r.left, f.left) > 1 && Math.min(r.bottom, f.bottom) - Math.max(r.top, f.top) > 1; });
-  return {fold: box.dataset.fold, dodge: box.dataset.dodge ?? null, pad: box.style.paddingLeft || null, label: stat.querySelector('.pk-eng-chip__name').textContent,
+  // pad：让位距离（data-shift，加在第一个键的 margin-left 上）；boxPad：按键这一截的 padding-left，应当始终不用
+  return {fold: box.dataset.fold, dodge: box.dataset.dodge ?? null, pad: box.dataset.shift ?? null, boxPad: box.style.paddingLeft || null, label: stat.querySelector('.pk-eng-chip__name').textContent,
     key: [r.left, r.top, r.width], lineStart: r.left - G.ml - c.left, ownLine: r.top > w.controls.children[1].getBoundingClientRect().top,
     keyHit: top === stat, top: top ? top.className : null, coveredBy: under.map((b) => b.className), center};
 }
