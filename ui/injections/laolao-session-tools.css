@@ -92,7 +92,7 @@ html[data-pinkie-night] .pinkie-paste-editor { background:#1f181d }
 /* 模式专属的那一颗（项目：工作程度；想法：取向）。默认时和别的按钮一样安静，选了别的才带上模式色。 */
 .pinkie-chip--mode { gap:5px;padding:0 8px 0 7px }
 .pinkie-chip--mode svg { width:16px;height:16px;flex:none }
-.pinkie-chip--mode .pinkie-chip__caret { width:9px;height:9px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round }
+.pinkie-chip--mode .pinkie-chip__caret { width:9px;height:9px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round }
 .pinkie-chip--mode:not([data-value="default"]) { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 10%,transparent);font-weight:600 }
 .pinkie-chip--mode:not([data-value="default"]):hover { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 16%,transparent) }
 .pinkie-style-menu__note { padding:6px 10px 4px;font-size:11px;opacity:.5;max-width:220px }
