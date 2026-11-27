@@ -2,7 +2,7 @@
 // （按键行、openclaw-exec-approval 卡片）、假网关请求函数和本批两个文件。
 // 改前（a4d141bf）：没有这两个文件，Metre 下没有放手程度 / 先出方案 / 状态键，审批卡是原生英文标题、只露第一条，
 // Metre 会话的审批不提醒（laolao-run-notify.js 的会话正则没有 metre），额度用完不会到点接着做——下面每条都失败。
-import {test} from 'node:test';
+import {after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -11,7 +11,39 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 const inj = (f) => fileURLToPath(new URL('../ui/injections/' + f, import.meta.url));
 const read = (f) => fs.readFileSync(inj(f), 'utf8');
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-const launch = () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+// CI 提速：整个文件只起一个浏览器，各测试共用。每个测试仍自己开 context（viewport / 时区跟原来的 newPage 一样），结束就关。
+// 起不来就跟以前一样让这个测试失败，不改成跳过。
+let sharedBrowserPromise = null;
+function sharedBrowser() {
+  sharedBrowserPromise ??= playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  return sharedBrowserPromise;
+}
+const launch = async () => {
+  const browser = await sharedBrowser();
+  const opened = [];
+  return {
+    async newPage(options) {
+      const context = await browser.newContext(options);
+      opened.push(context);
+      const page = await context.newPage();
+      const closePage = page.close.bind(page);
+      page.close = async (...args) => {
+        try { return await closePage(...args); }
+        finally { await context.close().catch(() => {}); }
+      };
+      return page;
+    },
+    async close() {
+      await Promise.all(opened.map((context) => context.close().catch(() => {})));
+      opened.length = 0;
+    },
+  };
+};
+after(async () => {
+  if (!sharedBrowserPromise) return;
+  const browser = await sharedBrowserPromise.catch(() => null);
+  if (browser) await browser.close();
+});
 const SK = 'agent:metre:dashboard:t1';
 
 // Metre 的日夜变量（laolao-metre-skin.css 第 1036、1122、1244 行起的原值）
@@ -76,6 +108,10 @@ async function open(browser, {mode = 'metre', night = false, sk = SK, clock = fa
 }
 // 装了假时钟以后 waitForFunction 的轮询也停了：每次推进 50ms 假时间再看一次
 async function until(p, fn, tries = 60) { for (let i = 0; i < tries; i++) { if (await p.evaluate(fn)) return; await p.clock.runFor(50); } throw new Error('没等到：' + fn); }
+// 这些固定等待不是在测「必须等满这段」。fitSoon 会在 60 / 400 / 1500ms 再量，approvalSoon 会在 30 / 250 / 800ms 再画。
+// 页面用 open(..., {clock: true}) 把假时钟先停住；这里把同样的毫秒快进掉，断言看到的和真等满一样。
+// 后面要点、要等选择器时再 clock.resume()，让动画和 ResizeObserver 走真时间。
+async function elapse(p, ms) { await p.clock.runFor(ms); }
 const calls = (p, m) => p.evaluate((m) => window.__calls.filter((c) => c.method === m), m);
 // color-mix() 算出来是 color(srgb 0.84 0.53 0.46)，分量是 0–1，不是 0–255
 const lum = (rgb) => { const k = /^color\(srgb/.test(rgb) ? 1 : 255; const [r, g, b] = rgb.replace(/^color\(srgb/, '').match(/\d*\.?\d+/g).slice(0, 3).map(Number).map((v) => { v /= k; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
@@ -209,10 +245,10 @@ for (const mode of ['metre', 'classic']) {
   test(`P1: in ${mode} the approval dialog is ${mode === 'metre' ? 'centred by layout (no half-pixel translate)' : 'left as native'} (${engine})`, {timeout: 60_000}, async () => {
     const browser = await launch();
     try {
-      const p = await open(browser, {mode});
+      const p = await open(browser, {mode, clock: true});
       await p.addScriptTag({content: FAKE_MODAL});
       await p.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: 'exec.approval.requested', payload: {id: 'a1', request: {command: 'npm test', sessionKey: 'agent:metre:dashboard:t1'}}}})));
-      await p.waitForTimeout(1200);
+      await elapse(p, 1200);
       const r = await p.evaluate(() => {
         const m = document.querySelector('openclaw-modal-dialog'), d = m.shadowRoot.querySelector('dialog'), c = d.getBoundingClientRect();
         return {snap: m.hasAttribute('data-pk-snap'), transform: getComputedStyle(d).transform, top: c.top, bottom: c.bottom, left: c.left, right: c.right, h: c.height, vw: innerWidth, vh: innerHeight};
@@ -327,10 +363,10 @@ test(`P1: approval buttons stay filled although the theme forces glass on .btn, 
 test(`other modes are untouched, and Metre text on these keys and popovers is at least 4.5:1 in day and night (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const other = await open(browser, {mode: 'main', sk: 'agent:main:chat:x'});
+    const other = await open(browser, {mode: 'main', sk: 'agent:main:chat:x', clock: true});
     await other.evaluate(() => window.PinkieMetrePerm.refresh());
     await other.evaluate(gw('exec.approval.requested', {id: 'z', request: {command: 'ls', sessionKey: 'agent:main:chat:x'}}));
-    await other.waitForTimeout(900);
+    await elapse(other, 900);
     assert.equal(await other.$('.pk-perm-chips'), null);
     assert.equal(await other.$('.pk-perm-q'), null);
     assert.equal(await other.$eval('.exec-approval-title', (e) => e.dataset.pkTitle ?? null), null);
@@ -360,7 +396,7 @@ test(`other modes are untouched, and Metre text on these keys and popovers is at
 test(`the keys sit right after the Metre engine key even when that key is inserted later (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser);
+    const p = await open(browser, {clock: true});
     await p.evaluate(() => { document.querySelector('.agent-chat__composer-controls > .pk-eng-chip').remove(); return window.PinkieMetrePerm.refresh(); });
     await p.waitForSelector('.pk-perm-chips');
     await p.evaluate(() => {
@@ -368,7 +404,7 @@ test(`the keys sit right after the Metre engine key even when that key is insert
       const baton = document.createElement('button'); baton.className = 'pinkie-chip pinkie-baton'; baton.textContent = 'Baton'; c.append(baton);
       const eng = document.createElement('button'); eng.className = 'pk-eng-chip'; eng.innerHTML = '<span class="pk-eng-chip__name">Metre</span>'; c.append(eng);
     });
-    await p.waitForTimeout(1700);   // 画完以后隔一会儿还会再量几次
+    await elapse(p, 1700);   // 画完以后隔一会儿还会再量几次
     const kids = await p.$$eval('.agent-chat__composer-controls > *', (n) => n.map((e) => e.className.split(' ')[0]));
     assert.equal(kids[kids.indexOf('pk-eng-chip') + 1], 'pk-perm-chips', `按键紧跟 Metre 键（${kids.join(' · ')}）`);
   } finally { await browser.close(); }
@@ -429,7 +465,7 @@ test(`when the composer row is too narrow the keys fold down instead of pushing 
   const browser = await launch();
   try {
     for (const [w, wide] of [[1000, true], [330, false]]) {
-      const p = await open(browser);
+      const p = await open(browser, {clock: true});
       await p.evaluate((w) => {
         const c = document.querySelector('.agent-chat__composer-controls');
         c.style.cssText = `display:flex;flex-wrap:wrap;gap:4px;width:${w}px`;
@@ -437,7 +473,7 @@ test(`when the composer row is too narrow the keys fold down instead of pushing 
         window.__plan = {items: [{id: '1', text: 'a', status: 'completed'}, {id: '2', text: 'b', status: 'pending'}]};
       }, w);
       await p.evaluate(() => window.PinkieMetrePerm.refresh());
-      await p.waitForTimeout(1700);   // 画完以后还会隔一会儿再量几次
+      await elapse(p, 1700);   // 画完以后还会隔一会儿再量几次
       const r = await p.evaluate(() => {
         const top = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top);
         return {metre: top('.agent-chat__composer-controls > .pk-eng-chip'), model: top('.chat-composer-model-control'), fold: document.querySelector('.pk-perm-chips').dataset.fold,
@@ -448,6 +484,7 @@ test(`when the composer row is too narrow the keys fold down instead of pushing 
       assert.ok(Number(r.fold) >= 2, '窄的时候收拢到只剩一个键');
       assert.equal(r.keys.length, 1);
       // 收进去的放手程度、先出方案在会话详情里还能用
+      await p.clock.resume();
       await p.click('.pk-perm-chip--stat');
       assert.deepEqual(await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__acts .pk-perm-pop__btn', (n) => n.map((e) => e.textContent)), ['放手程度：自动', '先出方案：关']);
       await p.click('.pk-perm-pop__acts .pk-perm-pop__btn:nth-child(2)');
@@ -475,7 +512,7 @@ async function longModelRow(p) {
     c.append(m);
   }, LONG);
   await p.evaluate(() => window.PinkieMetrePerm.refresh());
-  await p.waitForTimeout(1700);
+  await elapse(p, 1700);
 }
 const rowState = (p) => p.evaluate(() => {
   const top = (s) => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().top) : null; };
@@ -491,7 +528,7 @@ const rowState = (p) => p.evaluate(() => {
 test(`at any width the ⋯ key stays on the row and clickable; a long model name is cut first (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser, {width: 820});
+    const p = await open(browser, {width: 820, clock: true});
     await longModelRow(p);
     const wide = await rowState(p);
     assert.equal(wide.fold, '0'); assert.equal(wide.clipped, false, `够宽时模型名不截（${JSON.stringify(wide)}）`); assert.equal(wide.title, null);
@@ -512,6 +549,7 @@ test(`at any width the ⋯ key stays on the row and clickable; a long model name
     assert.ok(tight.nameW >= 8 * 6, `模型名最少留约 8 个字符宽（${tight.nameW}px）`);
     assert.equal(tight.title, LONG, '模型键 title 给全名');
     // 鼠标点「⋯」打开会话详情，里面有放手程度和先出方案
+    await p.clock.resume();
     await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
     await p.waitForSelector('.pk-perm-pop--detail');
     const acts = await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__acts .pk-perm-pop__btn', (n) => n.map((e) => e.textContent));
@@ -551,12 +589,12 @@ async function realTriggerLabel(p, name) {
     window.__writeTriggerLabel(s.firstElementChild, full, '');
   }, name);
   await p.evaluate(() => window.PinkieMetrePerm.refresh());
-  await p.waitForTimeout(400);
+  await elapse(p, 400);
 }
 test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut model name ends in an ellipsis and the title is the full name (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser, {width: 1280});
+    const p = await open(browser, {width: 1280, clock: true});
     await longModelRow(p);
     await realTriggerLabel(p, LONG);
     const look = () => p.evaluate(() => {
@@ -590,6 +628,7 @@ test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut m
     assert.deepEqual([tight.overflow, tight.ellipsis, tight.nowrap], ['hidden', 'ellipsis', 'nowrap'], `截断处有省略号（${JSON.stringify(tight)}）`);
     assert.equal(tight.nameTitle, LONG, '名字 span 的 title 是全名');
     assert.equal(tight.title, LONG, '模型键 title 给全名');
+    await p.clock.resume();
     await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
     await p.waitForSelector('.pk-perm-pop--detail');
     // 协调者 11-25 11:54 认图的条件：鼠标点「详情▾」要真看得到「自动」「先出方案」——键在视口里、有大小、键中心没被别的东西盖住。
@@ -610,10 +649,10 @@ test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut m
 test(`a key under the floating microphone / send button counts as not fitting, so the keys fold until it is clickable (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser, {width: 820});
+    const p = await open(browser, {width: 820, clock: true});
     await p.evaluate(() => { document.querySelector('.agent-chat__composer-controls').style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:600px'; });
     await p.evaluate(() => window.PinkieMetrePerm.refresh());
-    await p.waitForTimeout(1700);
+    await elapse(p, 1700);
     assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.fold), '0');
     // 把麦克风浮在状态键现在的位置上（和真页面一样挂在输入框里、绝对定位、z-index 3）
     await p.evaluate(() => {
@@ -639,14 +678,14 @@ test(`a key under the floating microphone / send button counts as not fitting, s
 test(`at the last fold a ⋯ still under the floating microphone moves to the start of its own line and stays clickable (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser, {width: 320});
+    const p = await open(browser, {width: 320, clock: true});
     await p.evaluate(() => {
       const c = document.querySelector('.agent-chat__composer-controls');
       c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:1000px';
       const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
     });
     await p.evaluate(() => window.PinkieMetrePerm.refresh());
-    await p.waitForTimeout(1700);
+    await elapse(p, 1700);
     // 只够放 Metre 键和模型键再加 10px：收到「⋯」也放不下，换行；这时没被盖住，不挪
     await p.evaluate(() => {
       const w = (s) => document.querySelector(s).getBoundingClientRect().width;
@@ -691,6 +730,7 @@ test(`at the last fold a ⋯ still under the floating microphone moves to the st
     assert.equal(spot.dodge, '1'); assert.ok(spot.left <= 1, `「⋯」排在行首（${JSON.stringify(spot)}）`);
     assert.equal(spot.engHit, true, `Metre 键没被挪到麦克风底下（${JSON.stringify(spot)}）`);
     // 鼠标点「⋯」打开会话详情
+    await p.clock.resume();
     await p.mouse.click(...await p.evaluate(() => { const k = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [k.left + k.width / 2, k.top + k.height / 2]; }));
     await p.waitForSelector('.pk-perm-pop--detail');
     await p.keyboard.press('Escape');
@@ -715,7 +755,7 @@ async function foldToDots(p) {
     const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
   });
   await p.evaluate(() => window.PinkieMetrePerm.refresh());
-  await p.waitForTimeout(1700);
+  await elapse(p, 1700);
   await p.evaluate(() => {
     const w = (s) => document.querySelector(s).getBoundingClientRect().width;
     document.querySelector('.agent-chat__composer-controls').style.width = Math.ceil(w('.agent-chat__composer-controls > .pk-eng-chip') + w('.chat-composer-model-control') + 4 + 10) + 'px';
@@ -724,12 +764,35 @@ async function foldToDots(p) {
   assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.fold), '3', '前提：收到「⋯」');
   assert.equal(await p.textContent('.pk-perm-chip--stat'), '⋯');
 }
+// 页面上当前那个「⋯」键的宽：等到它挂在文档里、宽 > 0 再取（有上限，超时报清楚现状，不放宽断言）。
+// 不用 p.$eval：按 Playwright 服务端 evalOnSelector 的写法，它是先查到元素拿句柄、再另一次求值去量，两步之间页面的定时器能插进来。
+// 点「⋯」时页面第一次 pointerup 排了 fitSoon（60 / 400 / 1500ms 再量），收拢档位 ≠ 0 时每次 fit() 都用 build() 重建
+// .pk-perm-chips、换掉旧节点——插进来的话量到的就是已经摘掉的旧节点，宽 0（CI 上「打开前后键宽不变」actual 0、expected 27.15625）。
+// 查和量放在页面里同一次同步执行里，就不会量到旧节点。轮询在 Node 这边做：装了假时钟以后页面里的 waitForFunction 轮询会停
+// （见上面 until()），这里不依赖页面的定时器；这是有上限的条件等待，不是固定等。
+async function statKeyWidth(p, what, timeout = 5000) {
+  const probe = () => {
+    const k = document.querySelector('.pk-perm-chip--stat');
+    if (!k) return {found: false};
+    return {found: true, text: k.textContent, connected: k.isConnected, w: k.getBoundingClientRect().width,
+      display: getComputedStyle(k).display, fold: k.closest('.pk-perm-chips')?.dataset.fold ?? null};
+  };
+  const deadline = Date.now() + timeout;
+  let now = null;
+  for (;;) {
+    now = await p.evaluate(probe);
+    if (now.found && now.connected && now.w > 0) return now.w;
+    if (Date.now() >= deadline) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`${what}：${timeout}ms 内没等到「⋯」键渲染出来且宽 > 0（现状 ${JSON.stringify(now)}）`);
+}
 
 test(`the collapsed ⋯ key has a ring at least 3:1 without changing its width, and at night its dots use the text colour (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
     for (const night of [false, true]) {
-      const p = await open(browser, {night, width: 320, height: 420});
+      const p = await open(browser, {night, width: 320, height: 420, clock: true});
       await foldToDots(p);
       const r = await p.evaluate(() => {
         const k = document.querySelector('.pk-perm-chip--stat'), name = k.querySelector('.pk-eng-chip__name');
@@ -742,9 +805,12 @@ test(`the collapsed ⋯ key has a ring at least 3:1 without changing its width, 
       assert.ok(ratio(r.ring, r.bg) >= 3, `${tag}：描边 ${ratio(r.ring, r.bg).toFixed(2)}（${JSON.stringify(r)}）`);
       assert.ok(r.inset && r.border === '0px', `${tag}：描边是内阴影，不加边框、不占宽度（${JSON.stringify(r)}）`);
       if (night) assert.ok(ratio(r.dots, r.bg) >= 12, `夜：点色 ${r.dots} 对底 ${ratio(r.dots, r.bg).toFixed(2)}`);
-      // 打开再关上，宽度不变
+      // 打开再关上，宽度不变（两头都等到「⋯」键在文档里、宽 > 0 再量，见 statKeyWidth）
+      const before = await statKeyWidth(p, `${tag}：打开前`);
+      assert.equal(before, r.w, `${tag}：打开前量到的键宽和上面描边那次一致`);
+      await p.clock.resume();
       await p.click('.pk-perm-chip--stat'); await p.waitForSelector('.pk-perm-pop--detail'); await p.keyboard.press('Escape');
-      assert.equal(await p.$eval('.pk-perm-chip--stat', (e) => e.getBoundingClientRect().width), r.w, `${tag}：打开前后键宽不变`);
+      assert.equal(await statKeyWidth(p, `${tag}：打开后`), before, `${tag}：打开前后键宽不变`);
       await p.close();
     }
   } finally { await browser.close(); }
@@ -754,8 +820,9 @@ test(`at 320 x 420 the details opened from ⋯ show their last row without scrol
   const browser = await launch();
   try {
     for (const night of [false, true]) {
-      const p = await open(browser, {night, width: 320, height: 420});
+      const p = await open(browser, {night, width: 320, height: 420, clock: true});
       await foldToDots(p);
+      await p.clock.resume();
       await p.click('.pk-perm-chip--stat');
       await p.waitForSelector('.pk-perm-pop--detail');
       const r = await p.evaluate(() => {
@@ -780,14 +847,14 @@ test(`at 320 x 420 the details opened from ⋯ show their last row without scrol
 test(`when something in the row grows after the keys were fitted, the row is measured again by itself and goes back to one line (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser, {width: 1280});
+    const p = await open(browser, {width: 1280, clock: true});
     await p.evaluate(() => {
       const c = document.querySelector('.agent-chat__composer-controls');
       c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:1000px';
       const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
     });
     await p.evaluate(() => window.PinkieMetrePerm.refresh());
-    await p.waitForTimeout(1700);
+    await elapse(p, 1700);
     const rows = () => p.evaluate(() => {
       const c = document.querySelector('.agent-chat__composer-controls');
       return {rows: new Set([...c.children].filter((k) => k.getBoundingClientRect().height > 0).map((k) => Math.round(k.getBoundingClientRect().top))).size, fold: document.querySelector('.pk-perm-chips').dataset.fold};
@@ -799,13 +866,20 @@ test(`when something in the row grows after the keys were fitted, the row is mea
       c.style.width = Math.ceil(used + 30) + 'px';
       window.PinkieMetrePerm.fit();
     });
-    await p.waitForTimeout(1700);
+    await elapse(p, 1700);
     const before = await rows();
     assert.equal(before.rows, 1, JSON.stringify(before)); assert.equal(before.fold, '0', JSON.stringify(before));
     // 后到的容量圈（60px）：按键行被挤换行。不手动调 fit。
+    // 变高以后是输入框上的 ResizeObserver 才去排 fitSoon。假时钟快进不到这个观察器，所以放开真时间，等到回到一行并且收拢了一档。
+    // fold==='0' 在重量前也成立，不能拿它当结束。
     await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:60px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });
-    await p.waitForTimeout(1900);
-    const after = await rows();
+    await p.clock.resume();
+    let after = await rows();
+    const deadline = Date.now() + 8000;
+    while (!(after.rows === 1 && Number(after.fold) > Number(before.fold)) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      after = await rows();
+    }
     assert.equal(after.rows, 1, `后到的东西把按键行挤换行以后自己重量、回到一行（${JSON.stringify(after)}）`);
     assert.ok(Number(after.fold) > Number(before.fold), `收拢了一档以上（${JSON.stringify({before, after})}）`);
   } finally { await browser.close(); }
@@ -816,7 +890,7 @@ test(`when something in the row grows after the keys were fitted, the row is mea
 test(`when the other keys already wrap with the full model name, the name is cut and the row goes back to one line (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser, {width: 1280});
+    const p = await open(browser, {width: 1280, clock: true});
     await longModelRow(p);
     await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:59px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });
     const state = () => p.evaluate(() => {
@@ -852,7 +926,7 @@ test(`a reduced-motion rule that gives every element a tiny transition does not 
   const browser = await launch();
   try {
     const run = async (upstreamReduce) => {
-      const p = await open(browser, {width: 1280});
+      const p = await open(browser, {width: 1280, clock: true});
       if (upstreamReduce) await p.addStyleTag({content: '*,:before,:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}'});
       await longModelRow(p);
       await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:59px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });

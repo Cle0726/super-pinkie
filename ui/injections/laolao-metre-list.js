@@ -52,7 +52,7 @@
   }
   function decorate(groups, rows, api) {
     const byKey = new Map((rows || []).map((s) => [s.key, s]));
-    for (const n of groups.querySelectorAll('.session-row-host[data-session-key]')) { const s = byKey.get(n.dataset.sessionKey); if (s) row(n, s, api); }
+    for (const n of groups.querySelectorAll('.session-row-host[data-session-key]')) { const s = byKey.get(n.dataset.sessionKey); if (s) row(n, s, api); } window.PinkieMetreWorktree?.mark(groups);   // S7：行里「目录 · 分支」（laolao-metre-worktree.js）
     for (const g of groups.querySelectorAll(':scope > .laolao-group')) {
       const head = g.querySelector(':scope > .laolao-group__head'), more = head?.querySelector(':scope > .pinkie-recent-menu');
       const first = g.querySelector(':scope > .laolao-group__list > .pinkie-session-date');

@@ -40,7 +40,7 @@ html[data-pinkie-night] .pinkie-art-card__gone { color:#f0a27a }
 .pinkie-art-viewer { position:fixed;inset:0;z-index:2147481000;display:flex;align-items:center;justify-content:center;background:rgba(40,18,30,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px) }
 html[data-pinkie-night] .pinkie-art-viewer { background:rgba(0,0,0,.5) }
 .pinkie-art-view { display:flex;flex-direction:column;width:min(1100px,calc(100vw - 64px));height:min(820px,calc(100vh - 64px));border:1px solid var(--pa-line);border-radius:16px;background:var(--pa-card);color:var(--pa-text);box-shadow:0 24px 70px rgba(40,18,30,.25);overflow:hidden }
-.pinkie-art-view__head { display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;border-bottom:1px solid var(--pa-line) }
+.pinkie-art-view__head { display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;border-bottom:1px solid var(--pa-line) } @media (max-width: 779px) { .pinkie-art-view__head { flex-wrap:wrap;row-gap:8px } .pinkie-art-view__actions { flex:1 0 100%;flex-wrap:wrap;justify-content:flex-end;row-gap:6px } }   /* B61：窗口窄于 780（查看器纸面 = 100vw - 64，头部一行要约 590，带「装到桌面」约 710）时头部换行：文件名 + 版本留在第一行，操作键另起一行靠右，× 不再被挤出纸面、文件名不再缩成 0。820 / 1440 不变。 */
 .pinkie-art-view__title { flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px }
 .pinkie-art-versions { display:flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:9px;background:color-mix(in srgb,currentColor 5%,transparent);font-size:12.5px;white-space:nowrap }
 .pinkie-art-versions__label { font-variant-numeric:tabular-nums;margin-right:2px }
@@ -122,9 +122,9 @@ html[data-pinkie-night] .pinkie-art-viewer { background:rgba(0,0,0,.5) }
 html .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog) { background:#fff8fb !important;color:#4a2a3b !important;border-color:rgba(96,50,73,.12) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important }
 html .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog) .laolao-modal__button { background:rgba(96,50,73,.07) !important;color:inherit !important;border:1px solid rgba(96,50,73,.12) !important }
 html .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog) .laolao-modal__button--primary { background:var(--pk-apps-accent,var(--pa-accent)) !important;color:var(--pk-apps-on-accent,#fff) !important;border-color:transparent !important }
-html[data-pinkie-night] .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog) { background:#2a2027 !important;color:#f3e9ef !important;border-color:rgba(255,235,245,.12) !important;box-shadow:0 24px 62px rgba(0,0,0,.5) !important }
-html[data-pinkie-night] .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog)::before { display:none }
-html[data-pinkie-night] .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog) .laolao-modal__button:not(.laolao-modal__button--primary) { background:rgba(255,235,245,.08) !important;border-color:rgba(255,235,245,.14) !important }
+html[data-pinkie-night] .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog,.pinkie-art-confirm *) { background:#2a2027 !important;color:#f3e9ef !important;border-color:rgba(255,235,245,.12) !important;box-shadow:0 24px 62px rgba(0,0,0,.5) !important }
+html[data-pinkie-night] .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog,.pinkie-art-confirm *)::before { display:none }
+html[data-pinkie-night] .laolao-modal:is(.pinkie-project-settings,.pinkie-shortcuts,.pk-apps-dialog,.pinkie-art-confirm *) .laolao-modal__button:not(.laolao-modal__button--primary) { background:rgba(255,235,245,.08) !important;border-color:rgba(255,235,245,.14) !important }
 html[data-pinkie-night] .pinkie-ps-instructions,html[data-pinkie-night] .pinkie-ps-find { background:#1f181d;border-color:rgba(255,235,245,.14) }
 html[data-pinkie-night] .pinkie-ps-pin { background:rgba(255,235,245,.06) }
 html[data-pinkie-night] .pinkie-ps-pin__x:hover { background:rgba(255,235,245,.1) }

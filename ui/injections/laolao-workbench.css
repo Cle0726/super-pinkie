@@ -225,6 +225,10 @@ html[data-pinkie-wb="on"] .chat-workbench { grid-template-columns: minmax(0, 1fr
 .pk-wb-tab__label { overflow: hidden; text-overflow: ellipsis; }
 .pk-wb-tab__dir { font-size: 11px; color: var(--wb-mute); overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
 .pk-wb-tab__diff { color: var(--wb-cle); }
+/* B30：差异标签文件名不缩、比较说明先缩带省略号；标签栏被挤出的一头淡出（--pk-fs / --pk-fe），右侧「全部标签」键 */
+.pk-wb-tab.is-diff { box-sizing: border-box; max-width: min(260px, 100%); } .pk-wb-tab.is-diff .pk-wb-tab__label { flex: none; max-width: 150px; } .pk-wb-tab__vs { min-width: 0; font-size: 11px; color: var(--wb-mute); overflow: hidden; text-overflow: ellipsis; }
+.pk-wb-tabs__list.is-clip-start { --pk-fs: 28px; } .pk-wb-tabs__list.is-clip-end { --pk-fe: 28px; } .pk-wb-tabs__list.is-clip-start, .pk-wb-tabs__list.is-clip-end { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--pk-fs, 0px), #000 calc(100% - var(--pk-fe, 0px)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--pk-fs, 0px), #000 calc(100% - var(--pk-fe, 0px)), transparent); }
+.pk-wb-tabs__more { flex: none; margin-left: 2px; } .pk-wb-tabs__more[hidden] { display: none; }
 .pk-wb-tab__close { width: 20px; height: 20px; border-radius: 4px; opacity: 0; }
 .pk-wb-tab__close .codicon { font-size: 14px; }
 .pk-wb-tab:hover .pk-wb-tab__close, .pk-wb-tab.is-active .pk-wb-tab__close { opacity: 1; }
@@ -329,7 +333,7 @@ button.pk-wb-status__item:hover { color: var(--wb-text); background: color-mix(i
 .pk-wb-status__flash { padding: 0 8px; color: var(--wb-git-u); opacity: 0; transform: translateY(3px); transition: opacity .25s, transform .25s; white-space: nowrap; }
 .pk-wb-status__flash.is-on { opacity: 1; transform: none; }
 .pk-wb-status__dot { width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--wb-text) 40%, transparent); }
-.pk-wb-status__pinkie.is-live { color: var(--wb-text); }
+.pk-wb-status__pinkie { flex: none; } .pk-wb-status__pinkie.is-live { color: var(--wb-text); }
 .pk-wb-status__pinkie.is-live .pk-wb-status__dot { background: var(--wb-accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--wb-accent) 60%, transparent); animation: pk-wb-pulse 1.6s ease-out infinite; }
 @keyframes pk-wb-pulse { 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
@@ -508,8 +512,8 @@ html[data-pinkie-wb="on"] .pinkie-buddy__caption { max-width: 140px; font-size: 
 
 /* 状态行：编辑卡片窄的时候按重要程度隐藏，左右两边不再叠在一起 */
 .pk-wb-editor { container-type: inline-size; container-name: wbeditor; }
-.pk-wb-status__side:first-child { flex: none; }
-.pk-wb-status__side:last-child { min-width: 0; overflow: hidden; justify-content: flex-end; }
+.pk-wb-status__side:first-child { flex: 0 1 auto; overflow: hidden; } .pk-wb-status__side:first-child > *, .pk-wb-status__branch > * { flex: none; } .pk-wb-status__side:first-child > .pk-wb-status__branch, .pk-wb-status__branch > .pk-wb-status__branch-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pk-wb-status__side:last-child { flex: 0 1000 auto; min-width: 0; overflow: hidden; justify-content: flex-end; } /* B50：右半边先让（按顺序藏项），藏到只剩碧琪键时（fitStatus 把碧琪键宽写成右半边 min-width）再让左半边：分支名缩成省略号，title 有全名 */
 @container wbeditor (max-width: 720px) { .pk-wb-status [data-opt="enc"], .pk-wb-status [data-opt="eol"] { display: none; } }
 @container wbeditor (max-width: 600px) { .pk-wb-status [data-opt="indent"], .pk-wb-status__flash { display: none; } }
 @container wbeditor (max-width: 500px) { .pk-wb-status [data-opt="lang"], .pk-wb-status__mode span { display: none; } }

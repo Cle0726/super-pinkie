@@ -94,3 +94,11 @@ test('extreme-think send fallback never clicks the voice or native dictation con
   assert.match(src,/chat-send-btn--laolao-dictation/);
   assert.match(src,/chat-send-btn--queue/);
 });
+
+test('night tier menu text follows data-pinkie-night, not only data-theme-mode=dark',()=>{
+  const src=read('ui/injections/laolao-deep-think.js');
+  const night=':is(html[data-theme-mode="dark"],html[data-pinkie-night])';
+  assert.ok(src.includes(`${night} :is(.laolao-deep-think-menu__head,.laolao-deep-think-menu__summary,.laolao-deep-think-menu__hint){color:`),'夜间 head / summary / hint 有夜间色');
+  assert.ok(src.includes(`${night} .laolao-deep-think-menu__footer{color:`),'夜间 footer 有夜间色');
+  assert.doesNotMatch(src,/html\[data-theme-mode="dark"\] \.laolao-deep-think-menu\{/,'不再留只认 dark 的菜单整块规则');
+});

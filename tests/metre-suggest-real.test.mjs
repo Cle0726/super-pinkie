@@ -48,7 +48,7 @@ async function turn(page, text) {
   await page.fill(BOX, text);
   await page.press(BOX, 'Enter');
   await page.waitForFunction(() => { const st = document.querySelector('openclaw-chat-pane')?.state; return st && !st.chatRunId && !st.chatSending && !st.chatStream && st.chatMessages?.at(-1)?.role === 'assistant'; }, null, {timeout: 10_000});
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(400);   // 保留：turn() 也用来断言「关掉后不出建议」，没有能等的条件
 }
 
 test('I8 real page: 回答后出下一句建议，点了只填不发，设置里能关（1440 日 / 820 夜）', async (t) => {
@@ -95,7 +95,7 @@ test('I8 real page: 回答后出下一句建议，点了只填不发，设置里
         // 2. 点了只填不发
         const before = await page.evaluate(sends);
         await page.click(`${ROW} .pk-metre-suggest__chip >> text=Vue`);
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(400);   // 保留：同时断言「没有发出新的 chat.send」，要给可能的误发送留时间
         assert.equal(await page.inputValue(BOX), 'Vue', '填进输入框');
         assert.equal(await page.evaluate(sends), before, '没有发出新的 chat.send');
         assert.equal(await page.evaluate((sel) => document.activeElement === document.querySelector(sel), BOX), true, '焦点在输入框');

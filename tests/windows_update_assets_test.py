@@ -17,12 +17,12 @@ class UpdateAssetsTests(unittest.TestCase):
             control = Path(directory)
             index = control / 'index.html'
             original = '<html><head><script>\nboot();\n</script><script type="module" src="/assets/index-test.js"></script></head><body><openclaw-app></openclaw-app></body></html>'
-            index.write_text(original)
-            template = (ROOT / 'ui/control-ui.index.html').read_text()
+            index.write_text(original, encoding="utf-8")
+            template = (ROOT / 'ui/control-ui.index.html').read_text(encoding="utf-8")
             for name in re.findall(r'(?:src|href)=["\']\.?/(assets/[^?"\']+)', template):
                 file = control / name
                 file.parent.mkdir(parents=True, exist_ok=True)
-                file.write_text('upstream fixture')
+                file.write_text('upstream fixture', encoding="utf-8")
             result = activate.activate(ROOT / 'ui', control)
             self.assertIn('laolao-update-dialog.js', result['resources'])
             self.assertIn('laolao-deep-think-full.webm', result['resources'])

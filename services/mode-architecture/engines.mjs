@@ -30,16 +30,74 @@ export function assetName(version = T3_VERSION, platform = process.platform, arc
   return `t3-${version}-${key}.${platform === 'win32' ? 'zip' : 'tar.gz'}`;
 }
 
+// 同一台电脑上每个 Windows 账号一个短标识（DOMAIN\用户名的哈希，纯英文）。
+export function engineUserKey(env = process.env) {
+  let name = env.USERNAME || '';
+  if (!name) { try { name = os.userInfo().username; } catch { name = 'user'; } }
+  return crypto.createHash('sha256').update(`${env.USERDOMAIN || ''}\\${name}`.toLowerCase()).digest('hex').slice(0, 12);
+}
+
+// 2.5.54 及以前所有账号共用的 ProgramData 目录（那时 App 总是用管理员身份跑）。
+export function sharedEngineRoot(env = process.env) {
+  return path.join(env.ProgramData || 'C:\\ProgramData', 'SuperPinkie', 'engines');
+}
+
 // 第一个纯英文的候选目录。用户名是中文时，家目录下的路径不行，退到系统的英文目录。
+// ProgramData 那一级按账号分开：App 不再要管理员（#343），以前提权跑的版本建的共用 engines 目录
+// 归 Administrators，普通身份写不进 prefs.json、换不了版本；而用户自己在 ProgramData 下新建的子目录归自己。
+// 分开也让别的账号读不到这个账号的引擎登录状态（home/）。
 export function engineRoot({stateDir = path.join(os.homedir(), '.openclaw'), base = '', env = process.env, platform = process.platform} = {}) {
   const candidates = [base ? path.join(base, 'engines') : path.join(stateDir, 'pinkie', 'engines')];
   if (platform === 'win32') {
     if (env.LOCALAPPDATA) candidates.push(path.join(env.LOCALAPPDATA, 'SuperPinkie', 'engines'));
-    candidates.push(path.join(env.ProgramData || 'C:\\ProgramData', 'SuperPinkie', 'engines'));
+    candidates.push(`${sharedEngineRoot(env)}-${engineUserKey(env)}`);
   } else {
     candidates.push(path.join('/tmp', 'superpinkie-engines'));
   }
   return candidates.find(isAscii) || candidates[candidates.length - 1];
+}
+
+// 从共用目录搬到按账号的目录时，只带开关和角色分配两个小文件（读得到才带，已有的不覆盖）。
+// 引擎本体（versions/，约 170MB）按需重新下载；home/ 里是引擎的登录状态，可能属于别的账号，不搬。
+export function adoptSharedEngineFiles(root, {env = process.env, platform = process.platform} = {}) {
+  if (platform !== 'win32') return [];
+  const shared = sharedEngineRoot(env);
+  if (root === shared || !root.startsWith(shared + '-')) return [];
+  const copied = [];
+  for (const name of ['prefs.json', 'players.json']) {
+    const from = path.join(shared, name);
+    const to = path.join(root, name);
+    try {
+      if (fs.existsSync(to) || !fs.existsSync(from)) continue;
+      fs.mkdirSync(root, {recursive: true});
+      fs.copyFileSync(from, to, fs.constants.COPYFILE_EXCL);
+      copied.push(name);
+    } catch {}
+  }
+  return copied;
+}
+
+// 发布包里的路径是下载内容，不是本机路径。绝对路径、盘符、UNC 和 `..`（含反斜杠写法）不能解压出来。
+// Windows 会去掉路径段末尾的点和空格，所以 `...`、`.. ` 这类只有点和空格的段也按 `..` 处理。
+export function archiveMemberEscapes(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return false;
+  const normalized = raw.replace(/\\/g, '/');
+  if (normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) return true;
+  return normalized.split('/').some(part => part !== '.' && part !== '' && part.replace(/[. ]+$/, '') === '');
+}
+
+// 列出发布包条目名的命令。Windows 的发布包是 .zip：Windows 上 tar 不一定在 PATH 里，
+// 也不保证能读 zip，所以和解压一样走 PowerShell，用 .NET 的 ZipFile 读 zip 目录（不解压）。
+// 其他平台是 .tar.gz，用 tar -tf。
+export function archiveListCommand(platform, archive) {
+  if (platform !== 'win32') return ['tar', ['-tf', archive]];
+  const literal = String(archive).replace(/'/g, "''");
+  const script = "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.Encoding]::UTF8; "
+    + 'Add-Type -AssemblyName System.IO.Compression.FileSystem; '
+    + `$z=[IO.Compression.ZipFile]::OpenRead('${literal}'); `
+    + 'try { foreach ($e in $z.Entries) { [Console]::Out.WriteLine($e.FullName) } } finally { $z.Dispose() }';
+  return ['powershell', ['-NoProfile', '-NonInteractive', '-Command', script]];
 }
 
 export function parseSums(text, name) {
@@ -187,15 +245,28 @@ export class EngineService {
       const expected = parseSums(fs.readFileSync(path.join(staging, 'SHA256SUMS'), 'utf8'), name);
       if (!expected) throw new Error('发布包的校验清单里没有这个文件');
       if (sha256File(path.join(staging, name)) !== expected) throw new Error('下载的文件校验不对，已丢弃');
+      const archive = path.join(staging, name);
+      const [listFile, listArgs] = archiveListCommand(this.platform, archive);
+      const listed = await this.exec(listFile, listArgs, {timeout: 60_000});
+      if (listed.code !== 0) throw new Error('解压失败：读不到发布包里的文件名');
+      for (const line of String(listed.stdout || '').split(/\r?\n/)) {
+        if (archiveMemberEscapes(line)) throw new Error('发布包里有越界路径，已丢弃');
+      }
       const out = path.join(staging, 'x');
       fs.mkdirSync(out, {recursive: true});
       const extracted = this.platform === 'win32'
-        ? await this.exec('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${path.join(staging, name).replace(/'/g, "''")}' -DestinationPath '${out.replace(/'/g, "''")}' -Force`], {timeout: 10 * 60_000})
-        : await this.exec('tar', ['-xzf', path.join(staging, name), '-C', out], {timeout: 10 * 60_000});
+        ? await this.exec('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${archive.replace(/'/g, "''")}' -DestinationPath '${out.replace(/'/g, "''")}' -Force`], {timeout: 10 * 60_000})
+        : await this.exec('tar', ['-xzf', archive, '-C', out], {timeout: 10 * 60_000});
       if (extracted.code !== 0) throw new Error('解压失败：' + (extracted.stderr || '').trim().slice(0, 200));
       const binary = this.platform === 'win32' ? 't3.exe' : 't3';
       const found = [out, ...fs.readdirSync(out).map(entry => path.join(out, entry))].find(dir => fs.existsSync(path.join(dir, binary)));
       if (!found) throw new Error('发布包里没有找到 ' + binary);
+      const binaryPath = path.join(found, binary);
+      if (!fs.lstatSync(binaryPath).isFile()) throw new Error('发布包里的程序不是普通文件，已丢弃');
+      const realOut = fs.realpathSync(out);
+      const realBin = fs.realpathSync(binaryPath);
+      const outPrefix = realOut.endsWith(path.sep) ? realOut : realOut + path.sep;
+      if (!realBin.startsWith(outPrefix)) throw new Error('发布包里的程序指向了目录外面，已丢弃');
       fs.mkdirSync(path.dirname(this.dir), {recursive: true});
       fs.rmSync(this.dir, {recursive: true, force: true});
       fs.renameSync(found, this.dir);
@@ -306,7 +377,12 @@ const SHARED = Symbol.for('pinkie.engines.v1');
 // lineage：Metre 的血缘（metre-board.mjs 传进来），有了它才提供 pinkie_engine_task（Metre 派活给外部引擎，engines-task.mjs）。
 // modelHealth：碧琪的模型健康（metre-board.mjs 传进来），「碧琪模型」那条路把能用的模型排在前面。
 export function registerEngines(api, {base = '', register, lineage = null, modelHealth = null} = {}) {
-  const shared = globalThis[SHARED] ||= {service: new EngineService({root: engineRoot({base}), logger: api.logger})};
+  const shared = globalThis[SHARED] ||= (() => {
+    const root = engineRoot({base});
+    const adopted = adoptSharedEngineFiles(root);
+    if (adopted.length) api.logger?.info?.(`engines: carried ${adopted.join(', ')} over from the shared ProgramData folder to ${root}`);
+    return {service: new EngineService({root, logger: api.logger})};
+  })();
   const service = shared.service;
   const prefsFile = path.join(service.root, 'prefs.json');
   const prefs = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')) || {}; } catch { return {}; } };
