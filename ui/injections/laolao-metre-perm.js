@@ -41,7 +41,7 @@
   };
   const tokens = (n) => (!Number.isFinite(n) ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n)));
   const money = (n) => (!Number.isFinite(n) ? '—' : '$' + n.toFixed(n < 0.1 ? 3 : 2));
-  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-perm]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志
+  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-perm]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志；同一规则另有两份在 laolao-metre-allow.js、laolao-metre-lock.js，改规则三处一起改
   // ---------- P2 放手程度 ----------
   const LEVELS = [
     {id: 'auto', name: '自动', hint: '命令直接跑（默认，和 Metre 一直以来一样）', security: 'full', ask: 'off'},

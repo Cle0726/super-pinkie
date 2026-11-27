@@ -69,7 +69,7 @@
     if (list.some((e) => norm(e.pattern) === norm(pattern))) return '清单里已经有这一条了。';
     return '';
   }
-  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-allow]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志
+  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-allow]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志；同一规则另有两份在 laolao-metre-perm.js、laolao-metre-lock.js，改规则三处一起改
   const state = {file: null, loaded: false, busy: false, error: '', note: '', confirmAll: false};
   let card = null, listEl = null, statusEl = null, input = null, addBtn = null, wasShown = false;
   // 重读和写入会重叠：慢的 get 不能把后写成功的清单盖掉。

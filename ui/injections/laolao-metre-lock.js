@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   if (window.__pinkieMetreLock) return;
-  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-lock]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志
+  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-lock]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志；同一规则另有两份在 laolao-metre-perm.js、laolao-metre-allow.js，改规则三处一起改
   const ACTIVE_MODE_KEY = 'laolao:active-mode';
   let cachedStatus = null;
   let activePrompt = null;
