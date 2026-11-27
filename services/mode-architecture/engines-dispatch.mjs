@@ -125,7 +125,7 @@ export class EngineDispatch {
       const auth = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))?.[1] || '';
       try { send(200, {ok: true, ...await this.call(auth, body)}); }
       // Metre 的报错让它「先用 pinkie_models」：外部引擎调不到这个工具，换成这里对应的写法。
-      catch (error) { send(error.status || 200, {ok: false, error: clip(String(error.message).replace(/pinkie_models/g, '{"action":"models"}'), 500)}); }
+      catch (error) { send(error?.status || 200, {ok: false, error: clip(String(error?.message ?? error ?? '派活失败').replace(/pinkie_models/g, '{"action":"models"}'), 500)}); }
     }, () => { try { res.destroy(); } catch {} });
   }
 

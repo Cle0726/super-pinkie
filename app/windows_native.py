@@ -248,11 +248,13 @@ class WindowsNative:
                 from app import windows_app_window
             return windows_app_window.handle(message)
         if kind == "context":
-            self.mode = str(message.get("mode") or self.mode)
-            self.mode_label = str(message.get("modeLabel") or self.mode_label)
+            # B43: only short strings from the page; the tray menu and quick-ask window show these
+            text = lambda value, cap: value.strip()[:cap] if isinstance(value, str) else ""  # noqa: E731
+            self.mode = text(message.get("mode"), 32) or self.mode
+            self.mode_label = text(message.get("modeLabel"), 32) or self.mode_label
             items = message.get("running") if isinstance(message.get("running"), list) else []
-            running = [(str(item.get("key")), str(item.get("title") or "未命名会话"))
-                       for item in items[:20] if isinstance(item, dict) and item.get("key")]
+            running = [(text(item.get("key"), 300), text(item.get("title"), 80) or "未命名会话")
+                       for item in items[:20] if isinstance(item, dict) and text(item.get("key"), 300)]
             now = self._clock()
             if [key for key, _ in running] != [key for key, _ in self._running]:
                 self._awake_capped = False
