@@ -39,6 +39,20 @@ jobs:
           npm install --prefix "$deps" --no-save playwright ws
           "$deps/node_modules/.bin/playwright" install chromium webkit
           echo "PINKIE_UI_DEPS=$deps" >> "$GITHUB_ENV"
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build the actual Mac package
         run: ./desktop/macos/build.sh
       - name: Capture the packaged Mac UI in Chromium
@@ -70,6 +84,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build the actual Windows package
         shell: pwsh
         run: .\build-win.ps1
@@ -86,6 +114,7 @@ jobs:
   windows-smoke:
     needs: windows
     uses: ./.github/workflows/windows-smoke.yml
+    secrets: inherit
     with:
       app_artifact: ui-parity-windows-app
       old_tag: ${{ inputs.old_tag || 'v2.5.16' }}
