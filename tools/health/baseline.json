@@ -2473,7 +2473,7 @@
     "ui/injections/laolao-session-cards.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 532,
+      "lines": 527,
       "mutationObserverRefs": 1,
       "mutationObservers": 0,
       "observeUnclear": 0,
