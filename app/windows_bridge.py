@@ -253,7 +253,12 @@ class NativeBridge(InAppBrowserBridge):
         """
         payload = payload if isinstance(payload, dict) else {}
         action = str(payload.get("action", "open"))
-        path = Path(str(payload.get("path", ""))).expanduser()
+        raw_path = str(payload.get("path", "")).strip()
+        if len(raw_path) > 1 and raw_path[0] in "\\/" and raw_path[1] in "\\/":
+            # \\host\share or //host from a model reply: resolving it would already
+            # open an SMB connection (and offer NTLM credentials) before any check.
+            return {"ok": False, "message": "只能打开用户主目录里的现有文件，且不能越过符号链接。"}
+        path = Path(raw_path).expanduser()
         try:
             path = path.resolve(strict=True)
             home = Path.home().resolve(strict=True)
@@ -972,6 +977,7 @@ class NativeBridge(InAppBrowserBridge):
         append_log("launcher", "startup page: user asked to repair settings")
         result = gateway.repair_config(force=True)
         if not (gateway.process and gateway.process.poll() is None):
+            gateway.reset_backoff()  # B44: a user-asked restart must not wait out the backoff
             gateway.start()
         message = result.get("message") or "已经重新启动本机网关"
         if result.get("step") == "none":

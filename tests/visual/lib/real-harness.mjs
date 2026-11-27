@@ -8,6 +8,7 @@
 // Never touches production paths (%LOCALAPPDATA%\SuperPinkie, Programs\SuperPinkie,
 // ~/.openclaw) or port 18789, and never renders a handwritten page skeleton.
 import {execFileSync} from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -260,45 +261,160 @@ export function ensureUpstreamOpenClaw(version = readRuntimeOpenClawVersion()) {
   }
 }
 
+// Everything the install reads, including this harness (so changing the install
+// steps below can never reuse an old entry). Over-inclusion only costs a
+// rebuild; a missing input could serve a stale bundle, so whole tool folders are
+// hashed. Python bytecode is derived from the sources and is skipped, otherwise
+// the first run's __pycache__ would change the key for the next one.
+const INSTALL_INPUT_DIRS = ['ui/assets', 'ui/injections', 'ui/runtime', 'tools/ui-parity', 'tools/assets'];
+const INSTALL_INPUT_FILES = ['ui/parity-policy.json', 'ui/control-ui.index.html', 'tests/visual/lib/real-harness.mjs'];
+const INSTALL_CACHE_MAX_IDLE_MS = 24 * 60 * 60 * 1000;
+const INSTALL_STAGE_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+const INSTALL_COMPLETE_MARK = '.pinkie-install-complete';
+
+export function realUiInstallKey(repoRoot = REPO_ROOT, version = readRuntimeOpenClawVersion(repoRoot)) {
+  const hash = crypto.createHash('sha256');
+  hash.update(`openclaw@${version}\0`);
+  const add = (abs, rel) => {
+    const data = fs.readFileSync(abs);
+    hash.update(`${rel}\0${data.length}\0`);
+    hash.update(data);
+  };
+  const walk = (dir, rel) => {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, {withFileTypes: true}).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const entry of entries) {
+      if (entry.name === '__pycache__' || entry.name.endsWith('.pyc')) continue;
+      const abs = path.join(dir, entry.name);
+      const childRel = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) walk(abs, childRel);
+      else if (entry.isFile()) add(abs, childRel);
+    }
+  };
+  for (const dir of INSTALL_INPUT_DIRS) walk(path.join(repoRoot, dir), dir);
+  for (const file of INSTALL_INPUT_FILES) {
+    const abs = path.join(repoRoot, file);
+    if (fs.existsSync(abs)) add(abs, file);
+  }
+  return hash.digest('hex').slice(0, 20);
+}
+
+function runInstallSteps({repoRoot, upstreamDir, packageDir, env}) {
+  const controlUiDir = path.join(packageDir, 'dist', 'control-ui');
+  fs.mkdirSync(path.dirname(packageDir), {recursive: true});
+  fs.cpSync(upstreamDir, packageDir, {recursive: true});
+  const pythonCmd = resolvePythonCommand();
+  const bundlePy = path.join(repoRoot, 'tools/ui-parity/bundle.py');
+  const stampMjs = path.join(repoRoot, 'tools/assets/stamp.mjs');
+  const opts = {cwd: repoRoot, env, stdio: 'pipe'};
+  execFileSync(pythonCmd, [bundlePy, 'install', '--root', repoRoot, '--control-ui', controlUiDir], opts);
+  execFileSync(process.execPath, [stampMjs, '--root', repoRoot, '--control-ui', controlUiDir], opts);
+  checkInstalledControlUi({repoRoot, controlUiDir, env});
+  return controlUiDir;
+}
+
+function checkInstalledControlUi({repoRoot, controlUiDir, env}) {
+  const bundlePy = path.join(repoRoot, 'tools/ui-parity/bundle.py');
+  execFileSync(resolvePythonCommand(), [bundlePy, 'check', '--root', repoRoot, '--control-ui', controlUiDir], {cwd: repoRoot, env, stdio: 'pipe'});
+}
+
+function pruneInstallCache(cacheParent, keepDir) {
+  let entries = [];
+  try { entries = fs.readdirSync(cacheParent, {withFileTypes: true}); } catch { return; }
+  const now = Date.now();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(cacheParent, entry.name);
+    if (entry.name.startsWith('stage-')) {
+      // Left behind by a killed run; a live build is far younger than this.
+      try { if (now - fs.statSync(dir).mtimeMs > INSTALL_STAGE_MAX_AGE_MS) fs.rmSync(dir, {recursive: true, force: true}); } catch {}
+      continue;
+    }
+    if (!entry.name.startsWith('installed-') || dir === keepDir) continue;
+    try {
+      const mark = path.join(dir, INSTALL_COMPLETE_MARK);
+      const stamp = fs.existsSync(mark) ? fs.statSync(mark).mtimeMs : fs.statSync(dir).mtimeMs;
+      if (now - stamp > INSTALL_CACHE_MAX_IDLE_MS) fs.rmSync(dir, {recursive: true, force: true});
+    } catch {}
+  }
+}
+
+// The installed Control UI (upstream package + bundle install/stamp/check) is
+// cached per content key and shared read-only: bundle install is ~57s locally
+// (~25s on CI) and every *-real test file used to repeat it. Callers only read
+// controlUiDir; per-run state (fake-server prefs, isolated env) lives in a fresh
+// runDir that cleanup() removes. Entries are built in a stage folder and renamed
+// into place, so concurrent test files or worktrees never see a partial one.
+// On every hit bundle.py check still runs (~3s); a failing entry is rebuilt once.
+// PINKIE_REAL_UI_NO_CACHE=1 restores a full install into runDir.
 export function installRealControlUi({repoRoot = REPO_ROOT, baseDir = os.tmpdir()} = {}) {
   const version = readRuntimeOpenClawVersion(repoRoot);
   const upstreamDir = ensureUpstreamOpenClaw(version);
   const runDir = fs.mkdtempSync(path.join(baseDir, 'pinkie-real-ui-run-'));
   const env = buildIsolatedEnv(runDir);
-  const packageDir = path.join(runDir, 'node_modules', 'openclaw');
-  const controlUiDir = path.join(packageDir, 'dist', 'control-ui');
-  fs.mkdirSync(path.dirname(packageDir), {recursive: true});
-  fs.cpSync(upstreamDir, packageDir, {recursive: true});
-
-  const pythonCmd = resolvePythonCommand();
-  const bundlePy = path.join(repoRoot, 'tools/ui-parity/bundle.py');
-  const stampMjs = path.join(repoRoot, 'tools/assets/stamp.mjs');
-
-  execFileSync(pythonCmd, [bundlePy, 'install', '--root', repoRoot, '--control-ui', controlUiDir], {
-    cwd: repoRoot,
-    env,
-    stdio: 'pipe',
-  });
-  execFileSync(process.execPath, [stampMjs, '--root', repoRoot, '--control-ui', controlUiDir], {
-    cwd: repoRoot,
-    env,
-    stdio: 'pipe',
-  });
-  execFileSync(pythonCmd, [bundlePy, 'check', '--root', repoRoot, '--control-ui', controlUiDir], {
-    cwd: repoRoot,
-    env,
-    stdio: 'pipe',
-  });
-
-  return {
+  const result = (packageDir, controlUiDir, cached) => ({
     version,
     runDir,
     packageDir,
     controlUiDir,
+    cached,
     cleanup() {
       fs.rmSync(runDir, {recursive: true, force: true});
     },
-  };
+  });
+
+  try {
+    if (process.env.PINKIE_REAL_UI_NO_CACHE === '1') {
+      const packageDir = path.join(runDir, 'node_modules', 'openclaw');
+      return result(packageDir, runInstallSteps({repoRoot, upstreamDir, packageDir, env}), false);
+    }
+
+    const cacheParent = process.env.PINKIE_REAL_UI_INSTALL_CACHE || path.join(os.tmpdir(), 'pinkie-real-ui-cache');
+    const cacheDir = path.join(cacheParent, `installed-${realUiInstallKey(repoRoot, version)}`);
+    const packageDir = path.join(cacheDir, 'openclaw');
+    const controlUiDir = path.join(packageDir, 'dist', 'control-ui');
+    const mark = path.join(cacheDir, INSTALL_COMPLETE_MARK);
+
+    if (fs.existsSync(mark)) {
+      try {
+        checkInstalledControlUi({repoRoot, controlUiDir, env});
+        const now = new Date();
+        try { fs.utimesSync(mark, now, now); } catch {}
+        return result(packageDir, controlUiDir, true);
+      } catch {
+        // A cached entry that no longer passes check (e.g. changed by hand) is
+        // rebuilt; a fresh build that fails check still throws below.
+        fs.rmSync(cacheDir, {recursive: true, force: true});
+      }
+    }
+
+    // Entries only appear by renaming a finished stage folder (mark included),
+    // so a folder without the mark is a half-removed leftover that would make
+    // the rename below fail forever.
+    if (fs.existsSync(cacheDir) && !fs.existsSync(mark)) fs.rmSync(cacheDir, {recursive: true, force: true});
+    fs.mkdirSync(cacheParent, {recursive: true});
+    const stageDir = fs.mkdtempSync(path.join(cacheParent, 'stage-'));
+    try {
+      runInstallSteps({repoRoot, upstreamDir, packageDir: path.join(stageDir, 'openclaw'), env});
+      fs.writeFileSync(path.join(stageDir, INSTALL_COMPLETE_MARK), `${version}\n`);
+      try {
+        fs.renameSync(stageDir, cacheDir);
+      } catch (error) {
+        // Another process finished the same key first: use its entry, after
+        // the same check a cache hit gets. (Our own staged copy was checked
+        // inside runInstallSteps before the rename.)
+        if (!fs.existsSync(mark)) throw error;
+        checkInstalledControlUi({repoRoot, controlUiDir, env});
+      }
+    } finally {
+      fs.rmSync(stageDir, {recursive: true, force: true});
+    }
+    pruneInstallCache(cacheParent, cacheDir);
+    return result(packageDir, controlUiDir, false);
+  } catch (error) {
+    fs.rmSync(runDir, {recursive: true, force: true});
+    throw error;
+  }
 }
 
 export function extractWindowsBridgeScript(repoRoot = REPO_ROOT) {
@@ -414,9 +530,12 @@ const FAKE_GATEWAY_EXT_SCRIPT = `(() => {
         }
         if ((frame.method === 'chat.metadata' || frame.method === 'models.list') && Array.isArray(window.__realHarnessModels)) {
           const models = window.__realHarnessModels;
-          Promise.resolve().then(() => {
-            this._raw?.({type: 'res', id: frame.id, ok: true, payload: {models}});
-          });
+          const reply = () => this._raw?.({type: 'res', id: frame.id, ok: true, payload: {models}});
+          // Only the readiness regression test sets this (via opts.initScript): the catalog
+          // reply is parked until the test releases it, i.e. it arrives late the way it can on
+          // a slow runner. Unset, the reply stays a microtask as before.
+          if (frame.method === 'chat.metadata' && window.__realHarnessHoldCatalog) (window.__realHarnessHeldCatalog ||= []).push(reply);
+          else Promise.resolve().then(reply);
           return;
         }
         if (frame.method === 'pinkie.usage.get') {
@@ -1017,12 +1136,56 @@ export async function assertRealPageLoaded(page) {
   return proof;
 }
 
+// The model picker fills its list from an async catalog (laolao-model-picker.js
+// ensureFallbackData: chat.metadata + sessions.list), then re-sorts and re-renders.
+// A menu taller than 40px only means the shell is open, so a fixed wait after it can
+// shoot a half-filled or still-reordering list (model-picker-day 0.5–0.85% red on
+// #302 / #313). Ready = the catalog has landed (data-pinkie-fallback-ready="1", set
+// for both a list and an error) and the menu's text, option order, selection and
+// height stay the same for two frames in a row. Counts frames, not ms: the page's
+// Date is frozen. Returns what it settled on so tests can check it.
+export async function waitModelPickerReady(page, {timeout = 10_000} = {}) {
+  await page.waitForFunction(() => {
+    const details = document.querySelector('details.chat-controls__model[open], details.chat-controls__model-picker[open]');
+    const menu = details?.querySelector('.chat-controls__inline-select-menu--combined');
+    return Boolean(menu && menu.getBoundingClientRect().height > 40 && details.dataset.pinkieFallbackReady === '1');
+  }, {timeout});
+  return page.evaluate(async () => {
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    const read = () => {
+      const details = document.querySelector('details.chat-controls__model[open], details.chat-controls__model-picker[open]');
+      const menu = details?.querySelector('.chat-controls__inline-select-menu--combined');
+      if (!menu) return null;
+      const all = [...menu.querySelectorAll('.chat-controls__combined-model-option, [data-chat-model-option]')];
+      const options = all
+        .filter((el) => el.getClientRects().length)
+        .map((el) => `${el.textContent.trim()}|${el.getAttribute('aria-selected') || ''}`);
+      // The default 常用模型 tab can legitimately be empty (no favourites or recent models yet):
+      // rows are then in the DOM but hidden, and the picker shows its empty-state line instead.
+      // rows = every model row the catalog produced (hidden or not); empty = the visible empty line.
+      const emptyEl = menu.querySelector('.pinkie-model-empty');
+      const empty = emptyEl && emptyEl.getClientRects().length ? emptyEl.textContent.trim() : '';
+      return {options, rows: all.length, empty, height: Math.round(menu.getBoundingClientRect().height), text: menu.textContent.replace(/\s+/g, ' ').trim()};
+    };
+    let last = JSON.stringify(read());
+    let same = 0;
+    for (let i = 0; i < 600 && same < 2; i++) {
+      await frame();
+      const now = JSON.stringify(read());
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
+    if (same < 2) throw new Error(`model picker list never held still for two frames: ${last.slice(0, 200)}`);
+    return JSON.parse(last);
+  });
+}
+
 export async function openRealScenePage(browser, origin, sceneId, theme = 'day', opts = {}) {
   const meta = sceneMeta(sceneId);
   const isNight = theme === 'night';
   const context = await browser.newContext({
     viewport: VIEWPORT,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: opts.deviceScaleFactor || 1,   // B36 高 DPI 走查传 1.25 / 1.5；不给就是 1，现有场景和基线不变
     colorScheme: isNight ? 'dark' : 'light',
     locale: 'zh-CN',
     ...(opts.timezoneId ? {timezoneId: opts.timezoneId} : {}),   // 不给就跟着机器（CI 上是 UTC）
@@ -1190,10 +1353,36 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
   await page.evaluate(() => {
     window.dispatchEvent(new Event('laolao:sessions-changed'));
   });
-  await page.waitForFunction(
-    () => !document.documentElement.hasAttribute('data-laolao-mode-enter'),
-    {timeout: 5_000},
-  );
+  // The mode-enter entrance (laolao-motion.js enter()) is CSS animations keyed on
+  // data-laolao-mode-enter, which the product removes on a fixed 1250ms timer;
+  // waiting for that timer was ~1s of every page open. Contexts here use
+  // reducedMotion: 'reduce', under which laolao-theme.css turns those animations
+  // off, so nothing was animating during the wait. Finish the entrance animations
+  // (a safety net for the non-reduced case), then remove the attribute: every
+  // animated value then already equals its resting value, so no transition starts
+  // (cle-stage gives body::before a 0.7s opacity transition) and the captured frame
+  // is the one the timer would have produced. The product's own removeAttribute
+  // later is a no-op. Late async UI updates that used to land during the timer
+  // are still waited for by settleRealPage's quiet-DOM wait.
+  // Only the animations laolao-theme.css keys on html[data-laolao-mode-enter="1"]
+  // (not the mode-transition overlay's laolao-mode-scene/content-enter). The two
+  // welcome animations are also driven by .laolao-welcome--materializing; those
+  // keep running, since removing the attribute would not end them either.
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    if (!html.hasAttribute('data-laolao-mode-enter')) return;
+    const ENTER = new Set([
+      'laolao-wallpaper-enter', 'laolao-glass-enter', 'laolao-avatar-enter',
+      'laolao-native-wallpaper-enter', 'laolao-native-glass-enter',
+      'laolao-welcome-particle-gather', 'laolao-welcome-materialize',
+    ]);
+    for (const anim of document.getAnimations()) {
+      if (!ENTER.has(anim.animationName)) continue;
+      if (anim.effect?.target?.closest?.('.laolao-welcome--materializing')) continue;
+      try { anim.finish(); } catch {}
+    }
+    html.removeAttribute('data-laolao-mode-enter');
+  });
   await page.waitForFunction(() => {
     const hasMeta = Boolean(document.querySelector('.agent-chat__composer-meta'));
     if (!hasMeta) return true;
@@ -1217,12 +1406,7 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     const triggerSel = 'details.chat-controls__model > summary, details.chat-controls__model-picker > summary';
     await page.waitForSelector(triggerSel, {timeout: 10_000});
     await page.click(triggerSel);
-    await page.waitForFunction(() => {
-      const details = document.querySelector('details.chat-controls__model[open], details.chat-controls__model-picker[open]');
-      const menu = details?.querySelector('.chat-controls__inline-select-menu--combined');
-      return Boolean(menu && menu.getBoundingClientRect().height > 40);
-    }, {timeout: 10_000});
-    await page.waitForTimeout(200);
+    await waitModelPickerReady(page);
   } else if (sceneId === 'settings') {
     const settingsLink = 'a.sidebar-footer-icon[aria-label="设置"]';
     await page.waitForSelector(settingsLink, {timeout: 10_000});

@@ -68,6 +68,33 @@ class HelperVisibilityTest(unittest.TestCase):
         self.assertIn("$data.state -eq 'problem'", PROGRESS_WINDOW_PS)
         self.assertIn("$script:ownerId = [int]$data.owner", PROGRESS_WINDOW_PS)
 
+    def test_progress_window_removes_its_shown_marker_when_it_closes(self):
+        # B19：.shown 只在窗口弹出前写一次，以前关窗只删状态文件和脚本，updates\ 里每次更新多一个。
+        closed = PROGRESS_WINDOW_PS.index("ShowDialog()")
+        self.assertGreater(PROGRESS_WINDOW_PS.index("Remove-Item -LiteralPath ($Status + '.shown')"), closed)
+
+    def test_app_cleanup_and_stale_sweep_remove_shown_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            token = "a" * 32
+            for name in (f"progress-{token}.json", f"progress-{token}.json.shown", f"progress-{token}.ps1"):
+                (root / name).write_text("1", encoding="ascii")
+            WindowsUpdater._stop_progress_window(None, root, token)
+            self.assertEqual(sorted(p.name for p in root.iterdir()), [])
+
+            old, fresh, other = (root / f"progress-{c * 32}.json.shown" for c in "bcd")
+            for marker in (old, fresh):
+                marker.write_text("1", encoding="ascii")
+            (root / "progress-x.json").write_text("{}", encoding="utf-8")  # not a marker: left alone
+            now = time.time()
+            os.utime(old, (now - 2 * 86400, now - 2 * 86400))
+            self.assertEqual(WindowsUpdater._sweep_stale_progress_markers(root, now=now), 1)
+            self.assertFalse(old.exists())
+            self.assertTrue(fresh.exists())  # an update that is running right now keeps its marker
+            self.assertFalse(other.exists())
+            self.assertTrue((root / "progress-x.json").exists())
+            self.assertEqual(WindowsUpdater._sweep_stale_progress_markers(root / "missing", now=now), 0)
+
     def test_admin_repair_copies_back_in_backup_mode_and_restarts_unelevated(self):
         copy = REPAIR_PS.index("robocopy.exe $source $Target /E /B")
         self.assertLess(REPAIR_PS.index("Stop-Owned $root"), copy)
@@ -168,6 +195,50 @@ class LaunchTest(unittest.TestCase):
                 mock.patch("app.windows_desktop.threading.Timer"):
             self.assertTrue(bridge.apply_update()["started"])
         self.assertEqual(updater.launch_replacer.call_args_list[-1], mock.call(elevated=True))
+
+    def test_bridge_does_not_elevate_when_the_user_says_no(self):
+        updater = mock.Mock()
+        updater.launch_replacer.return_value = {"started": False, "elevate": True, "message": "x"}
+        bridge = NativeBridge(updater)
+        bridge._window = mock.Mock()
+        with mock.patch.object(NativeBridge, "_ask_elevated_install", return_value=False):
+            self.assertFalse(bridge.apply_update()["started"])
+        self.assertEqual(updater.launch_replacer.call_args_list, [mock.call()])
+
+
+class ElevationEntryPointsTest(unittest.TestCase):
+    """The App runs unelevated (no --uac-admin); UAC is asked for only here."""
+
+    ALLOWED = {"app/windows_elevated.py", "app/windows_ps_templates.py"}
+
+    def test_only_the_known_entry_points_ask_for_uac(self):
+        pattern = re.compile(r"""lpVerb\s*=\s*["']runas|-Verb\s+RunAs|Verb\s*=\s*["']runas""", re.I)
+        found = set()
+        for folder in ("app", "services", "installer"):
+            for path in (ROOT / folder).rglob("*"):
+                if path.suffix not in (".py", ".ps1", ".mjs", ".js", ".cjs") or "node_modules" in path.parts:
+                    continue
+                if pattern.search(path.read_text(encoding="utf-8-sig", errors="replace")):
+                    found.add(path.relative_to(ROOT).as_posix())
+        self.assertEqual(found, self.ALLOWED)
+
+    def test_the_updater_elevates_in_one_place_and_only_when_asked(self):
+        lines = (ROOT / "app/windows_updater.py").read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any("def launch_replacer(self, elevated=False):" in line for line in lines))
+        calls = [i for i, line in enumerate(lines) if "start_elevated(" in line and "def start_elevated" not in line]
+        self.assertEqual(len(calls), 1)
+        guard = next(lines[i] for i in range(calls[0] - 1, -1, -1) if lines[i].strip().startswith("if "))
+        self.assertEqual(guard.strip(), "if elevated:")
+
+    def test_repair_button_elevates_only_on_click_and_restarts_unelevated(self):
+        from app.windows_ps_templates import __file__ as templates_file
+        templates = Path(templates_file).read_text(encoding="utf-8")
+        click = templates.index("$admin.Add_Click(")
+        runas = templates.index("-Verb RunAs")
+        self.assertLess(click, runas, "RunAs must sit inside the button's click handler")
+        self.assertEqual(templates.count("-Verb RunAs"), 1)
+        # The elevated repair hands the restart to Explorer, so the App comes back unelevated.
+        self.assertIn("& explorer.exe $TargetExe", REPAIR_PS)
 
 
 class PendingLaunchTokenTest(unittest.TestCase):

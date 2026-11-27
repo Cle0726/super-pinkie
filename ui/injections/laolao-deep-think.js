@@ -283,16 +283,7 @@
       setText(steps.children[1], (used.join("、") || "无") + " / " + (pending.join("、") || "无"));
     }
     for (const role of roles) {
-      const key = String(role.role || role.label || "协作");
-      seen.add(key);
-      let row = existing.get(key);
-      if (!row) {
-        row = document.createElement("div");
-        row.className = "laolao-deep-think-status__role";
-        row.dataset.role = key;
-        row.append(document.createElement("span"), document.createElement("span"));
-        details.append(row);
-      }
+      const row = ensureRow(String(role.role || role.label || "协作"));
       setText(row.children[0], role.label || role.role || "协作");
       setText(row.children[1], `${Math.min(Number(role.completed) || 0, Number(role.required) || 0)}/${Number(role.required) || 0}${role.pending ? ` · ${role.pending} 进行中` : ""}`);
     }

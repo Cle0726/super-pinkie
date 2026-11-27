@@ -42,7 +42,7 @@ html[data-pinkie-night] .pinkie-msg-menu { background:#2a2027;color:#f3e9ef;box-
 .pinkie-msg-toast[data-show] { opacity:1;transform:translate(-50%,0) }
 html[data-pinkie-reduce-motion] :is(.pinkie-msg-row,.pinkie-msg-toast) { transition:none }
 .chat-group.assistant .chat-group-footer:has(.pinkie-msg-row) { justify-content:flex-start }
-.chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) { order:-1;margin-left:-5px }
+.chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) { order:-1;margin-left:-5px } time.chat-group-timestamp:not([datetime^="2"]) { display:none }   /* B31：原生拿 new Date(ts).toISOString() 填 datetime；时间戳 0 / 负数 / 缺失（1970、1969、空）就不显示时间 */
 /* 失败卡：原因 + 换模型再发一次（替换「这次回复没能完成，请稍后再试」那句） */
 .chat-bubble[data-pinkie-fail] > .chat-text { display:none }
 .pinkie-fail { display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-size:14px;line-height:1.6 }

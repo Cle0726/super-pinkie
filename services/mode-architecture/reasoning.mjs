@@ -55,6 +55,18 @@ export function replyForReview(text = '') {
   if (value.length <= REVIEW_REPLY_KEEP) return value;
   return `${value.slice(0, REVIEW_REPLY_KEEP)}\n…（回复太长，后面还有 ${value.length - REVIEW_REPLY_KEEP} 字没有放进来；没看到的部分不要据此判没写完）`;
 }
+// 其余交给独立解答 / 审稿员 / 任务面板的正文也给全文（旧值 4000 / 6000 / 12000 字静默截，同 #241）：
+// 用户请求（「继续」指的那条、没登记过原话的那条）、独立做法和审稿员交回的原文、存进任务记录的主回复。
+// 真超过上限时在文本里明说截了多少。
+const USER_TEXT_KEEP = 20_000;
+const VIEW_KEEP = 20_000;
+const PASS_OUTPUT_KEEP = 60_000;
+const REVIEW_NOTE = '没看到的部分不要据此下结论';
+function keepMarked(text, limit, what, note = '') {
+  const value = String(text || '');
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit)}\n…（${what}太长，已截断 ${value.length - limit} 字${note ? `；${note}` : ''}）`;
+}
 const PASS_TIMEOUT_MS = 300_000;
 const INDEPENDENT_WAIT_MS = 240_000;
 const INTENT_TTL_MS = 60 * 60_000;
@@ -277,7 +289,7 @@ function lastTaskFromMessages(messages = []) {
     if (message?.role !== 'user') continue;
     const text = partsText(message.content).trim();
     if (!text || CONTROL_PROMPT.test(text) || messageWeight(text) !== 'task') continue;
-    return text.slice(0, 4000);
+    return keepMarked(text, USER_TEXT_KEEP, '之前这条请求', REVIEW_NOTE);
   }
   return '';
 }
@@ -312,8 +324,9 @@ function historyText(value) {
 }
 
 function outputText(result) {
-  return (result?.payloads || []).filter((part) => !part?.isError && !part?.isReasoning && !part?.isCommentary && typeof part?.text === 'string')
-    .map((part) => part.text).join('\n').trim().slice(0, 6000);
+  const text = (result?.payloads || []).filter((part) => !part?.isError && !part?.isReasoning && !part?.isCommentary && typeof part?.text === 'string')
+    .map((part) => part.text).join('\n').trim();
+  return keepMarked(text, PASS_OUTPUT_KEEP, '这份输出', REVIEW_NOTE);
 }
 
 function messageOf(entry) {
@@ -922,7 +935,8 @@ export class ReasoningEnhancer {
     if (intent.phase === 'armed' && matches) {
       const legacy = unrestrictedSession(sessionKey);
       if (runId && !legacy) intent.runId = runId;
-      if (!intent.message) intent.message = prompt.slice(0, MAX_MESSAGE);
+      // 没经过 prepare 登记原话（单独选了做事档位）时用这一轮的提示；超长不再静默截，审稿员要知道后面还有。
+      if (!intent.message) intent.message = keepMarked(prompt, USER_TEXT_KEEP, '用户这一轮的原话', REVIEW_NOTE);
       // 力气跟着活走：单独选了做事档位、发来的却只是寒暄，这一条什么都不加。
       const weight = legacy ? 'task' : messageWeight(intent.message);
       if (weight === 'social') { this.store.delete(sessionKey, intent.requestId); return; }
@@ -1104,7 +1118,7 @@ export class ReasoningEnhancer {
     if (SILENT_REPLY.test(reply)) return {reviewed: false, silent: true};
     for (const job of intent.jobs || []) {
       if ((job.role === 'main' || job.role === 'fix') && job.state === 'running') {
-        this.updateJob(sessionKey, intent.requestId, job, {state: event.success === false ? 'failed' : 'done', endedAt: Date.now(), summary: summaryOf(reply), output: reply.slice(0, 6000)});
+        this.updateJob(sessionKey, intent.requestId, job, {state: event.success === false ? 'failed' : 'done', endedAt: Date.now(), summary: summaryOf(reply), output: keepMarked(reply, PASS_OUTPUT_KEEP, '这条回复')});
       }
     }
     if (event.success === false || !reply) { const current = this.store.get(sessionKey, {requestId: intent.requestId}); if (current) { current.phase = 'skipped'; this.store.set(current); } return {reviewed: false}; }
@@ -1133,7 +1147,7 @@ export class ReasoningEnhancer {
       // 免得「取大」落空——这时回复已经交给用户了，补做不让用户多等。
       // 只在这一条自己带做事档位时才取：会话里上一件档位任务留下的子任务结果和这一条无关。
       let views = [];
-      if (!legacy && fresh.workTier) { try { views = (this.tierViews(sessionKey) || []).map((view) => String(view?.text || '').trim().slice(0, 6000)).filter(Boolean); } catch {} }
+      if (!legacy && fresh.workTier) { try { views = (this.tierViews(sessionKey) || []).map((view) => keepMarked(String(view?.text || '').trim(), VIEW_KEEP, '这份独立做法', REVIEW_NOTE)).filter(Boolean); } catch {} }
       const owed = legacy || fresh.round > 0 ? 0 : Math.min(3, (Number(recipe.tierViews) || 0) - views.length);
       const backfill = owed > 0 ? await waitFor(this.launchIndependent(fresh, owed, views.length + engine.length)) : [];
       // 补做的那几份留着，打回后的复核接着用，不再做一遍。
