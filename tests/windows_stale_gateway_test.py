@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -59,6 +60,25 @@ class ListenerTest(unittest.TestCase):
         self.assertEqual(4242, gateway_listener_pid(18789, runner=runner))
         self.assertIsNone(gateway_listener_pid(18790, runner=runner))
 
+    def test_netstat_in_a_non_utf8_console_code_page_does_not_crash_startup(self):
+        """法语 / 德语 Windows 的 netstat 按控制台 OEM 代码页输出（État → 0x90）。
+
+        旧代码 text=True 不带 errors：按 cp1252 或 UTF-8（PYTHONUTF8=1）严格解码都在读线程里抛
+        UnicodeDecodeError，stdout 变 None，找不到占着端口的旧网关，retire_stale() 就不退它——
+        更新后新版接上旧网关，又是「更新了没变化」。只用到 ASCII 字段，坏字节替换掉就行。
+        """
+        output = (
+            b"  Proto  Adresse locale          Adresse distante       \x90tat\r\n"
+            b"  TCP    127.0.0.1:18789        0.0.0.0:0              LISTENING       4242\r\n"
+        )
+        script = f"import sys; sys.stdout.buffer.write({output!r})"
+        passed = ("capture_output", "text", "encoding", "errors", "timeout")
+
+        def runner(command, **options):
+            return subprocess.run([sys.executable, "-c", script], **{k: v for k, v in options.items() if k in passed})
+
+        self.assertEqual(4242, gateway_listener_pid(18789, runner=runner))
+
 
 class RetireStaleTest(unittest.TestCase):
     def setUp(self):
@@ -99,6 +119,117 @@ class RetireStaleTest(unittest.TestCase):
         with mock.patch.object(windows_desktop, "http_ready", return_value=False):
             self.assertIsNone(self.supervisor.retire_stale(kill=self.fail))
 
+    # ---- B44: branches the cases above did not reach ----
+    def _stale(self, ready, kill, wait=0):
+        logs = []
+        listener = {"pid": 9, "image": "C:/old/node.exe", "started": 1}
+        with mock.patch.object(windows_desktop, "http_ready", side_effect=ready), \
+                mock.patch.object(GatewaySupervisor, "_listener", return_value=listener), \
+                mock.patch.object(windows_desktop, "stale_gateway_reason", return_value="another version"), \
+                mock.patch.object(windows_desktop, "append_log", lambda _kind, message: logs.append(message)):
+            return self.supervisor.retire_stale(kill=kill, wait=wait), logs
+
+    def test_b44_kill_that_fails_leaves_it_and_says_so(self):
+        for error in (OSError("access denied"), subprocess.TimeoutExpired("taskkill", 8)):
+            def kill(_pid, error=error):
+                raise error
+            reason, logs = self._stale(lambda _: True, kill)
+            self.assertIsNone(reason)
+            self.assertTrue(any("could not be stopped" in line for line in logs), logs)
+
+    def test_b44_gateway_still_answering_after_stop_is_logged(self):
+        killed = []
+        reason, logs = self._stale(lambda _: True, killed.append, wait=0.3)
+        self.assertEqual("another version", reason)
+        self.assertEqual([9], killed)
+        self.assertTrue(any("still answering" in line and "pid=9" in line for line in logs), logs)
+
+    def test_b44_gateway_gone_after_stop_logs_nothing_more(self):
+        ready = iter([True, False])
+        reason, logs = self._stale(lambda _: next(ready), lambda _pid: None, wait=1)
+        self.assertEqual("another version", reason)
+        self.assertFalse(any("still answering" in line for line in logs), logs)
+
+    def test_b44_answer_without_a_listener_pid_is_left_alone(self):
+        with mock.patch.object(windows_desktop, "http_ready", return_value=True), \
+                mock.patch.object(GatewaySupervisor, "_listener", return_value=None):
+            self.assertIsNone(self.supervisor.retire_stale(kill=self.fail, wait=0))
+
+
+class RestartBackoffTest(unittest.TestCase):
+    """B44: a gateway that never gets ready (port held by another program, dies at once)
+    used to be respawned every 2 s forever."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name) / "app"
+        (root / "runtime/bin").mkdir(parents=True)
+        (root / "VERSION").write_text("2.5.27\n", encoding="utf-8")
+        state = Path(self.temp.name) / "state"
+        state.mkdir()
+        self.clock = [1000.0]
+        self.spawned = []
+
+        class Dead:
+            pid = 9
+
+            def poll(self):
+                return 1
+
+        for patch in (mock.patch.object(windows_desktop, "state_root", return_value=state),
+                      mock.patch.object(windows_desktop, "http_ready", return_value=False),
+                      mock.patch.object(windows_desktop, "keep_gateway_after_close", return_value=True),
+                      mock.patch.object(windows_desktop, "append_log", lambda *_: None),
+                      mock.patch.object(windows_desktop.time, "monotonic", lambda: self.clock[0]),
+                      mock.patch.object(GatewaySupervisor, "root_proxy", return_value=None),
+                      # a plain function, not side_effect: a Mock keeps call args, i.e. the open gateway.log,
+                      # and Windows then cannot delete the temp folder
+                      mock.patch.object(windows_desktop.subprocess, "Popen",
+                                        new=lambda *a, **k: self.spawned.append(self.clock[0]) or Dead())):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.supervisor = GatewaySupervisor(BundledRuntime(root))
+
+    def tick(self, seconds, step=.75):
+        for _ in range(int(seconds / step)):
+            self.clock[0] += step
+            self.supervisor.start()
+
+    def test_respawns_back_off_to_a_minute(self):
+        self.supervisor.start()
+        self.tick(600)
+        gaps = [b - a for a, b in zip(self.spawned, self.spawned[1:])]
+        self.assertLess(len(self.spawned), 20, gaps)  # was ~270 in ten minutes
+        self.assertTrue(all(later >= earlier for earlier, later in zip(gaps, gaps[1:])), gaps)
+        self.assertGreaterEqual(gaps[-1], 60)
+        self.assertLess(gaps[-1], 62)
+        self.assertLess(gaps[0], 3)  # the first retry is still quick
+
+    def test_ready_gateway_resets_the_backoff(self):
+        self.supervisor.start()
+        self.tick(300)
+        with mock.patch.object(GatewaySupervisor, "config_repair", create=True):
+            self.supervisor.note_ready()
+        before = len(self.spawned)
+        self.tick(3)
+        self.assertEqual(before + 1, len(self.spawned))
+
+
+    def test_repair_button_restarts_at_once_even_after_a_minute_of_backoff(self):
+        # #317 review: the startup page's repair button is pressed exactly when the gateway keeps failing,
+        # i.e. when the gap has grown to 60 s; start() then returned and the page still said it restarted.
+        self.supervisor.start()
+        self.tick(600)
+        self.assertEqual(self.supervisor.restart_gap, 60.0)
+        self.clock[0] = self.spawned[-1] + 5  # 5 s after the last respawn: well inside the 60 s gap
+        before = len(self.spawned)
+        bridge = windows_desktop.NativeBridge(mock.Mock())
+        bridge._gateway = self.supervisor
+        with mock.patch.object(GatewaySupervisor, "repair_config", return_value={"repaired": True, "step": "migration", "message": "已经自动修好"}):
+            self.assertEqual(bridge.startup_repair(), {"ok": True, "message": "已经自动修好"})
+        self.assertEqual(before + 1, len(self.spawned), "repair did not start the gateway right away")
+        self.assertEqual(self.supervisor.restart_gap, 2.0)
 
 class ReplacerTest(unittest.TestCase):
     def test_portable_swap_stops_processes_from_the_install_first(self):

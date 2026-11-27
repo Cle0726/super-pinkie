@@ -10,7 +10,7 @@
 
   const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
   const mode = () => { const m = document.documentElement.getAttribute("data-laolao-mode"); return MODES.includes(m) ? m : "chat"; };
-  const ART = (m, s) => `./laolao-pinkie-buddy-${m}-${s}.png`;
+  const ART = (m, s) => `/laolao-pinkie-buddy-${m}-${s}.png`; // 绝对路径：在 /settings/… 下 ./ 会 404
   const PREF_KEY = "pinkie-buddy-prefs-v1";
   const SLEEPY_AFTER = 10 * 60_000;
   const FOCUS_MINUTES = 25;
@@ -24,8 +24,8 @@
   const savePrefs = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch {} };
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+  const zhError = (error, fallback) => { const raw = String(error?.message || error || ""); console.warn("[pinkie-buddy]", error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON 不上界面，原文进日志
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-
   /* 手绘线条图标：替代表情符号，悬停时各有一个小动作（见 CSS .ico--*） */
   const ICON = {
     explain: '<svg viewBox="0 0 24 24"><path class="draw" d="M9 18h6M10 21h4"/><path class="draw" d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z"/><path class="ray" d="M12 0.6v1.2M20.6 4l-.9.9M23 12h-1.2M3.4 4l.9.9M1 12h1.2"/></svg>',
@@ -80,7 +80,7 @@
         if (res?.error) return {html: `碧琪这次没想出来：${esc(res.error)}`};
       } catch (error) {
         if (kind === "clarify" && job.mode !== "unrestricted") return {error: String(error?.message || error)};
-        if (!/unknown method|not found|invalid/i.test(String(error?.message || ""))) return {html: `碧琪这次没连上：${esc(error?.message || error)}`};
+        if (!/unknown method|not found|invalid/i.test(String(error?.message || ""))) return {html: `碧琪这次没连上：${esc(zhError(error, "网关暂时没有回应，请稍后再试"))}`};
       }
     }
     return {html: "小帮手还没连接独立模型，先保留你正在写的内容。"};
@@ -417,18 +417,18 @@
       event.preventDefault();if(!live())return;
       const settings=values(), syncAll=allModes.checked;fields.disabled=allModes.disabled=true;test.disabled=save.disabled=true;showStatus("正在保存…");
       try{const result=await helperRpc("pinkie.companion.settings.set",{mode:originMode,settings,allModes:syncAll});if(live()){render(result);showStatus(syncAll?"已保存到所有模式。":"已保存。下一次小碧琪回复会使用这组设置。");}}
-      catch(error){if(live())showStatus(error.message || "保存失败，请再试一次。",true);}
+      catch(error){if(live())showStatus(zhError(error,"保存失败，请再试一次。"),true);}
       finally{if(live()){fields.disabled=allModes.disabled=false;test.disabled=save.disabled=!catalog.length;}}
     });
     test.addEventListener("click",async()=>{
       if(!form.reportValidity() || !live())return;
       const settings=values(), snapshot=JSON.stringify(settings);test.disabled=save.disabled=true;showStatus("正在测试连接…");
       try{const result=await helperRpc("pinkie.companion.test",{mode:originMode,settings},135000);if(live())showStatus(JSON.stringify(values())===snapshot?`连接正常 · ${Math.max(.1,result.latencyMs/1000).toFixed(1)} 秒`:"参数已修改，请用当前设置重新测试。");}
-      catch(error){if(live())showStatus(error.message || "未连接成功，可以换模型或调整参数后再试。",true);}
+      catch(error){if(live())showStatus(zhError(error,"未连接成功，可以换模型或调整参数后再试。"),true);}
       finally{if(live())test.disabled=save.disabled=!catalog.length;}
     });
     try{const result=await helperRpc("pinkie.companion.status",{mode:originMode});if(live()){if(!Array.isArray(result?.models))throw new Error("设置服务需要更新，重开 App 后再试。");render(result);model.focus();}}
-    catch(error){if(live())showStatus(error.message || "暂时读不到设置，请稍后重新打开。",true);}
+    catch(error){if(live())showStatus(zhError(error,"暂时读不到设置，请稍后重新打开。"),true);}
   };
 
   /* ── 功能 ─────────────────────────────────────────────────────────────── */
@@ -1058,7 +1058,7 @@
       askChip.append(ico, el("span", "", "问碧琪"));
       return askChip;
     },
-    run: selected => selected.library ? void window.__pinkieLibrary.askSelection(selected).catch(error => say(esc(error.message))) : explain(selected.text),
+    run: selected => selected.library ? void window.__pinkieLibrary.askSelection(selected).catch(error => say(esc(zhError(error, "碧琪这次没连上，请稍后再试")))) : explain(selected.text),
   });
 
   /* ── 氛围画布 ─────────────────────────────────────────────────────────── */

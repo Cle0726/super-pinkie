@@ -1007,7 +1007,9 @@ export function checkRoleToolCall(card, toolName, params = {}) {
       blockReason: `这个角色（${roleLabel}）不能用 ${name} 工具。需要的操作写进汇报，交给 Metre。`,
     };
   }
-  const category = toolCategory(name);
+  // app_browser serve with a command starts that command through a shell (app-browser.mjs spawn shell: true):
+  // it is an exec call, so the card needs exec and deny_commands applies. Static-directory serve has no command.
+  const category = name === 'app_browser' && params?.action === 'serve' && params?.command !== undefined ? 'exec' : toolCategory(name);
   if (!category) {
     return {
       block: true,
