@@ -126,7 +126,7 @@ function measure() {
       return sum + Math.max(0, Math.min(k.bottom, r.bottom) - Math.max(k.top, r.top)) * Math.max(0, Math.min(k.right, r.right) - Math.max(k.left, r.left));
     }, 0);
     const overlapText = overText(k);
-    const fork = bubble?.querySelector(':scope > .pinkie-fork-action');
+    const fork = bubble?.querySelector(':scope > .pinkie-fork-action') || group?.querySelector('.chat-group-footer .pinkie-fork-action');
     const f = fork?.getBoundingClientRect();
     const forkOverlapText = f ? Math.round(overText(f)) : null;
     const overlapFork = f ? Math.max(0, Math.min(k.bottom, f.bottom) - Math.max(k.top, f.top)) * Math.max(0, Math.min(k.right, f.right) - Math.max(k.left, f.left)) : 0;
