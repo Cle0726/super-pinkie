@@ -179,7 +179,8 @@ export function runProcess(file, args, {env = process.env, input = null, timeout
     child.stderr.on('data', chunk => { stderr += chunk; });
     child.on('error', error => { stderr += String(error?.message || error); finish(127); });
     child.on('close', code => finish(code ?? 1));
-    if (input != null) child.stdin.end(String(input));
+    // 子进程没读完 stdin 就退出时写入在流上报 EPIPE / EOF：只记进 stderr，退出码照常由 close 给。
+    if (input != null) { child.stdin.on('error', error => { stderr += String(error?.message || error); }); child.stdin.end(String(input)); }
   });
 }
 
