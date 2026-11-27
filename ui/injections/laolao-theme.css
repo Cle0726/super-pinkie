@@ -229,7 +229,7 @@ html[data-pinkie-native-glass="1"] .card.chat {
 .topbar {
   border-bottom: 1px solid rgba(217, 89, 143, 0.2) !important;
 }
-
+html:not(#_t) .topbar-search { border-color: var(--muted); } /* 820 宽才出现的原生搜索键：描边对顶栏 >=3:1，日夜随 --muted */
 
 .card.chat {
   background: rgba(255, 251, 252, 0.13) !important;
