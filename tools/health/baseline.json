@@ -2954,7 +2954,7 @@
     "ui/injections/laolao-theme.css": {
       "important": 557,
       "importantIndirect": 0,
-      "lines": 5389,
+      "lines": 5388,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3275,7 +3275,7 @@
     "ui/injections/laolao-resume.js": 2611,
     "ui/injections/laolao-settings-user.js": 1636,
     "ui/injections/laolao-sidebar.js": 2143,
-    "ui/injections/laolao-theme.css": 5389,
+    "ui/injections/laolao-theme.css": 5388,
     "ui/injections/laolao-workbench.js": 2339
   },
   "manualVersions": {
