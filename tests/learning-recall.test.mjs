@@ -66,3 +66,18 @@ test('a long complete paste is stored intact and every source character reaches 
  await recall.queue(ALL,{wait:true});assert.equal(seen.join(''),content);assert.ok(seen.length>2);
  assert.equal(store.findOwnedNote(ALL,saved.id).content,content);
 });
+test('a disk error inside the recall loop is not an unhandled rejection and the note is split again next time',async t=>{
+ const unhandled=[];const onUnhandled=error=>unhandled.push(error);process.on('unhandledRejection',onUnhandled);t.after(()=>process.off('unhandledRejection',onUnhandled));
+ let calls=0;const {store,recall}=fixture(t,async(...args)=>{calls++;return model(...args);});
+ // 只让循环开头「标记 running」那一次写盘失败：它在 try 之外，入队时那次写 queued 照常成功。
+ const realWrite=recall.write.bind(recall);let broken=true;
+ recall.write=data=>{if(broken&&Object.values(data.records||{}).some(record=>record.status==='running')){broken=false;throw new Error('EIO: i/o error, write');}return realWrite(data);};
+ const n=store.saveNote(KEY,{content:'avoid making mistakes（避免犯错）'}).note;
+ recall.enqueue(ALL);assert.ok(recall.running);
+ // 不去 await 这条链：enqueue 也不 await 它，要看的就是没人接时会不会漏成 unhandledRejection。
+ for(let i=0;i<200&&recall.running;i++)await new Promise(r=>setTimeout(r,5));
+ await new Promise(r=>setImmediate(r));
+ assert.equal(broken,false,'写盘故障应该真的触发过');assert.deepEqual(unhandled,[]);assert.equal(recall.running,null);assert.equal(calls,0);
+ assert.equal(recall.read().records[n.id].status,'queued');
+ const q=await recall.queue(ALL,{wait:true});assert.equal(calls,1);assert.equal(q.notes.length,1);assert.equal(recall.read().records[n.id].status,'ready');
+});

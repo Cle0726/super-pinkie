@@ -5,12 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
-  METRE_MAIN_REFERENCE: a85a7449103efa49674ed4f49725c1e93b943de0
+  METRE_MAIN_REFERENCE: cb7931c30ef82b7ac591bec456bd0c2bb7ee048f
 
 jobs:
   portable-checks:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.PINKIE_LINUX_RUNS_ON || '"ubuntu-latest"') }}  # repo variable: '["self-hosted","linux2-docker"]' moves this job to the Linux runners; unset = GitHub-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +34,7 @@ jobs:
         env:
           PINKIE_VISUAL_REPEAT: "3"
           PINKIE_VISUAL_REPORT: "1"
-        run: node --test tests/visual-baseline.test.mjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/visual-baseline.test.mjs
       - name: Capture the pinned main Metre regression baseline on Linux
         run: |
           git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
@@ -43,7 +47,8 @@ jobs:
       - name: Run all execution, recovery, UI and desktop regression tests
         timeout-minutes: 30
         run: |
-          node --test tests/*.test.cjs tests/*.test.mjs
+          # B72: one hung test fails after 10 min instead of holding the whole step to the 30-min cancel.
+          node --test --test-force-exit --test-timeout=600000 --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
           python -m unittest discover -s tests -p '*_test.py' -v
           node --check ui/party/party.js
           node --check ui/party/party-drafts.js
@@ -86,12 +91,16 @@ jobs:
           src=desktop/macos/pinkie/Sources
           xcrun swiftc -parse-as-library -typecheck \
             "$src/MaterialPreview.swift" "$src/BrowserControl.swift" \
-            "$src/ChatGPTBackgroundWorker.swift" "$src/PinkieNative.swift" "$src/Launcher.swift" \
+            "$src/ChatGPTBackgroundWorker.swift" "$src/PinkieNative.swift" \
+            "$src/LauncherRuntime.swift" "$src/LauncherViews.swift" \
+            "$src/LauncherServices.swift" "$src/LauncherBrowser.swift" \
+            "$src/LauncherWorkspace.swift" "$src/LauncherWebBridge.swift" \
+            "$src/AppWindow.swift" "$src/Launcher.swift" \
             -framework AppKit -framework AVFoundation -framework Carbon \
             -framework Foundation -framework Speech -framework UserNotifications \
             -framework WebKit
       - name: Verify self-contained bundle contract
-        run: node --test tests/self-contained-app.test.cjs tests/native-glass.test.cjs tests/macos-ci-contract.test.cjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/self-contained-app.test.cjs tests/native-glass.test.cjs tests/macos-ci-contract.test.cjs
       - name: Install WebKit regression dependencies
         run: |
           deps="$RUNNER_TEMP/pinkie-ci-deps"
@@ -103,7 +112,7 @@ jobs:
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: webkit
-        run: node --test --test-concurrency=1 tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-concurrency=1 tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
 
   windows-build:
     needs: [portable-checks, macos-check]
@@ -116,6 +125,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build Windows .exe
         shell: pwsh
         run: |
@@ -163,14 +186,16 @@ jobs:
           $version = (Get-Content 'tools/pinkie-toolbox/toolbox-manifest.json' -Raw | ConvertFrom-Json).playwrightVersion
           npm install --prefix $deps --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
           if ($LASTEXITCODE -ne 0) { throw 'Unable to install browser test dependencies' }
-          & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit for browser tests' }
+          # chromium-headless-shell: the pinned Playwright Chromium the real-page
+          # visual/hotspot suites capture with (same revision as portable-checks).
+          & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit chromium-headless-shell
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit / Chromium for browser tests' }
           "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Verify tool image trace and Metre sidebar in Chrome on Windows
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: chromium
-        run: node --test tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
       - name: Run the execution, recovery, UI and desktop suites on Windows
         timeout-minutes: 30
         # bash keeps this step identical to portable-checks: the default shell
@@ -195,9 +220,72 @@ jobs:
           # the number of processes instead of extending those test deadlines.
           # Both suites still run even if the other fails.
           status=0
-          node --test --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs || status=1
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs || status=1
           python -m unittest discover -s tests -p '*_test.py' -v || status=1
           exit $status
       - name: Check Python services
         shell: bash
         run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py
+
+  cle-core-checks:
+    name: C.le. 内核
+    # Fork pull requests never receive secrets. Everywhere else this job fails closed.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      PINKIE_CORE: cle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate core-manifest.json for C.le.
+        run: node tools/core/manifest.mjs info --core cle
+      # The token exists only in this step; install scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+            echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be tested."
+            exit 1
+          fi
+          tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+          echo "PINKIE_CLE_CORE_TARBALL=$tgz" >> "$GITHUB_ENV"
+      - name: Prove C.le. equals npm openclaw before and after Pinkie patches
+        env:
+          PINKIE_NPM_REGISTRY: https://registry.npmjs.org
+        run: |
+          official="$RUNNER_TEMP/openclaw-prefix"
+          cle="$RUNNER_TEMP/cle-core-prefix"
+          node tools/core/manifest.mjs install --core openclaw --prefix "$official"
+          node tools/core/manifest.mjs install --core cle --prefix "$cle"
+          node tools/core/verify-equivalence.mjs --openclaw-prefix "$official" --cle-prefix "$cle"
+          node tools/core/verify-cle-patches.mjs --openclaw-root "$official/node_modules/openclaw"
+          node tools/core/verify-cle-patches.mjs --openclaw-root "$cle/node_modules/openclaw"
+          node tools/core/verify-equivalence.mjs --openclaw-prefix "$official" --cle-prefix "$cle"
+      - name: Install browser regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps webkit chromium
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Verify M5 visual baseline on C.le. core path (3x determinism, <=0.1% diff)
+        env:
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/visual-baseline.test.mjs
+      - name: Run core-manifest, Metre inventory, and full regression suites on C.le. path
+        timeout-minutes: 30
+        run: |
+          git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
+          git worktree add --detach "$RUNNER_TEMP/metre-main-reference" "$METRE_MAIN_REFERENCE"
+          PINKIE_INVENTORY_SOURCE_ROOT="$RUNNER_TEMP/metre-main-reference" \
+            node tools/metre/inject-inventory.mjs --save-baseline "$RUNNER_TEMP/metre-main.json"
+          PINKIE_METRE_MAIN_BASELINE="$RUNNER_TEMP/metre-main.json" \
+            node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
+          python -m unittest discover -s tests -p '*_test.py' -v

@@ -77,6 +77,21 @@ jobs:
           if ($zip.Count -ne 1) { throw 'Expected exactly one release candidate portable ZIP' }
           Copy-Item -LiteralPath $zip[0].FullName -Destination new-portable.zip
 
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        if: inputs.candidate_artifact == ''
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build this ref and pack it the way release.yml does
         if: inputs.candidate_artifact == ''
         shell: pwsh

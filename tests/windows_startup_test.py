@@ -145,9 +145,14 @@ class WindowsStartupTests(unittest.TestCase):
              mock.patch.object(windows_desktop.subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x200, create=True):
             self.assertEqual(windows_desktop.hidden_process_kwargs(hide_window=False), {'creationflags': 0x08000200})
 
-    def test_both_executable_formats_request_admin_through_the_manifest(self):
+    def test_both_executable_formats_start_as_the_signed_in_user(self):
+        # Opening the App or an installed work must never ask for UAC; only
+        # the update swap into a protected folder elevates, on demand.
         build = (Path(__file__).resolve().parents[1] / 'build-win.ps1').read_text(encoding='utf-8-sig')
-        self.assertIn('"--windowed", "--uac-admin"', build)
+        code = '\n'.join(line.split('#', 1)[0] for line in build.splitlines())
+        self.assertNotIn('--uac-admin', code)
+        self.assertNotIn('requireAdministrator', code)
+        self.assertIn('"--windowed",', build)
         self.assertIn('$pyInstallerCommonArgs', build)
         self.assertIn('--onedir', build)
         self.assertIn('--onefile', build)
@@ -158,14 +163,14 @@ class WindowsStartupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             control = Path(directory) / 'dist/control-ui'
             control.mkdir(parents=True)
-            (control / 'index.html').write_text('<html><head><script type="module" src="/assets/index-test.js"></script></head><body><openclaw-app></openclaw-app></body></html>')
+            (control / 'index.html').write_text('<html><head><script type="module" src="/assets/index-test.js"></script></head><body><openclaw-app></openclaw-app></body></html>', encoding="utf-8")
             # Model the pinned upstream package's entry resources. The shared
             # installer must now reject missing upstream chunks as well.
             template = (Path(__file__).resolve().parents[1] / 'ui/control-ui.index.html').read_text(encoding='utf-8')
             for name in re.findall(r'(?:src|href)=["\']\.?/(assets/[^?"\']+)', template):
                 file = control / name
                 file.parent.mkdir(parents=True, exist_ok=True)
-                file.write_text('upstream fixture')
+                file.write_text('upstream fixture', encoding="utf-8")
             # Source resources are read only; every write goes to this fixture.
             original = super_pinkie.resource_path
             def resource(*parts):

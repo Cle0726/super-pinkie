@@ -310,3 +310,11 @@ test('quotes with nothing usable fail with a helper message', async () => {
   const {assistant} = fixture({fetchImpl: async () => new Response(JSON.stringify({choices: [{message: {content: '{"quotes":[]}'}, finish_reason: 'stop'}]}))});
   await assert.rejects(assistant.ask({kind: 'quotes', mode: 'chat'}), /没写出句子/);
 });
+
+test('the start-page lift is safe before the buddy exists (Metre never builds it)', () => {
+  // hy4flash-free 走查：Metre 里窗口一 resize 就报「Cannot read properties of undefined (reading 'classList')」at liftHome。
+  const source = fs.readFileSync(new URL('../ui/injections/laolao-companion.js', import.meta.url), 'utf8');
+  const lift = source.slice(source.indexOf('const liftHome = () => {'), source.indexOf('let liftTimer'));
+  assert.match(lift, /welcome && bubble\?\.classList\.contains\("is-shown"\)/);
+  assert.doesNotMatch(lift, /[^?]\bbubble\.classList/);
+});

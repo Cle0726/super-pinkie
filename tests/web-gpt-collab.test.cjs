@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 
 test('native ChatGPT bridge counts assistant turns even when wrappers have no frame', () => {
-  const native = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const native = read('desktop/macos/pinkie/Sources/LauncherBrowser.swift');
   const selector = "document.querySelectorAll('[data-message-author-role=\"assistant\"]')";
   assert.equal(native.split(selector).length - 1, 2);
   assert.doesNotMatch(native, /querySelectorAll\('\[data-message-author-role="assistant"\]'\)\)\.filter\(visible\)/);
@@ -54,7 +54,7 @@ test('web GPT collaboration is opt-in and scoped per session', () => {
   assert.match(ui, /bridge\.postMessage\(\{action: "open", url: home\}\)/);
   assert.match(ui, /未绑定项目 · 仅网页对话/);
   assert.match(ui, /No local project files were supplied or read/);
-  assert.match(ui, /Never inspect Pinkie\/OpenClaw memory/);
+  assert.match(ui, /Never inspect Pinkie\/C\.le\. memory/);
   assert.match(ui, /修复前记录，内部工作区连接现已停用/);
   assert.match(ui, /现在已经禁止读取碧琪记忆和内部工作区/);
   assert.match(ui, /const syncSession =/);
@@ -281,7 +281,7 @@ test('deep-think interception does not trigger a local run after direct web repl
 test('collaboration panel exposes honest activity and maintainable account controls', () => {
   const ui = read('ui/injections/laolao-web-gpt-collab.js');
   const connection = read('services/mode-architecture/web-gpt-connection.mjs');
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/LauncherBrowser.swift') + '\n' + read('desktop/macos/pinkie/Sources/LauncherWebBridge.swift');
   assert.match(ui, /连接与账号/);
   assert.match(ui, /pinkie\.webGpt\.connection\.get/);
   assert.match(ui, /pinkie\.webGpt\.connection\.pair/);

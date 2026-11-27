@@ -1,15 +1,24 @@
-import {test} from 'node:test';
+import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
+import {waitFirstFrame} from './helpers/browser-first-frame.mjs';
 
 const script = fileURLToPath(new URL('../ui/injections/laolao-session-tools.js', import.meta.url));
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 
-test(`Metre saves the active composer’s strategy before a message can send (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+// Launch and the first paint happen outside the test budget, as in
+// metre-sidebar-e2e / tool-images-e2e (see tests/helpers/browser-first-frame.mjs).
+let browser;
+before(async () => {
+  browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  await waitFirstFrame(browser, `metre-switch-e2e (${engine})`);
+}, {timeout: 120_000});
+after(async () => { await browser?.close(); });
+
+test(`Metre saves the active composer’s strategy before a message can send (${engine})`, {timeout: 30_000}, async () => {
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
     page.setDefaultTimeout(12_000);
     await page.route('http://127.0.0.1:30114/**', route => route.fulfill({
       contentType: 'text/html; charset=utf-8', body: '<html data-laolao-mode="metre"><body><openclaw-chat-pane active><div class="agent-chat__composer-combobox"><textarea></textarea></div><div class="agent-chat__composer-controls"><button class="chat-send-btn">发送</button></div></openclaw-chat-pane></body></html>',
@@ -47,5 +56,5 @@ test(`Metre saves the active composer’s strategy before a message can send (${
     await page.locator('.chat-send-btn').click();
     assert.deepEqual(await page.evaluate(() => window.qa.sends), ['solo']);
     assert.deepEqual(await page.evaluate(() => [...new Set(window.qa.requests.map(([,key]) => key))]), [composerKey]);
-  } finally { await browser.close(); }
+  } finally { await page.close(); }
 });

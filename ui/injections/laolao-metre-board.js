@@ -133,7 +133,7 @@
     {id: 'timeline', en: 'Bars', title: '小节', note: '分谱、交回、打回、验收、出错、收住，一小节一行，新的在上。', source: 'pinkie.metre.board → timeline'},
     {id: 'changes', en: 'Revisions', title: '改谱', note: '各声部动过的文件，按声部分组，点开在工作台里看。', source: 'pinkie.metre.board → changes'},
     {id: 'runtime', en: 'Tuning', title: '调音', note: '网关连接、在用模型的健康状态、角色卡检查、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
-    {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索。', source: 'pinkie.metre.memory（接口已有，面板没接）'},
+    {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索；下面列出项目自己的规矩文件，点开在工作台里改。', source: 'pinkie.metre.memory + pinkie.fs.stat'},
     {id: 'raw', en: 'Log', title: '排练记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
   ];
   const STATS = [
@@ -144,8 +144,8 @@
   ];
 
   const h = (tag, cls, html) => { const node = document.createElement(tag); if (cls) node.className = cls; if (html != null) node.innerHTML = html; return node; };
-  let page = null;
-  let lastFocus = null;
+  let page = null, lastFocus = null, leaveTimer = 0;
+  const reduced = () => document.documentElement.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
   function placeholder(slot) {
     const body = h('div', 'pk-metre-board__body is-placeholder');
@@ -251,10 +251,10 @@
       page.classList.add('is-overlay');
       page.style.left = left + 'px';
       page.style.width = '';
-      // 浮层停在输入框上面，不挡输入（A5-8）。
-      const input = document.querySelector('.agent-chat__input');
-      const box = input && input.getClientRects().length ? input.getBoundingClientRect() : null;
-      page.style.bottom = box && box.top > window.innerHeight * 0.4 ? Math.round(window.innerHeight - box.top + 8) + 'px' : '';
+      // 11-24 验收：浮层打开时输入框让位（laolao-metre-keys.css 把输入框、运行条、猫藏起来），
+      // 浮层一直铺到最底下的后台带上面（--metre-bs-room 由 laolao-metre-backstage.js 写），每张卡都滚得到、点得到。
+      // 以前停在输入框上沿以上，窄窗口里下面几张卡只露一半。
+      page.style.bottom = 'var(--metre-bs-room, 0px)';
       setMode('overlay');
       root.style.removeProperty('--metre-board-w');
       return;
@@ -273,13 +273,13 @@
 
   const api = {
     slots: SLOTS.map((slot) => slot.id),
-    get isOpen() { return Boolean(page && !page.hidden); },
+    get isOpen() { return Boolean(page && !page.hidden && !page.classList.contains('is-leaving')); },
     open(section) {
       if (!isMetre()) return false;
       if (!page) build();
       if (page.hidden) lastFocus = document.activeElement;
-      page.hidden = false;
-      place();
+      clearTimeout(leaveTimer); page.classList.remove('is-leaving'); page.hidden = false;
+      place(); window.dispatchEvent(new Event('pinkie:metre-board-open'));
       const target = section && card(section);
       const scroll = page.querySelector('.pk-metre-board__scroll');
       if (target) { scroll.scrollTop = Math.max(0, target.offsetTop - scroll.offsetTop - 12); target.classList.add('is-target'); setTimeout(() => target.classList.remove('is-target'), 1600); }
@@ -288,12 +288,12 @@
       if (page.classList.contains('is-overlay')) page.focus({preventScroll: true});
       return true;
     },
+    // 11-23：关的时候先滑出去（skin 里 .is-leaving 的动画，300ms），滑完才藏起来、对话区才收回让出的宽度；减少动效时直接关
     close() {
-      if (!page || page.hidden) return;
+      if (!page || page.hidden || page.classList.contains('is-leaving')) return;
       const hadFocus = page.contains(document.activeElement);
-      page.hidden = true;
-      root.removeAttribute('data-metre-board');
-      root.style.removeProperty('--metre-board-w');
+      const done = () => { clearTimeout(leaveTimer); page.classList.remove('is-leaving'); page.hidden = true; root.removeAttribute('data-metre-board'); root.style.removeProperty('--metre-board-w'); window.dispatchEvent(new Event('pinkie:metre-board-closed')); };
+      if (reduced()) done(); else { page.classList.add('is-leaving'); leaveTimer = setTimeout(done, 300); }
       if (hadFocus) lastFocus?.focus?.({preventScroll: true});
     },
     toggle(section) { return api.isOpen ? (api.close(), false) : api.open(section); },

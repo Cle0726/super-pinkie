@@ -1,4 +1,4 @@
-// CLE Kk Control – Service Worker
+// C.le. Control – Service Worker
 // Handles offline caching and push notifications.
 
 const CACHE_PREFIX = "openclaw-control-";
@@ -125,10 +125,10 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data.json();
   } catch {
-    data = { title: "CLE Kk", body: event.data.text() };
+    data = { title: "C.le.", body: event.data.text() };
   }
 
-  const title = data.title || "CLE Kk";
+  const title = data.title || "C.le.";
   const options = {
     body: data.body || "",
     icon: "./apple-touch-icon.png",

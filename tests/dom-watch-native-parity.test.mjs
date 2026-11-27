@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import test from 'node:test';
+import {after, test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
 
@@ -31,6 +31,27 @@ async function launchBrowser() {
   }
   throw lastError;
 }
+
+// One browser for the whole file. The launch promise is created once; a failure
+// is remembered and rethrown for every test, not turned into a skip. Each
+// scenario still opens its own context and closes it, so documents, timers,
+// and page errors stay isolated.
+let shared = null;
+async function sharedBrowser() {
+  shared ??= launchBrowser().then(
+    (browser) => ({browser}),
+    (error) => ({error}),
+  );
+  const got = await shared;
+  if (got.error) throw got.error;
+  return got.browser;
+}
+
+after(async () => {
+  if (!shared) return;
+  const got = await shared;
+  if (got.browser) await got.browser.close();
+});
 
 async function runPair(browser, body) {
   const out = {};
@@ -77,8 +98,7 @@ async function runPair(browser, body) {
 }
 
 test('M3 differential: domWatch observers and polling match native browser APIs', async (t) => {
-  const browser = await launchBrowser();
-  t.after(() => browser.close());
+  const browser = await sharedBrowser();
 
   await t.test('multi-target observe and mixed observe+watch do not overwrite earlier targets', async () => {
     const res = await runPair(browser, `
@@ -506,9 +526,22 @@ test('M3 differential: domWatch observers and polling match native browser APIs'
   });
 });
 
-test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 0 mismatches vs native MutationObserver)', async (t) => {
-  const browser = await launchBrowser();
-  t.after(() => browser.close());
+// B72: on GitHub runners the whole fuzz takes ~42 s (25 blocks x ~1.7 s). A stalled page used to
+// leave page.evaluate waiting forever, so the step printed nothing until the 30-min job cancel.
+// Each block now gets 60 s and the whole test 5 min; a normal run is not slowed and the count is unchanged.
+const FUZZ_BLOCK_LIMIT_MS = 60_000;
+const FUZZ_TOTAL_LIMIT_MS = 300_000;
+
+function withinLimit(promise, ms, what) {
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not finish within ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
+test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 0 mismatches vs native MutationObserver)', {timeout: FUZZ_TOTAL_LIMIT_MS}, async () => {
+  const browser = await sharedBrowser();
   const TOTAL_BLOCKS = 25;
   const PER_BLOCK = 100;
   let total = 0;
@@ -521,7 +554,7 @@ test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 
     try {
       await page.setContent('<!doctype html><html><head></head><body></body></html>');
       await page.addScriptTag({content: DOM_WATCH_SRC});
-      const res = await page.evaluate(async ({blockIndex, count}) => {
+      const res = await withinLimit(page.evaluate(async ({blockIndex, count}) => {
         const bad = [];
         let nonEmptyLocal = 0;
         for (let t = 0; t < count; t += 1) {
@@ -644,7 +677,7 @@ test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 
           root.remove();
         }
         return {bad, nonEmptyLocal};
-      }, {blockIndex: block, count: PER_BLOCK});
+      }, {blockIndex: block, count: PER_BLOCK}), FUZZ_BLOCK_LIMIT_MS, `fuzz block ${block}`);
       total += PER_BLOCK;
       nonEmpty += res.nonEmptyLocal;
       if (res.bad.length > 0) mismatches.push(...res.bad);
@@ -662,9 +695,8 @@ test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 
   );
 });
 
-test('M3 product regression: unmodified laolao-learning-reminder.js reacts to both html attributes and body subtree mutations', async (t) => {
-  const browser = await launchBrowser();
-  t.after(() => browser.close());
+test('M3 product regression: unmodified laolao-learning-reminder.js reacts to both html attributes and body subtree mutations', async () => {
+  const browser = await sharedBrowser();
 
   // 1. Direct reproduction of the coordinator's product.cjs check
   for (const attr of ['data-pinkie-study-desk', 'data-laolao-mode']) {
@@ -676,7 +708,7 @@ test('M3 product regression: unmodified laolao-learning-reminder.js reacts to bo
       await page.setContent('<!doctype html><html data-laolao-mode="study"><head></head><body></body></html>');
       await page.addScriptTag({content: DOM_WATCH_SRC});
       await page.addScriptTag({content: LEARNING_REMINDER_SRC});
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(300);   // 保留：让脚本初始那一轮跑完再换 rAF 计数，没有对外可见的完成信号
       const scheduled = await page.evaluate(async (attrName) => {
         let count = 0;
         const realRaf = window.requestAnimationFrame.bind(window);
@@ -717,7 +749,7 @@ test('M3 product regression: unmodified laolao-learning-reminder.js reacts to bo
     });
     await page.addScriptTag({content: DOM_WATCH_SRC});
     await page.addScriptTag({content: LEARNING_REMINDER_SRC});
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(250);   // 保留：接着断言提醒「没挂上」，没有能等的条件
 
     // Initially in chat mode: reminder should not be mounted
     assert.equal(await page.evaluate(() => Boolean(document.getElementById('pinkie-learning-reminder'))), false);

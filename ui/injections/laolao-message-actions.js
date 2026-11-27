@@ -21,7 +21,7 @@
     retry: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
     up: '<path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 2 2v4h6a2 2 0 0 1 2 2.3l-1.3 7A2 2 0 0 1 17.7 20H7"/>',
     down: '<path d="M7 13V4H4v9zM7 13l4 8a2 2 0 0 0 2-2v-4h6a2 2 0 0 0 2-2.3l-1.3-7A2 2 0 0 0 17.7 4H7"/>',
-    caret: '<path d="M7 10l5 5 5-5"/>',
+    caret: '<path d="M7 10l5 5 5-5"/>', sbs: '<rect x="3.5" y="5" width="7" height="14" rx="1.5"/><rect x="13.5" y="5" width="7" height="14" rx="1.5"/>',
   };
   function icon(name) {
     const span = el('span', 'pinkie-msg-icon');
@@ -331,7 +331,7 @@
     const userId = userGroup ? lastEntryIn(userGroup, history) : '';
     const ownId = lastEntryIn(group, history);
     const streaming = Boolean(group.querySelector('.chat-bubble.streaming'));
-    const signature = [userId, ownId, editable, busy, streaming, ratings[ownId] || ''].join('|');
+    const signature = [userId, ownId, editable, busy, streaming, ratings[ownId] || '', Boolean(window.Pinkie?.sideBySide)].join('|');
     const footer = group.querySelector('.chat-group-footer');
     if (!footer || group.dataset.pinkieActions === signature) return;
     group.dataset.pinkieActions = signature;
@@ -346,10 +346,10 @@
     if (editable && userId) {
       const retry = button('重新回答', 'retry', () => void act(pane, key, 'pinkie.chat.regenerate', {entryId: userId}, {focus: userId}));
       const more = button('换个模型重新回答', 'caret', event => void modelMenu(event.currentTarget, pane, key, userId), 'pinkie-msg-btn--caret');
-      retry.disabled = more.disabled = busy;
-      if (busy) retry.title = more.title = BUSY;
-      const split = el('span', 'pinkie-msg-split'); split.append(retry, more);
-      row.append(split);
+      const sbs = window.Pinkie?.sideBySide && button('并排再答', 'sbs', () => void window.Pinkie.sideBySide.start({pane, key, entryId: userId, anchor: group}), 'pinkie-msg-btn--sbs');
+      for (const node of [retry, more, sbs].filter(Boolean)) { node.disabled = busy; if (busy) node.title = BUSY; }
+      const split = el('span', 'pinkie-msg-split'); split.append(retry, more); row.append(split);
+      if (sbs) row.append(sbs);
     }
     const copy = button('复制', 'copy', () => void copyText(plainText(markdown())));
     const copyMore = button('复制方式', 'caret', event => menu(event.currentTarget, [
@@ -378,10 +378,10 @@
   const FAILURE_TEXT = /^\s*这次(?:回复没能完成|没连上模型)/;
   const failures = new Map();   // sessionKey → {at, data, loading}
   const FAILURE_SAY = {
-    account: (m) => `「${m}」现在用不了：模型那边没有可用的账号（或额度用完了），等多久都不会好。`,
+    account: (m, at) => at ? `「${m}」的额度用完了，${at}${/\d$/.test(at) ? ' ' : ''}恢复。急的话先换一个模型。` : `「${m}」现在用不了：模型那边没有可用的账号（或额度用完了），等多久都不会好。`,
     key: (m) => `「${m}」现在用不了：模型的密钥不对或过期了。`,
     missing: (m) => `「${m}」现在用不了：模型那边找不到这个模型。`,
-    busy: (m) => `「${m}」那边正忙，排队的人太多，过一会儿再发就好。`,
+    busy: (m, at) => `「${m}」那边正忙，排队的人太多，${at ? at + (/\d$/.test(at) ? ' ' : '') + '再发就好' : '过一会儿再发就好'}。`,
     timeout: (m) => `「${m}」太久没回话，这一轮先停下了。`,
     network: () => '网络断了一下，碧琪没够着模型。看看网络或代理，再发一次。',
     down: (m) => `「${m}」那边出了故障，这次没回出来。`,
@@ -438,10 +438,10 @@
     const userGroup = userGroupBefore(last);
     const userId = userGroup ? lastEntryIn(userGroup, history) : '';
     const failed = shortModel(failure.model, names);
-    const say = (FAILURE_SAY[failure.kind] || FAILURE_SAY.other)(failed);
+    const say = (FAILURE_SAY[failure.kind] || FAILURE_SAY.other)(failed, failure.resetText || ''); // E8-3：上游报了恢复时间就写出来（插件算好的「今天 17:44」）
     const offer = Boolean(suggestion && editable && userId && failure.kind !== 'busy');
     const next = offer ? shortModel(suggestion, names) : '';
-    const signature = [failure.at, failure.kind, suggestion, userId, busy, offer].join('|');
+    const signature = [failure.at, failure.kind, failure.resetText, suggestion, userId, busy, offer].join('|');
     if (bubble.dataset.pinkieFail === signature) return;
     bubble.dataset.pinkieFail = signature;
     bubble.querySelector(':scope > .pinkie-fail')?.remove();
@@ -474,9 +474,9 @@
       session = key; variants = new Map(); ratings = {}; lastLength = -1; pendingRatings.clear();
     }
     const history = pane.state?.chatMessages;
-    const busy = running(pane);
+    const busy = running(pane) || Boolean(window.Pinkie?.sideBySide?.active?.(key));
     const length = Array.isArray(history) ? history.length : 0;
-    if (length !== lastLength && !busy) { lastLength = length; void loadMeta(key, pane); }
+    if (length !== lastLength && !running(pane)) { lastLength = length; void loadMeta(key, pane); }
     const editable = !readonlyKey(key) && !isChannel(key);
     const thread = pane.querySelector('.chat-thread-inner') || pane;
     for (const bubble of thread.querySelectorAll('.chat-group.user .chat-bubble[data-message-id]')) {
@@ -493,7 +493,7 @@
   function schedule() { if (!frame) frame = requestAnimationFrame(paint); }
   const observer = window.Pinkie?.domWatch?.createObserver(mutations => {
     if (mutations.every(mutation => [...mutation.addedNodes, ...mutation.removedNodes]
-      .every(node => node.nodeType === 1 && node.closest?.('.pinkie-msg-row, .pinkie-msg-menu, .pinkie-msg-toast, .pinkie-msg-edit, .pinkie-fail')))) return;
+      .every(node => node.nodeType === 1 && node.closest?.('.pinkie-msg-row, .pinkie-msg-menu, .pinkie-msg-toast, .pinkie-msg-edit, .pinkie-fail, .pinkie-sbs')))) return;
     schedule();
   });
   const start = () => {

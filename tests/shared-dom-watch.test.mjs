@@ -14,6 +14,13 @@ import {
   launchVisualBrowser,
   startVisualServer,
 } from './visual/lib/harness.mjs';
+import {
+  assertRealPageLoaded,
+  installRealControlUi,
+  launchRealBrowser,
+  openRealScenePage,
+  startRealUiServer,
+} from './visual/lib/real-harness.mjs';
 
 test('M3 domWatch static: only ui/injections/laolao-dom-watch.js declares subtree:true in ui/injections', async () => {
   const report = await measure(REPO_ROOT, {includeTestInventory: false});
@@ -28,10 +35,12 @@ test('M3 domWatch static: only ui/injections/laolao-dom-watch.js declares subtre
   assert.equal(report.injectionTotals.subtreeObserverCalls, 1);
 });
 
-test('M3 domWatch runtime: no eager root observer, native MutationObserver instances, live delivery across migrated modules', async () => {
-  const server = await startVisualServer();
-  const browser = await launchVisualBrowser();
-  try {
+test('M3 domWatch runtime: no eager root observer, native MutationObserver instances, live delivery across migrated modules', async (t) => {
+  let server, browser;
+  t.after(async () => { await browser?.close(); await server?.close(); });
+  server = await startVisualServer();
+  browser = await launchVisualBrowser();
+  {
     const context = await browser.newContext();
     await context.addInitScript(() => {
       const NativeMO = window.MutationObserver;
@@ -102,8 +111,74 @@ test('M3 domWatch runtime: no eager root observer, native MutationObserver insta
     assert.ok(result.receivedBeforeDisconnect >= 1, `expected watchTree subscriber to receive DOM mutation, got ${result.receivedBeforeDisconnect}`);
     assert.equal(result.receivedAfterDisconnect, result.receivedBeforeDisconnect, 'disconnect() must stop delivering mutations');
     await context.close();
-  } finally {
-    await browser.close();
-    await server.close();
+  }
+});
+
+test('M3/M5 real-page runtime: domWatch works with native MutationObserver semantics on real Control UI bundle', async (t) => {
+  let installed, server, browser;
+  // B55: cleanup is registered before anything starts, so a browser that fails to launch cannot leave the server open.
+  t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
+  installed = installRealControlUi({repoRoot: REPO_ROOT});
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT});
+  browser = await launchRealBrowser();
+  {
+    const {context, page, pageErrors, failedRequests} = await openRealScenePage(
+      browser,
+      server.origin,
+      'sidebar-expanded',
+      'day',
+    );
+    try {
+      assert.deepEqual(pageErrors, []);
+      assert.deepEqual(failedRequests, []);
+      await assertRealPageLoaded(page);
+
+      const result = await page.evaluate(async () => {
+        const dw = window.Pinkie?.domWatch;
+        if (!dw) return {missing: true};
+        const isNativeInstance = dw.createObserver(() => {}) instanceof MutationObserver;
+        const statsBefore = dw.stats();
+        let received = 0;
+        const handle = dw.watchTree(document.body, (records) => {
+          received += records.length;
+        }, {childList: true});
+        const probe = document.createElement('div');
+        probe.id = 'm5-real-dom-watch-probe';
+        document.body.appendChild(probe);
+        await new Promise((r) => setTimeout(r, 30));
+        const receivedBeforeDisconnect = received;
+        handle.disconnect();
+        probe.remove();
+        const probe2 = document.createElement('div');
+        document.body.appendChild(probe2);
+        await new Promise((r) => setTimeout(r, 30));
+        probe2.remove();
+        return {
+          missing: false,
+          isNativeInstance,
+          statsBefore,
+          receivedBeforeDisconnect,
+          receivedAfterDisconnect: received,
+        };
+      });
+
+      assert.equal(result.missing, false, 'window.Pinkie.domWatch must be loaded on real Control UI page');
+      assert.equal(result.isNativeInstance, true, 'createObserver() must return a genuine MutationObserver on real page');
+      assert.ok(
+        result.statsBefore.createdObservers >= 10,
+        `expected real Control UI page injections to register >= 10 domWatch observers, got ${JSON.stringify(result.statsBefore)}`,
+      );
+      assert.ok(
+        result.receivedBeforeDisconnect >= 1,
+        `expected watchTree subscriber on real page to receive live DOM mutation, got ${result.receivedBeforeDisconnect}`,
+      );
+      assert.equal(
+        result.receivedAfterDisconnect,
+        result.receivedBeforeDisconnect,
+        'disconnect() must stop delivering mutations on real page',
+      );
+    } finally {
+      await context.close();
+    }
   }
 });

@@ -122,6 +122,7 @@ export const TOOL_CATEGORY_MAP = Object.freeze({
   nodes: 'exec',
   pinkie_mode_ask: 'exec',
   pinkie_session_start: 'exec',
+  pinkie_engine_task: 'exec',
   pinkie_sessions: 'exec',
   sessions_spawn: 'exec',
   sessions_yield: 'exec',
@@ -172,6 +173,7 @@ export const ROLE_DISALLOWED_TOOLS = Object.freeze(new Set([
   'workbench_show',
   'pinkie_sessions',
   'pinkie_session_start',
+  'pinkie_engine_task',
   'pinkie_mode_ask',
   'pinkie_session_message',
   'pinkie_session_list',
@@ -195,7 +197,7 @@ export const KNOWN_GATEWAY_TOOLS = Object.freeze([
   'image', 'image_generate', 'learning_activity', 'memory_get', 'memory_search',
   'message', 'metre_memory', 'music_generate', 'nodes', 'pdf', 'pinkie_mode_ask',
   'pinkie_model_capability', 'pinkie_models', 'pinkie_roles', 'pinkie_search', 'pinkie_session_list', 'pinkie_session_message',
-  'pinkie_session_start', 'pinkie_session_title', 'pinkie_sessions', 'plan_update',
+  'pinkie_session_start', 'pinkie_engine_task', 'pinkie_session_title', 'pinkie_sessions', 'plan_update',
   'process', 'read', 'run_tests', 'session_status', 'sessions_history', 'sessions_list',
   'sessions_send', 'sessions_spawn', 'sessions_yield', 'skill_workshop', 'subagents',
   'tts', 'update_goal', 'video_generate', 'web_fetch', 'web_gpt', 'web_gpt_activity', 'web_search',
@@ -1005,7 +1007,9 @@ export function checkRoleToolCall(card, toolName, params = {}) {
       blockReason: `这个角色（${roleLabel}）不能用 ${name} 工具。需要的操作写进汇报，交给 Metre。`,
     };
   }
-  const category = toolCategory(name);
+  // app_browser serve with a command starts that command through a shell (app-browser.mjs spawn shell: true):
+  // it is an exec call, so the card needs exec and deny_commands applies. Static-directory serve has no command.
+  const category = name === 'app_browser' && params?.action === 'serve' && params?.command !== undefined ? 'exec' : toolCategory(name);
   if (!category) {
     return {
       block: true,
@@ -1020,8 +1024,11 @@ export function checkRoleToolCall(card, toolName, params = {}) {
     };
   }
   if (category === 'exec' && card?.deny_commands?.length) {
-    const cmd = typeof params?.command === 'string' ? params.command
-      : typeof params?.cmd === 'string' ? params.cmd : '';
+    // run_tests appends `filter` verbatim to its command and runs it through a shell, so check it
+    // on its own and joined the way run_tests joins it (command: 'git' + filter: 'push' is git push).
+    const text = value => (typeof value === 'string' ? value : '');
+    const base = text(params?.command) || text(params?.cmd), filter = text(params?.filter);
+    const cmd = [base, filter, base && filter ? `${base} ${filter}` : ''].filter(Boolean).join('\n');
     const denied = checkDeniedCommand(cmd, card.deny_commands);
     if (denied.blocked) {
       return {

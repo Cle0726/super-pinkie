@@ -11,33 +11,42 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 
-GATEWAY_URL = "http://127.0.0.1:18789/"
-PARTY_URL = "http://127.0.0.1:18889/"
-ROUNDTABLE_URL = "http://127.0.0.1:18891/"
-TTS_URL = "http://127.0.0.1:18888/health"
-RELAY_SERVICE = "super-pinkie-relay"
+if "_PINKIE_DESKTOP_PART" not in globals():
+    GATEWAY_URL = "http://127.0.0.1:18789/"
+    PARTY_URL = "http://127.0.0.1:18889/"
+    ROUNDTABLE_URL = "http://127.0.0.1:18891/"
+    TTS_URL = "http://127.0.0.1:18888/health"
+    RELAY_SERVICE = "super-pinkie-relay"
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_gateway (tests)
+            from app import windows_desktop as module
+        return module
 
-def _config_repair_module(*args, **kwargs): return _desktop()._config_repair_module(*args, **kwargs)
-def _gateway_proxy_module(*args, **kwargs): return _desktop()._gateway_proxy_module(*args, **kwargs)
-def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
-def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
-def bind_to_app_lifetime(*args, **kwargs): return _desktop().bind_to_app_lifetime(*args, **kwargs)
-def gateway_closed_marker(*args, **kwargs): return _desktop().gateway_closed_marker(*args, **kwargs)
-def gateway_listener_pid(*args, **kwargs): return _desktop().gateway_listener_pid(*args, **kwargs)
-def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
-def http_alive(*args, **kwargs): return _desktop().http_alive(*args, **kwargs)
-def http_identity(*args, **kwargs): return _desktop().http_identity(*args, **kwargs)
-def http_ready(*args, **kwargs): return _desktop().http_ready(*args, **kwargs)
-def keep_gateway_after_close(*args, **kwargs): return _desktop().keep_gateway_after_close(*args, **kwargs)
-def kill_process_tree(*args, **kwargs): return _desktop().kill_process_tree(*args, **kwargs)
-def openclaw_config_path(*args, **kwargs): return _desktop().openclaw_config_path(*args, **kwargs)
-def process_image_and_start(*args, **kwargs): return _desktop().process_image_and_start(*args, **kwargs)
-def stale_gateway_reason(*args, **kwargs): return _desktop().stale_gateway_reason(*args, **kwargs)
-def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
+    def _config_repair_module(*args, **kwargs): return _desktop()._config_repair_module(*args, **kwargs)
+    def _gateway_proxy_module(*args, **kwargs): return _desktop()._gateway_proxy_module(*args, **kwargs)
+    def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
+    def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
+    def bind_to_app_lifetime(*args, **kwargs): return _desktop().bind_to_app_lifetime(*args, **kwargs)
+    def gateway_closed_marker(*args, **kwargs): return _desktop().gateway_closed_marker(*args, **kwargs)
+    def gateway_listener_pid(*args, **kwargs): return _desktop().gateway_listener_pid(*args, **kwargs)
+    def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
+    def http_alive(*args, **kwargs): return _desktop().http_alive(*args, **kwargs)
+    def http_identity(*args, **kwargs): return _desktop().http_identity(*args, **kwargs)
+    def http_ready(*args, **kwargs): return _desktop().http_ready(*args, **kwargs)
+    def keep_gateway_after_close(*args, **kwargs): return _desktop().keep_gateway_after_close(*args, **kwargs)
+    def kill_process_tree(*args, **kwargs): return _desktop().kill_process_tree(*args, **kwargs)
+    def openclaw_config_path(*args, **kwargs): return _desktop().openclaw_config_path(*args, **kwargs)
+    def process_image_and_start(*args, **kwargs): return _desktop().process_image_and_start(*args, **kwargs)
+    def stale_gateway_reason(*args, **kwargs): return _desktop().stale_gateway_reason(*args, **kwargs)
+    def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
 
 
 class GatewaySupervisor:
@@ -48,6 +57,7 @@ class GatewaySupervisor:
         self.marker_cleared = False
         self.lock = threading.RLock()
         self.last_restart = 0.0
+        self.restart_gap = 2.0
         self.failure_limit = 2
         self.version = app_version(runtime.root)
         self.log_offset = 0
@@ -145,8 +155,12 @@ class GatewaySupervisor:
             append_log("launcher", f"stale gateway could not be stopped: {error}")
             return None
         deadline = time.monotonic() + wait
-        while time.monotonic() < deadline and http_ready(GATEWAY_URL):
+        still = http_ready(GATEWAY_URL)
+        while still and time.monotonic() < deadline:
             time.sleep(.2)
+            still = http_ready(GATEWAY_URL)
+        if still:  # B44: say so instead of silently attaching to the old page
+            append_log("launcher", f"stale gateway still answering {wait:g}s after stop (pid={pid})")
         return reason
 
     def start(self):
@@ -167,8 +181,12 @@ class GatewaySupervisor:
                 return
             if self.process and self.process.poll() is None:
                 return
-            if time.monotonic() - self.last_restart < 2:
+            # B44: back off between restarts that never got ready (port held by another
+            # program, gateway dying at once): 2 s, doubling to 60 s; note_ready() resets it.
+            if time.monotonic() - self.last_restart < self.restart_gap:
                 return
+            if self.last_restart:
+                self.restart_gap = min(self.restart_gap * 2, 60.0)
             self.last_restart = time.monotonic()
             log_dir = state_root() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -296,7 +314,12 @@ class GatewaySupervisor:
         append_log("launcher", "gateway exited on an invalid config")
         return self.repair_config(paths)
 
+    def reset_backoff(self):
+        # B44: the user asked for a restart (startup page repair): start now, not after the 30–60 s gap.
+        self.restart_gap, self.last_restart = 2.0, 0.0
+
     def note_ready(self):
+        self.restart_gap = 2.0  # B44: a gateway that got ready ends the backoff
         if self.good_saved:
             return
         self.good_saved = True

@@ -1809,7 +1809,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.run.status').opts.scope,'operator.read');
-  assert.equal(tools.length,31);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','computer_flow','app_browser','pinkie_search','learning_activity','web_gpt_activity','web_gpt','ask_user','learning_material','learning_desk','learning_library','pinkie_mode_ask','pinkie_models','pinkie_roles','pinkie_sessions','metre_memory','pinkie_model_capability','plan_update','workbench_read','code_check','code_search','code_edit','code_refs','run_tests','workbench_show']);
+  assert.equal(tools.length,33);assert.ok(tools.some(item=>item.opts.name==='pinkie_whiteboard'));assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','computer_flow','app_browser','pinkie_search','learning_activity','web_gpt_activity','web_gpt','ask_user','learning_material','learning_desk','learning_library','pinkie_mode_ask','pinkie_models','pinkie_roles','pinkie_whiteboard','pinkie_sessions','metre_memory','pinkie_engine_task','pinkie_model_capability','plan_update','workbench_read','code_check','code_search','code_edit','code_refs','run_tests','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1878,7 +1878,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','metre_memory','pinkie_mode_ask','pinkie_model_capability','pinkie_models','pinkie_roles','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','pinkie_sessions','plan_update','run_tests','web_gpt','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','metre_memory','pinkie_engine_task','pinkie_mode_ask','pinkie_model_capability','pinkie_models','pinkie_roles','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','pinkie_sessions','pinkie_whiteboard','plan_update','run_tests','web_gpt','web_gpt_activity','workbench_read','workbench_show']);
   // A tool registered in code but missing above kills the whole plugin at load
   // (11-13: pinkie_search). Scan every registerTool name in the plugin source.
   const dir=path.join(import.meta.dirname,'../services/mode-architecture');
@@ -2995,18 +2995,18 @@ test('a final reply cut down to a word gets one more chance, then an honest stop
 });
 
 test('a retry carries the previous reply so the next one replaces it instead of repeating it',t=>{
-  const run=tierRun(t,'retry-draft','boost','帮我做一个记账的小网页');
-  run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
-  const draft='记账网页做好了：能记收入和支出、按月汇总，数据存在本机浏览器里，打开 index.html 就能用，右上角可以导出备份。';
-  const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx);
-  assert.equal(decision.action,'revise');
-  assert.match(decision.retry.instruction,/只补做缺的那一步核对/);
-  assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/);
-  assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'));
-  // 补了截图之后换了说法：不因为没背「这次和上次不同」而停掉。
-  run.tool('exec',{command:'look-page index.html'},'截图：index.preview.png');
-  run.tool('read',{path:'index.preview.png'},'Read image file [image/png]');
+  const run=tierRun(t,'retry-draft','boost','帮我做一个记账的小网页'); run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+  const draft='记账网页做好了：能记收入和支出、按月汇总，数据存在本机浏览器里，打开 index.html 就能用，右上角可以导出备份。'; const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx);
+  assert.equal(decision.action,'revise'); assert.match(decision.retry.instruction,/只补做缺的那一步核对/); assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/); assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'));
+  run.tool('exec',{command:'look-page index.html'},'截图：index.preview.png'); run.tool('read',{path:'index.preview.png'},'Read image file [image/png]');
   assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'retry-draft-2'}),undefined);
+});
+
+test('a retry carries a long previous reply whole, so the closing summary is not lost',t=>{ // issue #96 任务 0：续跑提示只带上一版前 2400 字（「…（后略）」），却要求「这一版会替代它，所以要完整」；模型没见过结论和汇总，只能现编一个短收尾，终稿尾巴就被吞了。完整草稿本来就留在进程里（DRAFT_KEEP）。
+  const run=tierRun(t,'retry-long-draft','boost','帮我做一个记账的小网页'); run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+  const tail='汇总：120 项全部做完，打开 index.html 就能用。结论：可以直接交付。'; const draft='记账网页做好了，下面逐项说明。\n\n'+'第 N 项：这一块的按钮、输入框和月度汇总都按说明做好了，数据存在本机浏览器里。\n'.repeat(120)+'\n'+tail; assert.ok(draft.length>3600,'the draft is well past the old 2400-character cut');
+  const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx); assert.equal(decision.action,'revise');
+  assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/); assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'),'the whole draft is quoted'); assert.ok(decision.retry.instruction.includes(tail),'the closing summary is in front of the model'); assert.doesNotMatch(decision.retry.instruction,/后略/);
 });
 
 test('a stop by the system still hands the user the last full reply',t=>{

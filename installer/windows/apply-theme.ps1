@@ -57,7 +57,6 @@ function Apply-UISkin {
     $serviceWorker = Join-Path $UiRoot 'sw.js'
     if (Test-Path $serviceWorker) {
         $worker = Get-Content $serviceWorker -Raw -Encoding UTF8
-        $worker = $worker.Replace('OpenClaw', 'CLE Kk')
         # 打了补丁的原生块沿用上游的哈希文件名，cache-first 会一直把补丁前的
         # 渲染器喂回来。给本地 UI 改网络优先，并给它那份可丢弃的缓存打版本号；
         # 离线回退仍然保留。
@@ -82,18 +81,33 @@ function Apply-UISkin {
 }
 
 # ── 1. 定位当前 OpenClaw（新版 dist/control-ui + 旧版 ui）──────────────
+# 若显式指定 PINKIE_INSTALL_CORE=1 或 PINKIE_CORE_PREFIX，则先按 core-manifest.json
+# 安装并校验内核（支持 PINKIE_CORE=openclaw|cle，sha256 不一致直接报错停止）。
+$coreManifestTool = Join-Path $RepoRoot 'tools\core\manifest.mjs'
+if ((Test-Path -LiteralPath $coreManifestTool) -and ($env:PINKIE_INSTALL_CORE -eq '1' -or $env:PINKIE_CORE_PREFIX)) {
+    $coreInfo = (& node $coreManifestTool info --root $RepoRoot | Out-String | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0 -or -not $coreInfo) { throw '无法解析 core-manifest.json' }
+    $corePrefix = if ($env:PINKIE_CORE_PREFIX) { $env:PINKIE_CORE_PREFIX } else { Join-Path $env:LOCALAPPDATA ('SuperPinkie\core\' + $coreInfo.core) }
+    & node $coreManifestTool install --root $RepoRoot --prefix $corePrefix
+    if ($LASTEXITCODE -ne 0) { throw "内核安装或 SHA-256 校验失败（$($coreInfo.core)）" }
+    $env:OPENCLAW_ROOT = Join-Path $corePrefix 'node_modules\openclaw'
+}
 $didAny = $false
 $packageRoots = [System.Collections.Generic.List[string]]::new()
-if ($env:OPENCLAW_ROOT) { $packageRoots.Add($env:OPENCLAW_ROOT) }
-try {
-    $npmRoot = (& npm root -g 2>$null | Select-Object -First 1).Trim()
-    if ($npmRoot) { $packageRoots.Add((Join-Path $npmRoot 'openclaw')) }
-} catch {}
-$packageRoots.Add((Join-Path $env:APPDATA 'npm\node_modules\openclaw'))
-if (Test-Path $NvmRoot) {
-    Get-ChildItem $NvmRoot -Directory | ForEach-Object {
-        $packageRoots.Add((Join-Path $_.FullName 'lib\node_modules\openclaw'))
-        $packageRoots.Add((Join-Path $_.FullName 'node_modules\openclaw'))
+if ($env:OPENCLAW_ROOT) {
+    $packageRoots.Add($env:OPENCLAW_ROOT)
+}
+if (-not ($env:OPENCLAW_ROOT -and $SkipApp)) {
+    try {
+        $npmRoot = (& npm root -g 2>$null | Select-Object -First 1).Trim()
+        if ($npmRoot) { $packageRoots.Add((Join-Path $npmRoot 'openclaw')) }
+    } catch {}
+    $packageRoots.Add((Join-Path $env:APPDATA 'npm\node_modules\openclaw'))
+    if (Test-Path $NvmRoot) {
+        Get-ChildItem $NvmRoot -Directory | ForEach-Object {
+            $packageRoots.Add((Join-Path $_.FullName 'lib\node_modules\openclaw'))
+            $packageRoots.Add((Join-Path $_.FullName 'node_modules\openclaw'))
+        }
     }
 }
 
@@ -116,6 +130,8 @@ foreach ($packageRoot in $packageRoots) {
                 'apply-context-budget.mjs',
                 'apply-history-image-thumbnails.mjs',
                 'apply-compaction-boundary-recovery.mjs',
+                'apply-preflight-compaction-events.mjs',
+                'apply-overflow-compaction-events.mjs',
                 'apply-loopback-model-reliability.mjs',
                 'apply-work-thinking.mjs',
                 'apply-thinking-capabilities.mjs',
@@ -125,6 +141,14 @@ foreach ($packageRoot in $packageRoots) {
                 'apply-local-unrestricted-policy.mjs',
                 'apply-computer-v2.mjs',
                 'apply-stream-survive-steer.mjs',
+                'apply-same-session-recovery.mjs',
+                'apply-steer-fallback-wait.mjs',
+                'apply-retry-single-user.mjs',
+                'apply-noop-write-continue.mjs',
+                'apply-retry-user-preservation.mjs',
+                'apply-steer-images.mjs',
+                'apply-work-first-media-gate.mjs',
+                'apply-fake-ip-benchmark-v6.mjs',
                 'apply-metre-lock.mjs'
             ) | ForEach-Object { Join-Path $RepoRoot "patch\$_" } | Where-Object { Test-Path $_ }
             if ($node -and $runtimePatches.Count -gt 0) {
@@ -148,7 +172,7 @@ foreach ($packageRoot in $packageRoots) {
 }
 
 if (-not $didAny) {
-    Write-Warning "找不到 CLE Kk UI 目录，皮肤注入跳过。请先运行一键安装 / 修复。"
+    Write-Warning "找不到 C.le. UI 目录，皮肤注入跳过。请先运行一键安装 / 修复。"
 }
 
 # ── 2. 写入头像到各工作区 ────────────────────────────────────────────────
@@ -168,4 +192,4 @@ foreach ($ws in $workspaces) {
 }
 
 Write-Host ""
-Write-Host "皮肤注入完成。如果 CLE Kk 正在运行，请重启网关使更改生效。"
+Write-Host "皮肤注入完成。如果 C.le. 正在运行，请重启网关使更改生效。"

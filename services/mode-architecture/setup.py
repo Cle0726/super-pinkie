@@ -542,6 +542,16 @@ def _configure_plugin(data: dict, target: Path, disabled_vision: set[str] | None
     if not isinstance(update, dict):
         update = data["update"] = {}
     update["checkOnStart"] = False
+    # OpenClaw 默认每天凌晨 4 点（网关本机时间）重置会话：开始时间早于当天 4 点的会话，跨过 4 点后的
+    # 第一条消息（哪怕是子会话回报自动叫醒）会把整段记录改名成 .reset.* 存档，换一份空记录。界面上
+    # 就是「正在派发，突然跳成一个空的新会话，之前的历史都不见了」（2026-11-22 04:01 实测，Metre
+    # 会话 f7306527 → 85ddaa66）。碧琪自己有上下文压缩，桌面会话不需要定时清空：改成只按空闲
+    # 重置且不设空闲时长，等于从不自动重置。用户自己配过 reset / resetByType / idleMinutes 的不动。
+    session_cfg = data.get("session")
+    if session_cfg is None:
+        session_cfg = data["session"] = {}
+    if isinstance(session_cfg, dict) and not any(key in session_cfg for key in ("reset", "resetByType", "idleMinutes")):
+        session_cfg["reset"] = {"mode": "idle"}
     # 手册单个文件默认超过 2 万字就被 OpenClaw 悄悄截掉中间一段（项目手册已经 1.9 万字），
     # 模型拿到的是缺了几节的手册，没有任何提示。把上限抬到手册够不着的地方；只抬不降。
     for key, floor in (("bootstrapMaxChars", 60_000), ("bootstrapTotalMaxChars", 200_000)):
@@ -658,7 +668,7 @@ def install(home=None) -> bool:
             "index.mjs", "mode-architecture-core.mjs", "deliberation-audit.mjs", "watchdog-runtime.mjs", "clekk-supervisor.mjs", "completion-integrity.mjs", "evidence-rules.mjs", "mode-constants.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs",
             "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs",
             "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs",
-            "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs",
+            "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs", "monthly-recap.mjs", "shell-run.mjs",
             "learning-desk.mjs", "learning-drill.mjs", "learning-explain-voice.mjs", "learning-game-bank.mjs", "learning-game-real.mjs", "learning-game-content.mjs", "learning-game-economy.json", "learning-game-economy.mjs", "learning-game-exam.mjs", "learning-game-forms.json", "learning-game-monsters.mjs", "learning-game-world.mjs", "learning-game.mjs", "learning-exams.mjs", "learning-vocab.mjs",
             "learning-almanac.mjs", "learning-holidays-cn.json", "learning-refs.mjs",
             "learning-recall.mjs", "learning-companion.mjs", "learning-lesson.mjs",
@@ -666,14 +676,14 @@ def install(home=None) -> bool:
             "learning-materials-extract.mjs", "learning-zsb.mjs",
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
-            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "metre-roles.mjs", "metre-baton.mjs", "model-tiers.json", "tool-trace.mjs", "metre-memory.mjs", "metre-board.mjs", "quiet-mode.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "channel-reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "turn-checkpoints.mjs", "reply-styles.json", "session-prefs.mjs", "whiteboard-store.mjs", "whiteboard-tools.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "metre-roles.mjs", "metre-baton.mjs", "model-tiers.json", "tool-trace.mjs", "metre-memory.mjs", "metre-board.mjs", "engines.mjs", "engines-rpc.mjs", "engines-bridge.mjs", "engines-upstream.mjs", "engines-task.mjs", "engines-players.mjs", "engines-registry.mjs", "engines-dispatch.mjs", "metre-plan-mode.mjs", "engines-dispatch-cli.mjs", "quiet-mode.mjs", "artifacts.mjs", "desktop-apps.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "channel-reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "model-setup.mjs", "settings-guard.mjs", "metre-lock.mjs", "metre-lock-hash.json",
             "feedback.mjs", "feedback-crypto.mjs", "feedback-sanitize.mjs", "feedback-transport.mjs", "feedback-public.json",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
             "app-browser.mjs", "web-search-fallback.mjs", "model-health.mjs", "file-delivery.mjs", "app-guide.mjs",
             "rich-runtime.mjs", "workbench.mjs", "workbench-lsp.mjs",
-            "workbench-ext.mjs", "nb_runner.py", "nb_bootstrap.py",
+            "workbench-ext.mjs", "pr-flow.mjs", "nb_runner.py", "nb_bootstrap.py",
             "package.json", "openclaw.plugin.json",
         ):
             if (source / name).is_file():

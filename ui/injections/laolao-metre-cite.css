@@ -1,0 +1,121 @@
+/* laolao-metre-cite —— M13：Metre 里的来源角标、来源行和引用卡（11-24）。
+ * 只在 Metre 里生效；颜色全用 Metre 皮肤的变量，夜间跟着皮肤走。
+ * 角标是谱上的小节号：方角、等宽数字、墨色细框；来源行是一排「小节号 + 标题 + 网站」的签条；
+ * 引用卡是一张谱纸便签：上面一条细线、号码和网站，下面标题和摘要。 */
+
+html[data-laolao-mode="metre"] .chat-group .pinkie-cite {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; margin: 0 2px; padding: 0 4px; box-sizing: border-box;
+  border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 3px;
+  background: var(--metre-surface, #FFFFFF); color: var(--metre-muted, #73726C);
+  font: 600 10px/1 var(--metre-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
+  vertical-align: 0.35em; text-decoration: none; cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+/* 悬停 / 出卡时：数字一直是强调色，底换成淡强调色，不铺实心。
+ * 皮肤把回答正文里的链接字色定死成强调色（强制覆盖），所以底色绝不能也用强调色，否则数字和底同色看不见（11-24 打回）；
+ * 原生正文链接悬停 opacity: .8，这里拉回 1。 */
+html[data-laolao-mode="metre"] .chat-group .pinkie-cite:hover,
+html[data-laolao-mode="metre"] .chat-group .pinkie-cite[aria-describedby] {
+  border-color: var(--metre-accent, #C96442); background: color-mix(in srgb, var(--metre-accent, #C96442) 14%, var(--metre-surface, #FFFFFF)); color: var(--metre-accent, #C96442); opacity: 1;
+}
+html[data-laolao-mode="metre"] .chat-group .pinkie-cite:focus-visible,
+html[data-laolao-mode="metre"] .pk-mcite-chip:focus-visible {
+  outline: 2px solid var(--metre-accent, #C96442); outline-offset: 2px;
+}
+
+/* 来源行。小字（Sources、编号、网站）用 --pk-mcite-ink：纯 --metre-muted 日间在页面底只有 4.37:1、在签条悬停底只有 4.03:1，掺两成多正文色（和预览行同一配方）到日间 ≥ 4.9、夜间 ≥ 5.6（B11 走查） */
+html[data-laolao-mode="metre"] .pinkie-sources.pk-mcite-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--metre-line, #E8E6DC);
+  max-width: 100%; box-sizing: border-box; font-size: 12px; --pk-mcite-ink: color-mix(in srgb, var(--metre-muted, #73726C) 78%, var(--metre-text, #1F1E1D)); color: var(--pk-mcite-ink);
+}
+html[data-laolao-mode="metre"] .pk-mcite-row__label {
+  margin-right: 4px; font: italic 400 13px/1 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em; color: var(--pk-mcite-ink);
+}
+html[data-laolao-mode="metre"] .pinkie-sources .pk-mcite-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: min(300px, 100%); height: 26px;
+  padding: 0 9px 0 4px; box-sizing: border-box;
+  border: 1px solid var(--metre-line, #E8E6DC); border-radius: 6px;
+  background: var(--metre-surface, #FFFFFF); color: var(--metre-text, #1F1E1D);
+  text-decoration: none; cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+html[data-laolao-mode="metre"] .pinkie-sources .pk-mcite-chip:hover,
+html[data-laolao-mode="metre"] .pinkie-sources .pk-mcite-chip[aria-describedby] {
+  border-color: var(--metre-line-strong, #D9D6CC); background: var(--metre-hover, #F0EEE6); color: var(--metre-text, #1F1E1D);
+}
+html[data-laolao-mode="metre"] .pinkie-sources .pk-mcite-chip:active { background: var(--metre-line, #E8E6DC); }
+html[data-laolao-mode="metre"] .pk-mcite-chip__n {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 3px; background: var(--metre-hover, #F0EEE6); color: var(--pk-mcite-ink);
+  font: 600 10px/1 var(--metre-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
+}
+html[data-laolao-mode="metre"] .pk-mcite-chip:hover .pk-mcite-chip__n { background: color-mix(in srgb, var(--metre-accent, #C96442) 14%, var(--metre-surface, #FFFFFF)); color: var(--metre-accent, #C96442); }
+html[data-laolao-mode="metre"] .pk-mcite-chip__title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12px/1 var(--metre-sans, system-ui, sans-serif);
+}
+html[data-laolao-mode="metre"] .pk-mcite-chip__host {
+  flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--pk-mcite-ink); font: 400 11px/1 var(--metre-sans, system-ui, sans-serif);
+}
+
+/* 引用卡（挂在 body 上，所以不带 .chat-group）。
+ * 用 Metre 弹层的颜色（--metre-card / --metre-pop-shadow，和菜单、弹层一套），日间白底、夜间深底。
+ * 卡片故意不带 role="tooltip"：皮肤给所有 [role="tooltip"] 铺「正文色底 + 底色字」的反色（强制覆盖），
+ * 卡片会变成日间黑底、夜间米白底，标题（正文色）和底同色整行消失（11-24 打回）。角标仍用 aria-describedby 指到卡片。 */
+html[data-laolao-mode="metre"] .pk-mcite-card {
+  position: fixed; z-index: 2147483000; width: min(340px, calc(100vw - 16px)); box-sizing: border-box; padding: 10px 12px 9px;
+  border: 1px solid var(--metre-line-strong, #D9D6CC); border-top: 2px solid var(--metre-accent, #C96442); border-radius: 6px;
+  background: var(--metre-card, var(--metre-surface, #FFFFFF)); color: var(--metre-text, #1F1E1D);
+  box-shadow: var(--metre-pop-shadow, 0 6px 20px rgba(31, 30, 29, 0.12)); pointer-events: none;
+  font: 400 12px/1.5 var(--metre-sans, system-ui, sans-serif);
+  animation: pk-mcite-in 140ms ease-out both;
+}
+html[data-laolao-mode="metre"] .pk-mcite-card[data-still] { animation: none; }
+@keyframes pk-mcite-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { html[data-laolao-mode="metre"] .pk-mcite-card { animation: none; } }
+html[data-laolao-mode="metre"] .pk-mcite-card__head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--metre-muted, #73726C); }
+html[data-laolao-mode="metre"] .pk-mcite-card__n {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 3px; background: var(--metre-accent, #C96442); color: var(--metre-bg, #FAF9F5);
+  font: 600 10px/1 var(--metre-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
+}
+html[data-laolao-mode="metre"] .pk-mcite-card__host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: color-mix(in srgb, var(--metre-text, #1F1E1D) 25%, var(--metre-muted, #73726C)); }
+html[data-laolao-mode="metre"] .pk-mcite-card__title {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  font: 600 13px/1.4 var(--metre-sans, system-ui, sans-serif); color: var(--metre-text, #1F1E1D);
+}
+html[data-laolao-mode="metre"] .pk-mcite-card__snippet {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere;
+  margin: 4px 0 0; color: color-mix(in srgb, var(--metre-text, #1F1E1D) 78%, var(--metre-muted, #73726C));
+}
+html[data-laolao-mode="metre"] .pk-mcite-card__foot { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--metre-line, #E8E6DC); font-size: 11px; color: color-mix(in srgb, var(--metre-text, #1F1E1D) 25%, var(--metre-muted, #73726C)); }
+
+/* M14 朗读键（laolao-metre-read.js）：和回答底部其他按键同一个样子；正在念时用强调色，按键区保持显示（共用规则看 aria-pressed）。
+ * 键可能在碧琪按键行里，也可能退回原生底部按键区：原生 .chat-group-footer button 不悬停时 opacity:0、pointer-events:none，
+ * 鼠标移开后「停止朗读」会看不见也点不到。所以正在念时让它一直显示、可点；不念时和旁边的键一样，跟着按键区显隐。
+ * 和来源角标放在同一张表里，免得为几条规则多登记一个文件。 */
+html[data-laolao-mode="metre"] .chat-group-footer .pk-mread[aria-pressed="true"] { opacity: 1; pointer-events: auto; color: var(--metre-accent, #C96442); background: color-mix(in srgb, var(--metre-accent, #C96442) 10%, transparent); }
+/* 退回原生底部按键区时，和旁边的原生键一样高（原生 24px，碧琪按键行 26px）。 */
+html[data-laolao-mode="metre"] .chat-group-footer-actions > .pk-mread { height: 24px; min-width: 24px; }
+/* 念的时候整排按键不跳位：原生左边的删除 / 画布 / 复制和时间戳只在悬停这条回答时显示（theme.css 和原生各一条 opacity: 0），
+ * 共用规则只把按键区容器提回 1，于是鼠标一移开左边三键和时间戳消失、看起来整排从右边开始。念的时候让它们保持悬停时的样子。 */
+html[data-laolao-mode="metre"] .chat-group:has(.pk-mread[aria-pressed="true"]) .chat-group-footer .chat-delete-wrap { opacity: 1; }
+html[data-laolao-mode="metre"] .chat-group:has(.pk-mread[aria-pressed="true"]) .chat-group-footer button:not(.pk-mread) { opacity: 0.6; pointer-events: auto; }
+html[data-laolao-mode="metre"] .chat-group:has(.pk-mread[aria-pressed="true"]) .chat-group-footer .chat-group-timestamp { opacity: 0.72; }
+/* 朗读键的悬停提示（和 aria-label 同一句），不用 title：title 的系统提示要等一秒多，而且 WebView 里不一定出。 */
+html[data-laolao-mode="metre"] .chat-group-footer .pk-mread { position: relative; }
+html[data-laolao-mode="metre"] .chat-group-footer .pk-mread::after {
+  content: attr(aria-label); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+  padding: 3px 7px; border-radius: 4px; white-space: nowrap; pointer-events: none;
+  background: var(--metre-text, #1F1E1D); color: var(--metre-bg, #FAF9F5); font: 400 11px/1.3 var(--metre-sans, system-ui, sans-serif);
+  opacity: 0; transition: opacity 120ms ease 250ms;
+}
+html[data-laolao-mode="metre"] .chat-group-footer .pk-mread:is(:hover, :focus-visible)::after { opacity: 1; }
+html[data-laolao-mode="metre"] .chat-group-footer .pk-mread[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--metre-accent, #C96442) 16%, transparent); }
+
+@media (max-width: 900px) {
+  html[data-laolao-mode="metre"] .pinkie-sources .pk-mcite-chip { max-width: 100%; }
+  html[data-laolao-mode="metre"] .pk-mcite-chip__host { display: none; }
+}

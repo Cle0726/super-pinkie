@@ -76,10 +76,10 @@
 }
 @keyframes pinkie-caret { 50% { opacity: 0; } }
 .pinkie-thinking__head { all: unset; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12.5px; color: #805269; padding: 2px 0; }
-.pinkie-thinking__chev { display: inline-block; width: 10px; color: #a36b82; transition: transform 0.25s; }
+.pinkie-thinking__chev { display: inline-block; width: 10px; color: #8f5a73; transition: transform 0.25s; }
 .pinkie-thinking.is-open .pinkie-thinking__chev, .pinkie-thinking.is-live .pinkie-thinking__chev { transform: rotate(90deg); }
 .pinkie-thinking.is-live .pinkie-thinking__label, .pinkie-status__phrase.is-shimmer {
-  background: linear-gradient(90deg, #805269 35%, #e94f91 50%, #805269 65%); background-size: 250% 100%;
+  background: linear-gradient(90deg, #805269 35%, #b8306e 50%, #805269 65%); background-size: 250% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent; animation: pinkie-shimmer 1.8s linear infinite; font-weight: 600;
 }
 @keyframes pinkie-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }

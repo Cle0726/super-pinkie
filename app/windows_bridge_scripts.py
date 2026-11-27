@@ -377,8 +377,19 @@ BRIDGE_SCRIPT = r"""
         background:linear-gradient(145deg,rgba(54,39,52,.92),rgba(41,31,43,.82));
         border-color:rgba(246,218,234,.2);box-shadow:0 3px 12px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.05);
       }
+      /* B23：Metre 里胶囊不用粉色，换 Metre 色板（纸白底、墨色图标、钴蓝更新标记、关闭键用 Metre 的危险色）。 */
+      html[data-pinkie-platform="windows"][data-laolao-mode="metre"] #pinkie-native-window-controls {
+        --caption-ink:var(--metre-text,#1B1A18);--caption-hover:var(--metre-hover,#EFEDE8);--caption-face:var(--metre-surface,#FFFFFF);--pinkie-update-mark:var(--metre-cobalt,#2F4BB0);
+        background:var(--metre-surface,#FFFFFF);border-color:var(--metre-line-strong,#D3D0C8);box-shadow:0 2px 8px rgba(27,26,24,.06);
+      }
+      html[data-pinkie-platform="windows"][data-laolao-mode="metre"]:is([data-pinkie-night],[data-theme="dark"]) #pinkie-native-window-controls {
+        --caption-hover:rgba(255,255,255,.08);background:var(--metre-surface,#232321);border-color:var(--metre-line-strong,#393835);box-shadow:0 2px 8px rgba(0,0,0,.2);
+      }
+      html[data-pinkie-platform="windows"][data-laolao-mode="metre"] #pinkie-native-window-controls button:hover { box-shadow:none }
+      html[data-pinkie-platform="windows"][data-laolao-mode="metre"] #pinkie-native-window-controls button:active { background:var(--caption-hover) }
+      html[data-pinkie-platform="windows"][data-laolao-mode="metre"] #pinkie-native-window-controls button[data-act="close"]:hover { background:var(--metre-danger,#A8432F);box-shadow:none }
       html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:var(--pinkie-caption-reserve,204px)!important }
-      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important } html[data-pinkie-platform="windows"] .pk-metre-board .pk-metre-board__head { padding-top:50px!important } @media(max-width:760px) { html[data-pinkie-platform="windows"] .pk-metre-board .pk-metre-board__close { top:50px!important } }
       html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:var(--pinkie-caption-reserve,204px)!important }
       html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:var(--pinkie-caption-reserve,204px)!important }
       @media(max-width:900px) {

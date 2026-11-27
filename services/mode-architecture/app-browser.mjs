@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
+import {drainThen} from './engines-upstream.mjs';
 
 export const APP_BROWSER_ACTIONS = Object.freeze([
   'open', 'status', 'snapshot', 'screenshot', 'click', 'type', 'press', 'scroll',
@@ -231,7 +232,8 @@ const MIME = Object.freeze({
 });
 
 function staticRequest(directory, home, req, res, log) {
-  const respond = (status, text) => { res.writeHead(status, {'Content-Type': 'text/plain; charset=utf-8'}); res.end(text); };
+  // 报错前先把没读的请求体读掉（drainThen，见 engines-upstream.mjs）：不读就回 405，客户端带 Connection: close 时只收到 RST。
+  const respond = (status, text) => drainThen(req, res, () => { res.writeHead(status, {'Content-Type': 'text/plain; charset=utf-8'}); res.end(text); });
   if (!['GET', 'HEAD'].includes(req.method)) return respond(405, '这里只支持读取网页。');
   try {
     const pathname = decodeURIComponent(String(req.url || '/').split('?')[0]);
@@ -409,7 +411,8 @@ export class AppBrowserServers {
       throw new Error('启动服务请二选一：填写 dir，或同时填写 command、cwd、port。');
     }
     const record = {...sessionContext(ctx), owner: sessionOwner(ctx), logs: [], partial: '', kind: staticMode ? 'static' : 'command', pid: process.pid, stopped: false};
-    const onAbort = () => { void this.stopRecord(record); };
+    // startServe's catch awaits the same record.stopping promise and reports its error; only this copy goes unobserved.
+    const onAbort = () => { this.stopRecord(record).catch(() => {}); };
     signal?.addEventListener('abort', onAbort, {once: true});
     try {
       if (staticMode) {

@@ -168,7 +168,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
   arm(sessionKey, tier) {
     const agent = agentFromSessionKey(sessionKey);
     const mode = MODE_BY_AGENT[agent];
-    if (!mode || !TIER_LIMITS[tier]) throw new Error('只支持 CLE Kk 主模式与基础/加强/全开/长跑四档');
+    if (!mode || !TIER_LIMITS[tier]) throw new Error('只支持 C.le. 主模式与基础/加强/全开/长跑四档');
     const existing = this.getRun(sessionKey);
     if (existing?.active) throw new Error('上一轮档位任务仍在执行，请等最终交付后再发送下一条');
     const run = {
@@ -1036,10 +1036,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const note = unverifiedNote(state.stopMissing || []);
       return note ? draft + '\n\n' + note : draft;
     }
+    // 上一版保存时已按 DRAFT_KEEP 留足，这里整段附上：以前截到 4000 字，长回复的结尾悄悄没了。
     return '本轮未完成：' + state.stopReason + '\n已尝试：' + methods
       + '\n当前流程：' + workflowProgress(state).label
       + '。请查看本轮已有结果后，再决定下一步。'
-      + (draft ? '\n\n上一版回复（还没核对完，仅供参考）：\n' + draft.slice(0, 4000) : '');
+      + (draft ? '\n\n上一版回复（还没核对完，仅供参考）：\n' + draft : '');
   }
 
   stopForHonestIncomplete(state, reply, audit, ctx = {}) {

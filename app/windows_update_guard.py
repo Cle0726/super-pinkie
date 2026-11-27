@@ -16,26 +16,40 @@ import tempfile
 import time
 import urllib.parse
 
-import release_notes
+try:
+    import release_notes
+except ImportError:  # imported as app.windows_update_guard (tests, no app/ on sys.path)
+    from app import release_notes
 
-UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
-UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
-TRUSTED_UPDATE_HOSTS = {
-    "api.github.com",
-    "github.com",
-    "objects.githubusercontent.com",
-    "release-assets.githubusercontent.com",
-}
-UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
-UPDATE_MANIFEST_NAME = "latest.json"
-DEFAULT_UPDATE_PROXIES = ("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
-UPDATE_RELEASE_API_PROXY_HOSTS = frozenset({"gh-proxy.com"})
+if "_PINKIE_DESKTOP_PART" not in globals():
+    UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
+    UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
+    TRUSTED_UPDATE_HOSTS = {
+        "api.github.com",
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    }
+    UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
+    UPDATE_MANIFEST_NAME = "latest.json"
+    DEFAULT_UPDATE_PROXIES = ("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
+    UPDATE_RELEASE_API_PROXY_HOSTS = frozenset({"gh-proxy.com"})
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_update_guard (tests)
+            from app import windows_desktop as module
+        return module
 
-def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
-def update_in_progress(*args, **kwargs): return _desktop().update_in_progress(*args, **kwargs)
+    def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
+    def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
+    def openclaw_config_path(*args, **kwargs): return _desktop().openclaw_config_path(*args, **kwargs)
+    def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
+    def update_in_progress(*args, **kwargs): return _desktop().update_in_progress(*args, **kwargs)
 
 
 def version_tuple(value):
@@ -253,6 +267,8 @@ def guard_bundle_identity(resource_root):
         info = json.loads((root / "build-info.json").read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         info = {}
+    if not isinstance(info, dict):
+        info = {}
     manifest = {}
     manifest_sha = ""
     manifest_file = root / "guard-manifest.json"
@@ -262,6 +278,8 @@ def guard_bundle_identity(resource_root):
             manifest_sha = hashlib.sha256(raw).hexdigest()
             manifest = json.loads(raw.decode("utf-8"))
         except (OSError, ValueError):
+            manifest = {}
+        if not isinstance(manifest, dict):
             manifest = {}
     return {
         "channel": str(info.get("channel") or "release"),
@@ -290,7 +308,7 @@ def has_guard_receipt(app_state, openclaw_state=None, version="", commit="", man
     status_file = app_dir / "guard" / "status.json"
     try:
         status = json.loads(status_file.read_text(encoding="utf-8-sig"))
-        if int(status.get("counterSchema") or 0) >= 1 and _guard_receipt_matches(status, version, commit, manifest_sha):
+        if isinstance(status, dict) and int(status.get("counterSchema") or 0) >= 1 and _guard_receipt_matches(status, version, commit, manifest_sha):
             return True
     except (OSError, ValueError, TypeError):
         pass
@@ -298,7 +316,7 @@ def has_guard_receipt(app_state, openclaw_state=None, version="", commit="", man
     receipt_file = oc_dir / "guard-receipt.json"
     try:
         receipt = json.loads(receipt_file.read_text(encoding="utf-8-sig"))
-        if int(receipt.get("schema") or 0) >= 1 and _guard_receipt_matches(receipt, version, commit, manifest_sha):
+        if isinstance(receipt, dict) and int(receipt.get("schema") or 0) >= 1 and _guard_receipt_matches(receipt, version, commit, manifest_sha):
             return True
     except (OSError, ValueError, TypeError):
         pass
@@ -306,7 +324,7 @@ def has_guard_receipt(app_state, openclaw_state=None, version="", commit="", man
         mark = oc_dir / "extensions" / plugin / "guard-build.json"
         try:
             obj = json.loads(mark.read_text(encoding="utf-8-sig"))
-            if obj.get("counterReady") is True and _guard_receipt_matches(obj, version, commit, manifest_sha):
+            if isinstance(obj, dict) and obj.get("counterReady") is True and _guard_receipt_matches(obj, version, commit, manifest_sha):
                 return True
         except (OSError, ValueError):
             pass

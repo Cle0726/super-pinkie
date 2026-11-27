@@ -524,7 +524,7 @@
         resolve(true);
       };
       image.onerror = () => resolve(false);
-      image.src = (window.__pinkieAsset || ((p) => p))(`./laolao-reasoning-frame-${material}.png`);
+      image.src = (window.__pinkieAsset || ((p) => p))(`/laolao-reasoning-frame-${material}.png`);
     });
     frameLoads.set(material, loaded);
     return loaded;
@@ -564,7 +564,7 @@
       layers[0].classList.add("is-initial");
       /* Freeze the outgoing image while the first frame loads. Otherwise a
          quick drag makes the old CSS background switch before the fade exists. */
-      menu.style.backgroundImage = `url("${(window.__pinkieAsset || ((p) => p))(`./laolao-reasoning-frame-${material}.png`)}"), linear-gradient(145deg, rgba(252, 250, 252, .88), rgba(239, 235, 242, .78) 58%, rgba(250, 247, 248, .84))`;
+      menu.style.backgroundImage = `url("${(window.__pinkieAsset || ((p) => p))(`/laolao-reasoning-frame-${material}.png`)}"), linear-gradient(145deg, rgba(252, 250, 252, .88), rgba(239, 235, 242, .78) 58%, rgba(250, 247, 248, .84))`;
       state = { layers, active: 0, material, pending: null, token: 0, initialLoad: null };
       frameStates.set(menu, state);
       state.initialLoad = preloadFrame(material).then((loaded) => {
@@ -811,14 +811,14 @@
     }
     label.style?.setProperty?.("display", "none", "important");
     const decorated = owned.querySelector?.(":scope > .pinkie-external-tier");
-    if (owned.textContent === display && Boolean(decorated) === Boolean(tier)) return display;
-    if (!tier || !document.createTextNode || !owned.replaceChildren) {
-      owned.textContent = display;
-      return display;
-    }
+    const wrapped = owned.querySelector?.(":scope > .pinkie-external-model-name");
+    if (owned.textContent === display && Boolean(decorated) === Boolean(tier) && (wrapped || !owned.replaceChildren)) return display;
+    // Name in its own span even without a tier: owned is inline-flex (theme.css), where text-overflow draws no "…".
+    if (!owned.replaceChildren || (tier && !document.createTextNode)) return (owned.textContent = display);
     const model = document.createElement("span");
     model.className = "pinkie-external-model-name";
-    model.textContent = name;
+    model.textContent = model.title = name;
+    if (!tier) { owned.replaceChildren(model); return display; }
     const level = document.createElement("span");
     level.className = "pinkie-external-tier";
     level.textContent = LEVEL_LABELS[tier];
@@ -1560,12 +1560,12 @@
         if (window.localStorage?.getItem(RECENT_MODELS_KEY) !== encoded) window.localStorage?.setItem(RECENT_MODELS_KEY, encoded);
       } catch { /* Browser storage can be unavailable. */ }
     }
-    const common = new Set(recentOrder);
-    let visible = 0;
+    const favs = window.Pinkie?.metre?.fav?.pickerFavs?.(rows.map((row) => row.getAttribute("data-chat-model-option"))) || [], common = new Set([...favs, ...recentOrder]);
+    let visible = 0; // Metre favourites (laolao-metre-fav.js) sit between the current model and the recent ones in 常用模型.
     for (const [index, row] of rows.entries()) {
       const value = row.getAttribute("data-chat-model-option");
-      const order = query ? Number(row.dataset.chatModelRank ?? index)
-        : state.brand === "common" ? row === selected ? -1 : recentOrder.indexOf(value) >= 0 ? recentOrder.indexOf(value) : rows.length + index : row === selected ? -1 : index;
+      const order = query ? Number(row.dataset.chatModelRank ?? index) : state.brand !== "common" ? row === selected ? -1 : index : row === selected ? -1
+        : favs.includes(value) ? favs.indexOf(value) : recentOrder.includes(value) ? favs.length + recentOrder.indexOf(value) : rows.length + favs.length + index;
       if (row.style.getPropertyValue("--pinkie-model-order") !== String(order)) row.style.setProperty("--pinkie-model-order", String(order));
       const haystack = [row.dataset.chatModelName, row.dataset.chatModelKeywords, row.dataset.chatModelProviderLabel,
         row.getAttribute("data-chat-model-option"), row.dataset.pinkieSources, row.querySelector(".chat-controls__model-option-name")?.textContent || row.textContent].join(" ").toLocaleLowerCase();

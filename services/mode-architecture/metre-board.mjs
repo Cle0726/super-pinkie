@@ -15,6 +15,7 @@ import {createHash} from 'node:crypto';
 import {agentOf, clipGraphemes, isInternalMessage, messageText, readSessionJson, registerSessionMethod} from './session-titles.mjs';
 import {isMetreKey} from './session-lineage.mjs';
 import {getActiveMetreLock} from './metre-lock.mjs';
+import {registerEngines} from './engines.mjs';
 
 export const RAW_LIMIT = 200;
 export const TIMELINE_LIMIT = 120;
@@ -336,15 +337,19 @@ export class MetreBoard {
         : state.phase === 'waiting' ? 'waiting'
         : state.phase === 'error' || lastReport?.failed ? 'failed'
         : stoppedKeys.has(key) && !(lastReport && lastReport.createdAt > (parentState.lastStop?.at || 0)) ? 'stopped' : 'done';
-      const spans = (j.spans[key] || []).map(span => ({from: span.from, to: span.to || (busy ? now : (state.at || span.from)),
-        kind: span.to ? span.kind : busy ? 'run' : status === 'failed' || status === 'interrupted' ? 'fail' : 'done'}));
+      // 外部引擎的子任务（engines-task.mjs）不在网关里跑，没有一轮一轮的记账：从交出去到交回画一整段。
+      const external = record.kind === 'external';
+      const spans = external ? [{from: record.engineSince || record.createdAt || now, to: busy ? now : (state.at || now), kind: busy ? 'run' : status === 'failed' ? 'fail' : status === 'waiting' ? 'wait' : 'done'}]
+        : (j.spans[key] || []).map(span => ({from: span.from, to: span.to || (busy ? now : (state.at || span.from)),
+          kind: span.to ? span.kind : busy ? 'run' : status === 'failed' || status === 'interrupted' ? 'fail' : 'done'}));
       const usage = j.usage[key] || {};
       return {key, title: row?.label || record.title || launch?.title || '子会话', mode: record.mode || launch?.mode || '',
-        modeName: MODE_NAMES[record.mode || launch?.mode] || '', model: record.model || launch?.model || '',
+        modeName: external ? record.engineName || '外部引擎' : MODE_NAMES[record.mode || launch?.mode] || '', model: external ? record.modelName || record.model || '' : record.model || launch?.model || '',
+        ...(external ? {engine: record.engine || '', external: true} : {}),
         ...metreRoleFields(record, launch, metreRoles),
         status, statusText: STATUS_WORDS[status], state: BOARD_STATE[status],
         startedAt: record.createdAt || launch?.at || 0, endedAt: busy ? 0 : (state.at || 0),
-        doing: busy ? (j.doing[key] || '想') : '',
+        doing: busy ? (external && this.lineage.externalDoing?.(key)) || j.doing[key] || '想' : '',
         usage: {input: usage.input || num(row?.inputTokens), output: usage.output || num(row?.outputTokens), total: num(row?.totalTokens)},
         reports: childReports.length,
         lastActiveAt: Math.max(j.seen?.[key] || 0, ...(j.spans[key] || []).map(span => span.to || span.from)),
@@ -440,6 +445,8 @@ export class MetreBoard {
 export function registerMetreBoard(api, {root, lineage, plans = null, modelHealth = null, lock = null, metreRoleCatalog} = {}) {
   const activeLock = () => lock || getActiveMetreLock();
   const board = new MetreBoard({root, lineage, plans, modelHealth, metreRoleCatalog});
+  // 外部引擎（T3 Code：Claude Code、Codex、Antigravity），briefs/metre-engines-1122。默认关，用户打开才装才跑。
+  if (root) registerEngines(api, {base: path.dirname(root), register: registerSessionMethod, lineage, modelHealth}); // 没有状态目录（测试里）就不建引擎服务
   const safe = work => (event, ctx) => {
     if (activeLock()?.isLocked?.()) return;
     try { work(event, ctx); } catch { /* 看板记账出错不影响这一轮 */ }
