@@ -102,6 +102,8 @@ node (Join-Path $RepoDir "patch\apply-steer-fallback-wait.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Steer fallback patch failed" }
 node (Join-Path $RepoDir "patch\apply-retry-single-user.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Retry single user patch failed" }
+node (Join-Path $RepoDir "patch\apply-noop-write-continue.mjs")
+if ($LASTEXITCODE -ne 0) { throw "No-op write continue patch failed" }
 node (Join-Path $RepoDir "patch\apply-loopback-model-reliability.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Loopback model reliability patch failed" }
 node (Join-Path $RepoDir "patch\apply-local-unrestricted-policy.mjs")
