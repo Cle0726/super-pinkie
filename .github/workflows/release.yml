@@ -43,6 +43,20 @@ jobs:
           version="$(python3 -c 'import json; print(json.load(open("desktop/windows/runtime-manifest.json"))["openclaw"])')"
           npm install -g "openclaw@$version"
           python3 -m pip install --disable-pip-version-check edge-tts aiohttp
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build self-contained macOS app
         env:
           PINKIE_GUARD_SIGNING_KEY: ${{ secrets.PINKIE_GUARD_SIGNING_KEY }}
@@ -110,6 +124,20 @@ jobs:
           $settings = Get-Content -Raw update-mirrors.json | ConvertFrom-Json
           $settings.bucket = $env:CN_MIRROR_BASE_URL
           $settings | ConvertTo-Json | Set-Content -LiteralPath update-mirrors.json -Encoding utf8
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build Windows exe
         shell: pwsh
         env:
@@ -169,6 +197,7 @@ jobs:
   windows-smoke:
     needs: windows
     uses: ./.github/workflows/windows-smoke.yml
+    secrets: inherit
     with:
       app_artifact: windows-onedir
 

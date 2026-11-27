@@ -313,12 +313,14 @@ class WindowsUpdater:
             headers = getattr(response, "headers", None)
             declared = headers.get("Content-Length") if headers is not None else None
             declared = int(declared) if isinstance(declared, str) and declared.isdigit() else None
-            if status == 206 and offset:
+            content_range = headers.get("Content-Range", "") if headers is not None else ""
+            match = re.fullmatch(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", content_range.strip())
+            if status == 206 and offset and not (match and int(match.group(1)) != offset):
                 start = offset
-            elif status == 416:
-                # 服务端认为续传起点已经越界：丢掉半成品，让下一次重试从头来。
+            elif status == 416 or (status == 206 and offset):
+                # 416 续传起点越界，或 206 却不是从续传起点开始（代理丢了 Range）：丢掉半成品，下一次从头来。
                 temporary.unlink(missing_ok=True)
-                raise ValueError("update package resume was refused; restarting download")
+                raise ValueError("update package resume was refused or answered from the wrong byte; restarting download")
             else:
                 start = 0
             if declared is not None and start + declared > maximum:
@@ -328,8 +330,6 @@ class WindowsUpdater:
             # response. Use Content-Range for the whole file; if it is absent,
             # report an unknown total instead of inventing a percentage.
             total = declared if start == 0 and status != 206 else None
-            content_range = headers.get("Content-Range", "") if headers is not None else ""
-            match = re.fullmatch(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", content_range.strip())
             if match and int(match.group(1)) == start and match.group(3) != "*":
                 range_end, range_total = int(match.group(2)), int(match.group(3))
                 if range_end >= start and range_total > range_end and (declared is None or range_end - start + 1 == declared):
@@ -762,7 +762,9 @@ function Register-RestoreAtLogon {
   try {
     if ((Test-Path -LiteralPath $TargetDir) -or -not (Test-Path -LiteralPath $Backup)) { return }
     $restore = Join-Path $UpdateRoot ('restore-' + $Token + '.ps1')
-    $target = $TargetDir.Replace("'", "''"); $backupPath = $Backup.Replace("'", "''"); $log = $LogPath.Replace("'", "''")
+    # PowerShell also ends '...' at ‘ ’ ‚ ‛, so double those too (B33).
+    $quotes = "['\u2018-\u201B]"
+    $target = $TargetDir -replace $quotes, '$0$0'; $backupPath = $Backup -replace $quotes, '$0$0'; $log = $LogPath -replace $quotes, '$0$0'
     @(
       "if (-not (Test-Path -LiteralPath '$target') -and (Test-Path -LiteralPath '$backupPath')) {",
       "  try { Move-Item -LiteralPath '$backupPath' -Destination '$target' -ErrorAction Stop; `$message = 'previous version restored at sign-in' }",

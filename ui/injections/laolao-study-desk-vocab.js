@@ -97,14 +97,14 @@
     async function load() {
       const token = ++revision;
       try {
-        const result = await request('list', {filter, query, limit: 500, exam: examFilter});
+        const raw = await request('list', {filter, query, limit: 500, exam: examFilter}), words = Array.isArray(raw?.words) ? raw.words : [];
         if (!alive || token !== revision) return;
-        data = result; render();
+        const result = {...raw, words, counts: {total: words.length, due: 0, resting: 0, pending: 0, failed: 0, ...(raw?.counts || {})}}; data = result; render(); // 老插件或异常应答缺 counts / words 时按空生词本补齐
         if(route.wordId) { const node=[...root.querySelectorAll('[data-id]')].find(n=>n.dataset.id===route.wordId&&n.getClientRects().length);if(node){node.tabIndex=-1;node.scrollIntoView({block:'center'});node.focus();delete route.wordId;} }
         clearTimeout(poll);
         if ((result.counts.pending || result.retagging) && !document.hidden && (!ctx.pane || desk.isFocused())) poll = setTimeout(load, 2500);
         if (route.review && !route.started) { route.started = true; window.__pinkieDrill?.start({source: 'vocab', scope: result.counts.due ? {kind: 'due'} : {kind: 'more'}, size: 10, returnTo: route.from && route.from !== 'vocab' && route.from !== 'drill' ? route.from : 'vocab'}); if (!result.counts.due) toast('今天没有到期的，先背一组新的'); }
-      } catch (error) { if (alive && token === revision) { count.textContent = error.message || '读取失败'; } }
+      } catch (error) { if (!alive || token !== revision) return; const bug = error instanceof TypeError || error instanceof ReferenceError || error instanceof RangeError; if (bug) console.warn('[pinkie] 生词本渲染失败', error); count.textContent = bug ? '生词本暂时读不出来，稍后再试' : error?.message || '读取失败'; } // 网关的业务错误照样显示；页面脚本自己的异常只进控制台，不露原文
     }
 
     function render() {

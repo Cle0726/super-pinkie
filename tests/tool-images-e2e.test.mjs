@@ -8,6 +8,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {ToolTraceStore, serveToolImage} from '../services/mode-architecture/tool-trace.mjs';
 import {pinkieSplitTimelineMessage} from '../patch/apply-chat-timeline.mjs';
+import {waitFirstFrame} from './helpers/browser-first-frame.mjs';
 
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,6 +25,7 @@ let browser;
 before(async () => {
   const playwright = require('playwright');
   browser = await playwright[engine].launch(engine === 'chromium' ? {headless:true,channel:'chrome'} : {headless:true});
+  await waitFirstFrame(browser, `tool-images-e2e (${engine})`);
 }, {timeout: 120_000});
 after(async () => { await browser?.close(); });
 

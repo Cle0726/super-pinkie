@@ -20,10 +20,11 @@ import { compareCores } from '../tools/core/verify-equivalence.mjs';
 
 const read = (rel) => fs.readFileSync(path.join(DEFAULT_REPO_ROOT, rel), 'utf8');
 
-test('core-manifest.json defaults to openclaw and stays synced with legacy runtime-manifest.json', () => {
+test('core-manifest.json defaults to cle, keeps openclaw as fallback, and stays synced with legacy runtime-manifest.json', () => {
   const manifest = loadCoreManifest(DEFAULT_REPO_ROOT);
   const legacy = JSON.parse(read('desktop/windows/runtime-manifest.json'));
-  assert.equal(manifest.default, 'openclaw');
+  assert.equal(manifest.default, 'cle');
+  assert.ok(manifest.openclaw && typeof manifest.openclaw === 'object', 'openclaw entry must stay as the fallback core');
   assert.match(manifest.node, /^24\./);
   assert.equal(manifest.openclaw.version, '2026.7.1-2');
   assert.equal(legacy.node, manifest.node);
@@ -38,8 +39,9 @@ test('resolveCoreSelection defaults to manifest.default and honors PINKIE_CORE=o
   const prevEnv = process.env.PINKIE_CORE;
   delete process.env.PINKIE_CORE;
   try {
-    assert.equal(resolveCoreSelection(manifest, undefined).core, 'openclaw');
-    assert.equal(resolveCoreSelection(manifest, '').core, 'openclaw');
+    assert.equal(resolveCoreSelection(manifest, undefined).core, 'cle');
+    assert.equal(resolveCoreSelection(manifest, '').core, 'cle');
+    assert.equal(resolveCoreSelection(manifest, undefined).defaultCore, 'cle');
     assert.equal(resolveCoreSelection(manifest, 'openclaw').core, 'openclaw');
     assert.equal(resolveCoreSelection(manifest, 'cle').core, 'cle');
     assert.equal(resolveCoreSelection(manifest, 'CLE').core, 'cle');
@@ -269,7 +271,7 @@ test('core CLI helpers still execute when invoked through a symlinked directory 
       { encoding: 'utf8', env: { ...process.env, PINKIE_CORE: '' } },
     );
     assert.equal(infoRes.status, 0, infoRes.stderr);
-    assert.equal(infoRes.stdout, 'openclaw');
+    assert.equal(infoRes.stdout, 'cle');
 
     const eqRes = spawnSync(
       process.execPath,
