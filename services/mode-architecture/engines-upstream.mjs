@@ -94,6 +94,72 @@ const sameToken = (given, token) => {
 };
 const tokenOf = req => String(req.headers['x-api-key'] || '').trim() || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
 
+// 回 4xx 之前先把还没读的请求体读掉（只读不攒）。Node 不读请求体就回包时，客户端带 Connection: close、req.destroy()、
+// 或者在 for await (… of req) 里提前 return，关连接那一下内核都会对没读的字节回 RST：Windows 上连已经发出的回复都收不到
+// （WinError 10053/10054，同 services/roundtable #204；11-26 本机回环实测，Node v24）。
+// limit 以内：读完再回，连接照常可复用。
+// 声明的长度超过 limit、读到超过 limit、长度写错或 ms 内没动静：先回（带 Connection: close，回复头和正文立刻发出去），
+// 但 res.end 先压着，接着读掉丢弃，读完（或 ms 内没新数据）才真的 end、关连接，客户端能收到完整回复。
+// 读掉的总量超过硬上限 cap、或总共超过 totalMs，才不再读、直接 end（这时没读的字节可能让客户端收到 RST）。
+// #263 后续：之前超过 limit 就直接回、直接关，engines-upstream 1–32 MiB 的请求体回 401 / 404 / 413 全被 RST。
+export const DRAIN_LIMIT = 1 << 20;
+export const DRAIN_CAP = 16 << 20;
+export const DRAIN_MS = 2000;
+export const DRAIN_TOTAL_MS = 30000;
+export function drainThen(req, res, reply, {limit = DRAIN_LIMIT, cap = DRAIN_CAP, ms = DRAIN_MS, totalMs = DRAIN_TOTAL_MS} = {}) {
+  if (req.complete || req.readableEnded) return reply();
+  const raw = req.headers['content-length'];
+  const declared = raw === undefined ? 0 : Number(raw);
+  const end = res.end;
+  let seen = 0, early = false, done = false, held = null, idle = null, total = null;
+  const stop = () => {
+    if (done) return; done = true; clearTimeout(idle); clearTimeout(total);
+    req.off('data', count); req.off('end', stop);
+    if (!early) return reply();
+    res.end = end;
+    const args = held; held = null;
+    if (args) end.apply(res, args);
+  };
+  // 先回：reply 照常 writeHead + end，end 里的正文先 write 出去，end 本身留到 stop 再调。
+  const replyNow = () => {
+    if (early || done) return; early = true;
+    if (!res.headersSent) res.setHeader('Connection', 'close');
+    res.end = (...args) => {
+      if (done) return end.apply(res, args);
+      const callback = typeof args.at(-1) === 'function' ? args.pop() : null;
+      if (args.length && args[0] != null) res.write(...args.slice(0, 2));
+      held = callback ? [callback] : [];
+      return res;
+    };
+    reply();
+  };
+  const arm = () => { clearTimeout(idle); idle = setTimeout(early ? stop : () => { replyNow(); arm(); }, ms); idle.unref?.(); };
+  const count = chunk => {
+    seen += chunk.length;
+    if (!early && seen > limit) replyNow();
+    if (early && seen > cap) return stop();
+    arm();
+  };
+  if (!Number.isSafeInteger(declared) || declared < 0 || declared > limit) replyNow();
+  // error / close 监听一直留着：客户端中途断开时 req 会报错，没人接就成了未捕获异常。stop 只走一次。
+  req.on('data', count); req.on('end', stop); req.on('error', stop); req.on('close', stop);
+  arm();
+  total = setTimeout(() => { replyNow(); stop(); }, totalMs); total.unref?.();
+  req.resume();
+}
+
+// 攒请求体，最多 max 字节。超了就停下（不 destroy，destroy 就是 RST），返回 null，剩下的交给 drainThen 读掉。
+export function readCapped(req, max) {
+  return new Promise((resolve, reject) => {
+    const chunks = []; let size = 0;
+    const stop = () => { req.off('data', onData); req.off('end', onEnd); req.off('error', onError); };
+    const onData = chunk => { size += chunk.length; if (size <= max) { chunks.push(chunk); return; } stop(); req.pause(); resolve(null); };
+    const onEnd = () => { stop(); resolve(Buffer.concat(chunks)); };
+    const onError = error => { stop(); reject(error); };
+    req.on('data', onData); req.on('end', onEnd); req.on('error', onError);
+  });
+}
+
 // 本机转发口。config()：每次请求现读碧琪配置（钥匙不留在这个对象上）。fetchImpl 给测试换。
 export class PinkieRelay {
   constructor({config = () => ({}), logger = null, fetchImpl = globalThis.fetch, token = crypto.randomBytes(32).toString('base64url')} = {}) {
@@ -134,10 +200,16 @@ export class PinkieRelay {
   }
 
   // openai：Codex 那条路（/v1/responses）用 OpenAI 的错误格式，Claude Code 那条路用 Anthropic 的。
+  // 回复前先把没读的请求体读掉（drainThen），不然 Windows 上 Claude Code / Codex 连这条报错都收不到。
   fail(res, status, type, message, {openai = false} = {}) {
     if (res.headersSent) { try { res.end(); } catch {} return; }
-    res.writeHead(status, {'content-type': 'application/json'});
-    res.end(JSON.stringify(openai ? {error: {type, message, code: type}} : {type: 'error', error: {type, message}}));
+    const reply = () => {
+      if (res.headersSent || res.writableEnded) return;
+      res.writeHead(status, {'content-type': 'application/json'});
+      res.end(JSON.stringify(openai ? {error: {type, message, code: type}} : {type: 'error', error: {type, message}}));
+    };
+    // 硬上限要比 MAX_BODY（32 MiB）大：超 32 MiB 的 413 也得先读掉剩下的，客户端才收得到。
+    if (res.req) drainThen(res.req, res, reply, {cap: 2 * MAX_BODY}); else reply();
   }
 
   async handle(req, res) {
@@ -156,10 +228,12 @@ export class PinkieRelay {
     const openai = codex || chat;
     const opts = {openai};
     if (req.method !== 'POST' || !(openai || claude)) return this.fail(res, 404, 'not_found_error', '只转 /v1/messages、/v1/responses 和 /v1/chat/completions');
-    const chunks = []; let size = 0;
-    for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大', opts); chunks.push(chunk); }
+    // 不在 for await (… of req) 里提前 return：迭代器退出时会销毁 req，客户端只收到 RST。
+    if (Number(req.headers['content-length']) > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大', opts);
+    const raw = await readCapped(req, MAX_BODY);
+    if (!raw) return this.fail(res, 413, 'request_too_large', '请求太大', opts);
     let body;
-    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
+    try { body = JSON.parse(raw.toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
     const config = this.config();
     const family = codex ? 'codex' : chat ? 'chat' : 'claude';
     const route = routeModel(body?.model, pinkieModels(config, {family}), codex ? this.codexModel : chat ? this.chatModel : this.defaultModel);

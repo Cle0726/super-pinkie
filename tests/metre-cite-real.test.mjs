@@ -84,9 +84,11 @@ const footerState = (page) => page.evaluate(() => {
 
 async function hoverCite(page) {
   await page.mouse.move(2, 2);
-  await page.waitForTimeout(150);
+  // 指针移开后上一张引用卡要先收掉（pointerout 里同步删卡），再去悬停，免得 waitForSelector 直接命中旧卡。
+  await page.waitForFunction(() => !document.querySelector('.pk-mcite-card'), null, {timeout: 5_000});
   await page.locator('.chat-group.assistant .pinkie-cite').first().hover();
   await page.waitForSelector('.pk-mcite-card', {timeout: 5_000});
+  // 保留死等：接下来截图读像素，要等卡片入场动画（140ms）和角标悬停底色过渡（120ms）放完，没有可等的 DOM 状态。
   await page.waitForTimeout(300);
 }
 
@@ -132,11 +134,13 @@ test('M13/M14 real page: citation card title + contrast, hovered badge number, r
 
       // 反例 1：卡片加回 role=tooltip（旧样子），标题必须看不见
       await page.evaluate(() => document.querySelector('.pk-mcite-card').setAttribute('role', 'tooltip'));
+      // 保留死等：改属性后要等皮肤的字色 / 底色过渡放完再截图读像素，没有可等的 DOM 状态。
       await page.waitForTimeout(100);
       const oldTitle = await contrast(page, await rectOf(page, '.pk-mcite-card__title'));
       assert.ok(oldTitle.ratio < 1.5, `反例没生效：卡片带 role=tooltip 时标题仍有 ${fmt(oldTitle)}`);
       // 反例 2：角标悬停放回旧规则（实心强调色底），数字必须看不见
       await page.addStyleTag({content: 'html[data-laolao-mode="metre"] .chat-group .pinkie-cite[aria-describedby] { background: var(--metre-accent) !important; border-color: var(--metre-accent) !important; }'});
+      // 保留死等：加样式后要等角标底色过渡（120ms）放完再截图读像素，没有可等的 DOM 状态。
       await page.waitForTimeout(100);
       const oldBadge = await contrast(page, await inset());
       assert.ok(oldBadge.ratio < 1.5, `反例没生效：实心强调色底上角标数字仍有 ${fmt(oldBadge)}`);
@@ -144,17 +148,21 @@ test('M13/M14 real page: citation card title + contrast, hovered badge number, r
 
       // ---------- M14 朗读：按键行不跳位，停止键认得出 ----------
       await page.mouse.move(2, 2);
-      await page.waitForTimeout(300);
+      // 指针移开后引用卡要先收掉（pointerout 里同步删卡）。
+      await page.waitForFunction(() => !document.querySelector('.pk-mcite-card'), null, {timeout: 5_000});
       const last = page.locator('.chat-group.assistant').last();
       await last.hover();
+      // 保留死等：底部按键是悬停时靠 opacity 过渡显出来的，footerState 读的是透明度，要等过渡放完。
       await page.waitForTimeout(400);
       const hovered = await footerState(page);
       assert.ok(hovered.count >= 2, `${theme}: 悬停回答后底部按键太少 ${JSON.stringify(hovered)}`);
       const read = last.locator('.pk-mread');
       assert.equal(await read.getAttribute('aria-label'), '朗读');
       await read.click();
-      await page.waitForTimeout(200);
+      // 点了朗读键，laolao-metre-read.js 同步把它设成 aria-pressed="true"（正在念）。
+      await page.waitForFunction(() => [...document.querySelectorAll('.chat-group.assistant')].pop()?.querySelector('.pk-mread')?.getAttribute('aria-pressed') === 'true', null, {timeout: 5_000});
       await page.mouse.move(2, 2);
+      // 保留死等：鼠标移开后按键 / 时间戳的透明度过渡要放完再读，读的就是「过渡完的样子」，没有别的可等状态。
       await page.waitForTimeout(600);
       const away = await footerState(page);
       t.diagnostic(`${theme} footer hover left=${hovered.left} n=${hovered.count}; reading+away left=${away.left} n=${away.count} ts=${away.ts}`);
@@ -171,9 +179,11 @@ test('M13/M14 real page: citation card title + contrast, hovered badge number, r
       assert.ok(sq && sq.width >= 9 && sq.height >= 9, `${theme}: 停止方块太小，夜间认不出（11-25 06:46 打回）${JSON.stringify(sq)}`);
       assert.equal(stop.tip, '"停止朗读"', `${theme}: 停止朗读键没有悬停提示`);
       await read.hover();
-      await page.waitForTimeout(600);
+      // 提示是 ::after 的 opacity 过渡（延迟 250ms + 120ms）：轮询到计算值变成 1（过渡放完）为止；等不到不在这里报错，交给下面原有断言。
+      await page.waitForFunction(() => getComputedStyle([...document.querySelectorAll('.chat-group.assistant')].pop().querySelector('.pk-mread'), '::after').opacity === '1', null, {timeout: 5_000}).catch(() => {});
       assert.equal(await page.evaluate(() => getComputedStyle([...document.querySelectorAll('.chat-group.assistant')].pop().querySelector('.pk-mread'), '::after').opacity), '1', `${theme}: 悬停停止朗读键提示没出来`);
       await page.mouse.move(2, 2);
+      // 保留死等：鼠标移开后提示淡出、按键行回到「不悬停」的样子（都是过渡），下面反例要在这个样子上量。
       await page.waitForTimeout(600);
 
       // 反例 3：删掉念时保持按键行的规则，鼠标移开后必须跳位（左边三键 / 时间戳消失）
@@ -189,6 +199,7 @@ test('M13/M14 real page: citation card title + contrast, hovered badge number, r
         return n;
       });
       assert.equal(removed, 3, '没找到念时保持按键行的三条规则');
+      // 保留死等：删规则后按键 / 时间戳的透明度要过渡回去才看得出跳位，没有可等的 DOM 状态。
       await page.waitForTimeout(400);
       const bad = await footerState(page);
       assert.ok(bad.left !== hovered.left || bad.ts < 0.3, `反例没生效：删掉规则后按键行仍从 x=${bad.left} 开始、时间戳透明度 ${bad.ts}`);
