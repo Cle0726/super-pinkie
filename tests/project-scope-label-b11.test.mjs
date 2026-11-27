@@ -162,14 +162,15 @@ async function fit(p) {
   });
 }
 
-// 820：uireview 图上截断后的标签右边到模型芯片还空约 120px，0.58 × 列宽 − 8 ≈ 120 → 第 9 列约 221px。
-// 1440：第 9 列宽得多，取 600px。另加一档只比文字多 2px 的（8 是 theme.css 给的 margin-left）。
+// 列宽是真页面量的（pr-shots 45973849919，tools/pr-shots/424-scope-probe.mjs，linux / windows 一致）：home-project
+// 820 第 9 列 198px（.chat-main 736px，不进 ≤680 的 @container 块），42% 时 client 83 < scroll 95 截断；1440 第 9 列 230px。
+// 另加一档只比文字多 2px 的（8 是 theme.css 给的 margin-left）。
 test('B11 #261 #6：第 9 列放得下时标签不截断（820 / 1440 / 刚好）；反例 max-width 42% 在 820 下截断', async (t) => {
   const why = await withPage(async (p) => {
     await p.setContent(gridPage(false, fixed, 1100));
     const base = await fit(p);
     for (const night of [false, true]) {
-      for (const [name, col] of [['820', 221], ['1440', 600], ['刚好', base.scroll + 8 + 2]]) {
+      for (const [name, col] of [['820', 198], ['1440', 230], ['刚好', base.scroll + 8 + 2]]) {
         await p.setContent(gridPage(night, fixed, col));
         const got = await fit(p);
         t.diagnostic(`${night ? 'night' : 'day'} ${name} col=${got.col} scroll=${got.scroll} client=${got.client}`);
