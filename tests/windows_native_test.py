@@ -68,6 +68,27 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertEqual(safe_file_name("a\x00b\nc", "md"), "a-b-c.md")
         self.assertEqual(safe_file_name("...", "md"), "碧琪会话.md")
 
+    def test_safe_file_name_reserved_device_names_b60(self):
+        # B60: "CON.pdf" / "nul" / "COM1" used to pass through, and Windows opens the device instead of a file
+        for raw, ext, want in (("CON", "pdf", "CON-.pdf"), ("CON.pdf", "pdf", "CON-.pdf"), ("con.txt.pdf", "pdf", "con-.txt.pdf"),
+                               ("nul", "png", "nul-.png"), ("Prn.MD", "md", "Prn-.MD"), ("aux", "md", "aux-.md"),
+                               ("COM1", "pdf", "COM1-.pdf"), ("com9.png", "png", "com9-.png"), ("LPT1", "md", "LPT1-.md"),
+                               ("lpt9.txt", "pdf", "lpt9-.txt.pdf"), ("CON .pdf", "pdf", "CON-.pdf"), (" Nul ", "md", "Nul-.md")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
+        for raw, ext, want in (("CONSOLE", "pdf", "CONSOLE.pdf"), ("COM10", "pdf", "COM10.pdf"), ("COM0", "pdf", "COM0.pdf"),
+                               ("LPT", "md", "LPT.md"), ("NULL.pdf", "pdf", "NULL.pdf"), ("my-con", "pdf", "my-con.pdf"),
+                               ("x.con", "pdf", "x.con.pdf"), ("会议 CON", "md", "会议 CON.md"), ("auxiliary.png", "png", "auxiliary.png")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
+
+    def test_safe_file_name_bare_extension_b60(self):
+        # B60: ".pdf" used to lose its leading dot first and come out as "pdf.pdf"
+        for raw, ext, want in ((".pdf", "pdf", "碧琪会话.pdf"), (" .md ", "md", "碧琪会话.md"), ("..png", "png", "碧琪会话.png"),
+                               (".PDF", "pdf", "碧琪会话.PDF")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
+        for raw, ext, want in (("pdf", "pdf", "pdf.pdf"), (".x.pdf", "pdf", "x.pdf"), (".gitignore", "md", "gitignore.md"),
+                               ("report.pdf", "pdf", "report.pdf"), (".pdf", "md", "pdf.md")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
+
     def test_notify_dedupes_by_run_id(self):
         posted = []
         self.native._post = lambda command, payload=None: posted.append((command, payload))
