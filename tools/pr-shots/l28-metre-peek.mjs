@@ -36,7 +36,14 @@ const shoot = async (page, name, clip) => {
 
 // 卡片量一次：位置、是否在窗口里、是否盖住了悬停的那一行、字色 / 底色对比度、内容
 const MEASURE = (rowSel) => {
-  const parse = (s) => { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const v = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return {r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1}; };
+  // color-mix() 的计算值在 Chromium 里是 color(srgb r g b [/ a])（0–1 小数），不是 rgb()：两种都认（run 46031562560 在这里读到 null 崩了）
+  const parse = (s) => {
+    const v = (re) => { const m = re.exec(s || ''); return m ? m[1].split(/[\s,/]+/).filter(Boolean).map(Number) : null; };
+    const rgb = v(/rgba?\(([^)]+)\)/), srgb = v(/color\(srgb\s+([^)]+)\)/);
+    if (rgb) return {r: rgb[0], g: rgb[1], b: rgb[2], a: rgb.length > 3 ? rgb[3] : 1};
+    if (srgb) return {r: srgb[0] * 255, g: srgb[1] * 255, b: srgb[2] * 255, a: srgb.length > 3 ? srgb[3] : 1};
+    return null;
+  };
   const lum = (c) => [c.r, c.g, c.b].map((x) => x / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)).reduce((s, x, i) => s + x * [0.2126, 0.7152, 0.0722][i], 0);
   const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
   const card = document.querySelector('.pk-mpeek');
@@ -46,7 +53,8 @@ const MEASURE = (rowSel) => {
   const hostEl = [...document.querySelectorAll(rowSel)].find((n) => n.getClientRects().length && n.getBoundingClientRect().width > 0) || null;
   const row = hostEl?.getBoundingClientRect();
   const side = document.querySelector('aside.sidebar')?.getBoundingClientRect();
-  const part = (sel) => { const n = card.querySelector(sel); return n ? {text: n.textContent, contrast: bg ? Number(ratio(parse(getComputedStyle(n).color), bg).toFixed(2)) : null} : null; };
+  // 认不出的颜色就记 null（连同原始字串），不让量的这一步把整格拍图带崩
+  const part = (sel) => { const n = card.querySelector(sel); if (!n) return null; const raw = getComputedStyle(n).color, fg = parse(raw); return {text: n.textContent, color: raw, contrast: bg && fg ? Number(ratio(fg, bg).toFixed(2)) : null}; };
   return {
     open: true, rect: {left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height)},
     inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
