@@ -581,35 +581,6 @@ def install_personas(log, register=True):
     return ensure_mode_agents(log) if register else True
 
 
-def run_openclaw(arguments, timeout):
-    """Run the bundled openclaw CLI and return (returncode, text).
-
-    Node writes UTF-8.  subprocess text=True would decode it with the ANSI code
-    page instead (cp936 on Chinese Windows, cp1252 on English), and the agent
-    names contain Chinese and emoji, so read bytes and decode them ourselves.
-    """
-    result = subprocess.run(openclaw_command(*arguments), capture_output=True, timeout=timeout, **hidden_process_kwargs())
-    output = (result.stdout or b"").decode("utf-8", "replace")
-    errors = (result.stderr or b"").decode("utf-8", "replace")
-    return result.returncode, output, errors
-
-
-def parse_agent_ids(text):
-    """Agent ids from `openclaw agents list --json`, tolerating log lines before the JSON."""
-    decoder = json.JSONDecoder()
-    start = text.find("[")
-    while start >= 0:
-        try:
-            items, _ = decoder.raw_decode(text[start:])
-        except ValueError:
-            items = None
-        # A log prefix such as "[plugins] ..." is not the listing; keep looking.
-        if isinstance(items, list) and all(isinstance(item, dict) for item in items):
-            return {item.get("id") for item in items}
-        start = text.find("[", start + 1)
-    raise ValueError("no JSON agent list in agents list output")
-
-
 def configured_agent_ids(config_path=None):
     """Agent ids registered in openclaw.json, in order, or None when unreadable."""
     try:
@@ -627,8 +598,8 @@ def ensure_main_agent(log, config_path=None, *, stage_modes=False):
     opens the default session.  A fresh Windows profile only ever had the two
     party agents written by services/party, so 唠嗑模式 silently ran as
     pinkie-party.  The Mac install lists main first with this same workspace.
-    In a guarded install, stage all missing bundled modes in the same write,
-    before plugin setup or any CLI command can take a partial baseline.
+    With stage_modes, add all missing bundled modes in the same write, before
+    plugin setup or the release guard can take a partial baseline.
     """
     path = Path(config_path or openclaw_config_path())
     try:
@@ -692,53 +663,19 @@ def ensure_main_agent(log, config_path=None, *, stage_modes=False):
 def ensure_mode_agents(log):
     """Register any missing mode agent.  Returns True when all of them exist.
 
-    Use one config write for the guarded App. Its own `agents add` commands
-    would otherwise load the guard and count each legitimate new bundled mode
-    as a change to protected configuration during a legacy upgrade.
+    One config write for every build, no CLI. In the guarded App the CLI's own
+    `agents add` would load the guard and count each legitimate new bundled
+    mode as a change to protected configuration during a legacy upgrade. In
+    development and local builds it started 11 node processes (agents list,
+    then add and set-identity per mode, ~16s each), ~192s in front of the
+    gateway on the first start (B48). OpenClaw resolves the default agentDir
+    and reads each mode's name and avatar from the IDENTITY.md that
+    install_personas already put in its workspace.
     """
     configured = configured_agent_ids()
     if configured and configured[0] == "main" and all(agent_id in configured for agent_id in MODE_AGENTS):
         return True
-    if bundled_settings_guard_enabled():
-        return ensure_main_agent(log, stage_modes=True)
-    registered = register_mode_agents(log)
-    # After the CLI, which rewrites openclaw.json itself.
-    return ensure_main_agent(log) and registered
-
-
-def register_mode_agents(log):
-    home = Path.home()
-    try:
-        code, output, errors = run_openclaw(("agents", "list", "--json"), timeout=60)
-        if code != 0:
-            log(f"  ⚠️ 读取模式列表失败（返回码 {code}）：{errors.strip()[-400:]}")
-            return False
-        existing = parse_agent_ids(output)
-    except (OSError, subprocess.SubprocessError, ValueError) as exc:
-        log(f"  ⚠️ 读取模式列表失败：{exc}")
-        return False
-    complete = True
-    for agent_id, folder in MODE_AGENTS.items():
-        if agent_id in existing:
-            continue
-        workspace = home / ".openclaw" / folder
-        workspace.mkdir(parents=True, exist_ok=True)
-        try:
-            code, _, errors = run_openclaw(("agents", "add", agent_id, "--non-interactive", "--workspace", workspace), timeout=60)
-            if code != 0:
-                complete = False
-                log(f"  ⚠️ 补齐 {agent_id} 模式失败（返回码 {code}）：{errors.strip()[-400:]}")
-                continue
-            log(f"  已补齐 {agent_id} 模式")
-            identity = workspace / "IDENTITY.md"
-            if identity.is_file():
-                code, _, errors = run_openclaw(("agents", "set-identity", "--agent", agent_id, "--identity-file", identity), timeout=60)
-                if code != 0:
-                    log(f"  ⚠️ 设置 {agent_id} 模式名片失败（返回码 {code}）：{errors.strip()[-400:]}")
-        except (OSError, subprocess.SubprocessError) as exc:
-            complete = False
-            log(f"  ⚠️ 补齐 {agent_id} 模式失败：{exc}")
-    return complete
+    return ensure_main_agent(log, stage_modes=True)
 
 
 def install_runtime_service(service_name, log):
