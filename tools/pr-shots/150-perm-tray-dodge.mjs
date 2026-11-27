@@ -48,7 +48,8 @@ const probe = (force) => {
   const input = box?.closest('.agent-chat__input');
   if (!stat) return {found: false};
   const saved = force ? {dodge: box.dataset.dodge, pad: box.style.paddingLeft} : null;
-  if (force) { box.dataset.dodge = '1'; box.style.paddingLeft = ''; }
+  // force 是数字时再临时加这么多 px 的 padding-left，看真页面（父级 display: contents、本截是输入框 grid 的子项）里让位到底推不推得动「⋯」
+  if (force) { box.dataset.dodge = '1'; box.style.paddingLeft = typeof force === 'number' ? force + 'px' : ''; }
   try {
     const r = stat.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const top = document.elementFromPoint(cx, cy);
@@ -60,7 +61,7 @@ const probe = (force) => {
       stat: R(r), center: [cx, cy], statHit: Boolean(top && stat.contains(top)), top: name(top),
       stack: document.elementsFromPoint(cx, cy).slice(0, 6).map(name), coveredBy, floats: floats.map(({el, rect}) => ({el, rect})),
       chips: R(box.getBoundingClientRect()), controls: controls ? R(controls) : null, controlsRight: controls ? Math.round(controls.right) : null,
-      inputH: input ? Math.round(input.getBoundingClientRect().height) : null};
+      inputH: input ? Math.round(input.getBoundingClientRect().height) : null, inputRight: input ? Math.round(input.getBoundingClientRect().right) : null};
   } finally {
     if (saved) {
       if (saved.dodge === undefined) delete box.dataset.dodge; else box.dataset.dodge = saved.dodge;
@@ -103,12 +104,21 @@ try {
         await shoot(page, `${base}-refit-row`, '.chat-main .agent-chat__input', {...refit, refit: true});
         // 临时排到行首量一次（同步还原，不拍图）：让到行首后会被谁盖、按键行右沿在哪
         const {center: _fc, ...forced} = await page.evaluate(probe, true);
+        // 再临时加 40px 让位量一次：看 padding-left 在真页面上推不推得动「⋯」（同步还原，不拍图）
+        const {center: _pc, ...forcedPad} = await page.evaluate(probe, 40);
+        // 页面实际加载的 laolao-metre-perm.js 里有没有 clearCover 的 display: contents 兜底（af7ac0a2 的修复）
+        const loaded = await page.evaluate(async () => {
+          const src = [...document.scripts].map((s) => s.src).find((u) => /laolao-metre-perm\.js/.test(u)) || null;
+          if (!src) return {src: null, hasFix: null};
+          try { const t = await (await fetch(src)).text(); return {src, hasFix: /c\.width > 0 \? c\.right : input\.getBoundingClientRect\(\)\.right/.test(t)}; }
+          catch (e) { return {src, hasFix: null, error: String(e)}; }
+        });
         // 放宽：回到原位
         await page.setViewportSize({width: 820, height: HEIGHT});
         await page.evaluate(() => window.PinkieMetrePerm?.fit?.());
         await page.waitForTimeout(1800);
         const wide = await page.evaluate(probe);
-        report.push({theme, width, row: rec, opened, refit, forced, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, statHit: wide.statHit}, pageErrors});
+        report.push({theme, width, row: rec, opened, refit, forced, forcedPad, loaded, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, statHit: wide.statHit}, pageErrors});
       } catch (error) {
         report.push({theme, width, error: error.message, pageErrors});
       } finally {
@@ -130,7 +140,9 @@ for (const r of report) {
     const cov = (p) => (p?.coveredBy?.length ? p.coveredBy.join('+') : '-');
     console.log(`pr-shots: ${r.theme} ${r.width} fold=${r.row.fold} dodge=${r.row.dodge} pad=${r.row.padLeft} statHit=${r.row.statHit} top=${r.row.top} coveredBy=${cov(r.row)} opened=${r.opened}`
       + ` | refit dodge=${r.refit?.dodge} pad=${r.refit?.padLeft} statHit=${r.refit?.statHit} top=${r.refit?.top} coveredBy=${cov(r.refit)}`
-      + ` | forced stat=${JSON.stringify(r.forced?.stat)} coveredBy=${cov(r.forced)} controlsRight=${r.forced?.controlsRight}`
+      + ` | forced stat=${JSON.stringify(r.forced?.stat)} coveredBy=${cov(r.forced)} controlsRight=${r.forced?.controlsRight} inputRight=${r.forced?.inputRight}`
+      + ` | pad40 stat=${JSON.stringify(r.forcedPad?.stat)} chips=${JSON.stringify(r.forcedPad?.chips)} coveredBy=${cov(r.forcedPad)} statHit=${r.forcedPad?.statHit}`
+      + ` | loaded hasFix=${r.loaded?.hasFix} src=${r.loaded?.src ? r.loaded.src.replace(/^.*\//, '') : null}`
       + ` | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft}`);
   }
 }
