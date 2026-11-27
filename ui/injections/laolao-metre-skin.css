@@ -710,8 +710,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-cha
   box-shadow: none !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input textarea { min-height: 50px !important; }
-/* 发送键：工具栏最右，和这一排同一条中线 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input button.chat-send-btn { right: 10px !important; bottom: 9px !important; width: 30px !important; height: 30px !important; }
+/* B28：工具键、发送 / 麦克风键挂在输入框本体下沿（锚点定位），框下那排控件窄时折成两行也不骑到框线上；不支持锚点时沿用 :904 / :960 的 bottom 49px（= 一行时框下沿 38px + 11px）。这里原来那行 right / bottom / width / height 整行被 :904 同选择器覆盖，是死规则。 */
+@supports (anchor-name: --a) { html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not([data-laolao-startup-home="1"]) .agent-chat__input .agent-chat__composer-combobox { anchor-name: --pk-metre-box; } html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not([data-laolao-startup-home="1"]) .agent-chat__input :is(.pinkie-tray-btn, button.chat-send-btn) { position-anchor: --pk-metre-box; bottom: calc(anchor(bottom, 38px) + 11px) !important; } }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .laolao-context-viewer { margin-right: 46px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinkie-tray-btn, .chat-controls__inline-select-trigger, .pinkie-effort-trigger, .laolao-deep-think-btn, .laolao-context-viewer > summary) { min-height: 30px !important; }
 /* Baton / Virtuoso：一个小分段开关，字是斜体衬线 */

@@ -17,6 +17,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import zlib from 'node:zlib';
 import {playwright} from '../../../tools/study-desk/harness.mjs';
 import {FROZEN_TIME_MS, THEMES, VIEWPORT, VISUAL_SCENES} from './harness.mjs';
+import {noteRequestFailure} from './socket-diag.mjs';
 
 export {FROZEN_TIME_MS, THEMES, VIEWPORT, VISUAL_SCENES};
 export const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -1316,7 +1317,9 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
   page.on('pageerror', (err) => pageErrors.push(String(err)));
   page.on('requestfailed', (req) => {
     const where = describeRequest(origin, req.url());
-    if (where) failedRequests.push(`${req.method()} ${where}: ${req.failure()?.errorText || 'failed'}`);
+    const errorText = req.failure()?.errorText || 'failed';
+    noteRequestFailure(errorText); // B55: log the TCP table once, only on ERR_NO_BUFFER_SPACE
+    if (where) failedRequests.push(`${req.method()} ${where}: ${errorText}`);
   });
   page.on('response', (res) => {
     if (res.status() >= 400) {

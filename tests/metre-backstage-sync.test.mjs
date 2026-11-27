@@ -188,7 +188,8 @@ test('the short tier of the band still says what failed or waits, and which side
     assert.deepEqual(short, {failWait: '引擎 4 · 1 失败 · 1 等你', failOnly: '引擎 2 · 1 失败', fail2wait3: '引擎 5 · 2 失败 · 3 等你', wait: '引擎 2 · 1 等你', run: '引擎 2 · 1 在跑', done: '引擎 1',
       backRunning: '不同步 · 后台在跑', backIdle: '不同步 · 后台空闲'});
     // 真画出来：窄输入框只能走短档，引擎格失败数、等你数都在，每一格都不挤字
-    await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
+    // B28：输入框宽正好等于短档要的宽（原来写死 300px，短档其实放不下、格子伸出带子外；现在放不下会走紧档）
+    await tab.evaluate(() => { document.querySelector('.agent-chat__input').style.width = window.PinkieMetreBackstage.tierWidths().short + 'px'; window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})); });
     const drawn = await tab.evaluate(() => {
       const band = document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)');
       return {tier: band?.dataset.tier, eng: band?.querySelector('[data-seg="eng"] span')?.textContent, engLabel: band?.querySelector('[data-seg="eng"]')?.getAttribute('aria-label'),
