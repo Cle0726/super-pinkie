@@ -1182,6 +1182,8 @@ class Handler(BaseHTTPRequestHandler):
                 '/dom-watch.js': ROOT/'ui/injections/laolao-dom-watch.js',
                 '/whiteboard.js': ROOT/'ui/injections/laolao-whiteboard.js',
                 '/whiteboard.css': ROOT/'ui/injections/laolao-whiteboard.css',
+                # 白板导出 PNG 借图表的 pngOf（WebKit toBlob 回空时的退路），按页面相对路径 import。
+                '/laolao-rich-chart.js': ROOT/'ui/injections/laolao-rich-chart.js',
             }
             party_portraits = {
                 'pinkie': 'laolao-party-avatar-v1.png',

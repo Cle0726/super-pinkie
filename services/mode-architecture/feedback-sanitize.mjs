@@ -121,7 +121,18 @@ export function sanitizeFeedbackValue(value, depth = 0) {
   return undefined;
 }
 
+// id 是本机 randomUUID() 生成的记录主键，不是用户内容：只按字符白名单收窄，不能走文本脱敏。
+// 否则 UUID 末段偶尔恰好是「1[3-9] 开头的 11 位数字」，会被 PHONE_RE 改写成 <PHONE>（约 0.03%），
+// 落盘 id 就和内存里记下的 correctionId 对不上，replaceItem 静默找不到记录（tests/feedback.test.mjs:181 偶发）。
+function sanitizeRecordId(id) {
+  return String(id || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 48);
+}
+
 export function sanitizeFeedbackRecord(record = {}) {
+  return {...sanitizeFeedbackRecordFields(record), id: sanitizeRecordId(record?.id)};
+}
+
+function sanitizeFeedbackRecordFields(record = {}) {
   const type = record?.type === 'correction' ? 'correction' : 'usage';
   const mode = ALLOWED_MODES.has(record?.mode) ? record.mode : 'chat';
   const base = {
