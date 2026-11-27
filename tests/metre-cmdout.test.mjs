@@ -165,6 +165,30 @@ test('status only says what the output or isError says; otherwise nothing', () =
   assert.deepEqual(plain(api.statusOf('shared UI check OK')), {kind: '', text: ''}, 'unknown → no guess');
 });
 
+// linuxwatch 11:48Z（#444 评论 7217495613）在 vm 里实测的三条：两句话出现在命令自己打印的内容里（grep 到源码、子进程日志），
+// 旧实现取第一处、不看 isError，写成「还在后台跑」「退出码 1」，第 3 条甚至把失败写成「退出码 0」（ok）。
+test('status: only the leading background line and the trailing exit line count; isError true is never shown as ok', () => {
+  const {api} = load();
+  // 1. git grep 命中源码里那句，命令本身末尾退出码 0
+  assert.deepEqual(plain(api.statusOf('services/mode-architecture/background-jobs.mjs:12:  // e.g. Command still running (session calm-reef, pid 1)\n\n(Command exited with code 0)', false)),
+    {kind: 'ok', code: 0, text: '退出码 0'}, 'a grep hit is not a background command');
+  assert.deepEqual(plain(api.statusOf('Command still running (session calm-reef, pid 1)\nfrom a test fixture\n\n(Command exited with code 0)')),
+    {kind: 'ok', code: 0, text: '退出码 0'}, 'even at the very start, a trailing exit line means the command finished');
+  // 2. 子进程日志里有一行退出码 1，整条命令退出码 0
+  assert.deepEqual(plain(api.statusOf('[worker] Process exited with code 1\nretrying… ok\n\n(Command exited with code 0)', false)),
+    {kind: 'ok', code: 0, text: '退出码 0'}, 'a child log line is not the command exit code');
+  // 3. 子进程日志里有一行退出码 0，整条命令退出码 2，内核 isError 为真
+  assert.deepEqual(plain(api.statusOf('[child] Process exited with code 0\nboom\n\n(Command exited with code 2)', true)),
+    {kind: 'fail', code: 2, text: '退出码 2'}, 'a failed command is never shown as exit 0');
+  // 矛盾时只写「没成功」
+  assert.deepEqual(plain(api.statusOf('done\n\n(Command exited with code 0)', true)), {kind: 'fail', text: '没成功'});
+  assert.deepEqual(plain(api.statusOf('Command still running (session s1, pid 4242). Use process for follow-up.', true)), {kind: 'fail', text: '没成功'});
+  // 末尾空白不影响；只在中间出现、末尾没有的不算
+  assert.deepEqual(plain(api.statusOf('x\n(Command exited with code 3)\n\n  \n')), {kind: 'fail', code: 3, text: '退出码 3'});
+  assert.deepEqual(plain(api.statusOf('Process exited with code 1\nstill printing')), {kind: '', text: ''});
+  assert.deepEqual(plain(api.statusOf('log: Command still running (session s1, pid 9)\nmore')), {kind: '', text: ''});
+});
+
 test('copied output drops terminal control codes with the same rule as the R2 session terminal', () => {
   const raw = '\x1b[32mPASS\x1b[0m tests/a.test.js\r\n\x1b]0;title\x07done\r\n\n';
   const own = load().api.model({name: 'exec', args: {command: 'npm test'}, output: raw});

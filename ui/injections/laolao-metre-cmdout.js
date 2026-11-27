@@ -5,8 +5,9 @@
  * 对照已合的 R2 会话终端（laolao-workbench-term.js），这里在那一步的输出上方补一行命令头：
  *   $ npm test                         退出码 1        复制命令  复制输出
  *   - 命令原文：这一轮的历史里这次调用的参数（command / cmd），拿不到就读原生「参数」那块的 JSON；
- *   - 结果：输出里的「Command still running (session …)」→ 还在后台跑；「… exited with code N」→ 退出码 N；
- *     没有退出码时看内核的 isError：true → 没成功，false → 跑完了，不知道就不写（不猜）；
+ *   - 结果：输出开头就是「Command still running (session …, pid …)」→ 还在后台跑；输出末尾那一句「… exited with code N」→ 退出码 N
+ *     （中间行里的不算：那是命令自己打印的）；内核 isError 为真时绝不写成功，矛盾就只写「没成功」；
+ *     没有退出码时看 isError：true → 没成功，false → 跑完了，不知道就不写（不猜）；
  *   - 复制输出：去掉终端控制码，规则和 R2 终端上报前的清理是同一个（window.Pinkie.workbench.term.plainText）。
  * 只在 data-laolao-mode="metre" 下生效；离开 Metre 时补上的命令头全部拿掉，其他模式一个字不动。
  * 不改原生工具卡和共用的 laolao-tool-rows.css；模型跑的命令不进 R2 终端（R2 设计定了模型不往终端里输入）。
@@ -45,13 +46,25 @@
     if (Array.isArray(command)) return command.map(String).join(' ').trim();
     return typeof command === 'string' ? command.trim() : '';
   }
-  // 只认原文里明说的结果；说不清就返回空，不猜成功或失败。
+  // 只认原文里明说的结果；说不清就返回空，不猜成功或失败。输出里大半是命令自己打印的东西
+  // （grep 到源码里的这两句、子进程日志），所以两句都要锚在位置上：
+  //   后台：OpenClaw 把命令放到后台时，整段输出就是以「Command still running (session X, pid N)」开头；
+  //   退出码：只认整段末尾那一句——exec 的「(Command exited with code N)」、process 的「Process exited with code N.」。
+  // 内核的 isError 为真时绝不写成功：末尾退出码 0、或者说在后台跑，都和它矛盾，这时只写「没成功」。
+  const RUNNING_AT_START = /^Command still running \(session [\w.-]+, pid [\w/]+\)/;
+  const EXIT_AT_END = /(?:^|\n)[ \t]*\(?(?:Command|Process) exited with code (-?\d+)\)?\.?$/i;
   function statusOf(output, isError) {
-    const text = String(output || '');
-    if (/Command still running \(session [\w.-]+/.test(text)) return {kind: 'running', text: TEXT.running};
-    const exit = /(?:Command|Process) exited with code (-?\d+)/i.exec(text);
-    if (exit) { const code = Number(exit[1]); return {kind: code === 0 ? 'ok' : 'fail', code, text: TEXT.code(code)}; }
-    if (isError === true) return {kind: 'fail', text: TEXT.failed};
+    const text = plainText(output).trim();
+    const failed = {kind: 'fail', text: TEXT.failed};
+    // 末尾有退出码就是跑完了，比开头那句更说了算（真放到后台时整段只有那一句，末尾不会有退出码）。
+    const exit = EXIT_AT_END.exec(text);
+    if (exit) {
+      const code = Number(exit[1]);
+      if (code === 0) return isError === true ? failed : {kind: 'ok', code, text: TEXT.code(code)};
+      return {kind: 'fail', code, text: TEXT.code(code)};
+    }
+    if (RUNNING_AT_START.test(text)) return isError === true ? failed : {kind: 'running', text: TEXT.running};
+    if (isError === true) return failed;
     if (isError === false) return {kind: 'ok', text: TEXT.done};
     return {kind: '', text: ''};
   }
