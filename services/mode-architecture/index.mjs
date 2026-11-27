@@ -444,7 +444,7 @@ function createLongTermMemoryTool(memory, context = {}) {
     },
     async execute(_toolCallId, params = {}) {
       try {
-        if (!mode) throw new Error('当前会话不属于 CLE Kk 主模式');
+        if (!mode) throw new Error('当前会话不属于 C.le. 主模式');
         if (params.action === 'remember') return memoryToolResult(memory.remember(toolContext, {...params, source: 'agent-tool'}));
         if (params.action === 'forget') return memoryToolResult(memory.forget(toolContext, params));
         if (params.action === 'search') return memoryToolResult(memory.retrieve(toolContext, params.query || '', {limit: 12}));
@@ -470,17 +470,17 @@ function cuaEndpoint(environment = process.env) {
   const raw = String(environment.OPENCLAW_CUA_DRIVER_ENDPOINT || '').trim();
   // Windows 版没有桌面执行器（Mac 用 App 自带的 CuaDriver）；别让碧琪以为稍后会连上而反复重试。
   if (!raw && process.platform === 'win32') throw new Error('这台 Windows 电脑上没有 computer 桌面执行器，不要重试它。操控软件改用 computer_flow：按名字找窗口和控件、一次连做多步，不用现写脚本。');
-  if (!raw) throw new Error('CLE Kk 桌面执行器尚未连接，App 会自动重连；请稍后重试当前操作');
+  if (!raw) throw new Error('C.le. 桌面执行器尚未连接，App 会自动重连；请稍后重试当前操作');
   let endpoint;
   try {
     endpoint = JSON.parse(raw);
   } catch {
-    throw new Error('CLE Kk 桌面执行器端点格式无效');
+    throw new Error('C.le. 桌面执行器端点格式无效');
   }
   const binaryPath = String(endpoint?.binaryPath || '');
   const socketPath = String(endpoint?.socketPath || '');
   if (!path.isAbsolute(binaryPath) || !path.isAbsolute(socketPath)) {
-    throw new Error('CLE Kk 桌面执行器端点不完整');
+    throw new Error('C.le. 桌面执行器端点不完整');
   }
   return {binaryPath, socketPath};
 }
@@ -497,7 +497,7 @@ export function createCuaComputerTool(
   return {
     name: 'computer',
     label: '电脑操控',
-    description: '通过 CLE Kk App 自带的本机桌面执行器查看并操控电脑。没有模式级文件、应用或命令限制。action 直接填写 CuaDriver 动作名；不确定参数时先用 list_tools，查看单个动作结构时用 describe_tool，并把动作名放在 arguments.name。常用动作有 get_desktop_state、get_window_state、list_apps、list_windows、click、double_click、right_click、scroll、drag、type_text、press_key、hotkey、launch_app、kill_app、set_window_frame、browser_prepare、get_browser_state、browser_click、browser_type、browser_navigate。',
+    description: '通过 C.le. App 自带的本机桌面执行器查看并操控电脑。没有模式级文件、应用或命令限制。action 直接填写 CuaDriver 动作名；不确定参数时先用 list_tools，查看单个动作结构时用 describe_tool，并把动作名放在 arguments.name。常用动作有 get_desktop_state、get_window_state、list_apps、list_windows、click、double_click、right_click、scroll、drag、type_text、press_key、hotkey、launch_app、kill_app、set_window_frame、browser_prepare、get_browser_state、browser_click、browser_type、browser_navigate。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -548,7 +548,7 @@ export function createCuaComputerTool(
 
 export default {
   id: 'pinkie-mode-architecture',
-  name: `CLE Kk · ${process.platform === 'win32' ? '超級碧琪' : 'C.le.'} 执行控制层`,
+  name: `${process.platform === 'win32' ? '超級碧琪' : 'C.le.'} 执行控制层`,
   register(api) {
     // 版本标记：看日志就知道网关 / agent runtime 各自加载的是哪一版插件（热重启后是否真的换上了新代码）。
     globalThis.__pinkieModeArchitectureLoads = (globalThis.__pinkieModeArchitectureLoads || 0) + 1;
