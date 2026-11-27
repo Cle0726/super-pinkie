@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.PINKIE_LINUX_RUNS_ON || '"ubuntu-latest"') }}  # same switch as portable-checks
     env:
       # Same historical baseline as portable-checks; generate it on Linux
       # rather than using the checked-in examples captured on another OS.
