@@ -67,14 +67,16 @@ addEventListener('keydown',e=>{if(e.key==='Escape')pywebview.api.close();});
 
 def parse_accelerator(raw):
     """'Ctrl+Alt+Space' → (modifiers, virtual key) or None."""
-    parts = [part.strip().lower() for part in str(raw or "").split("+") if part.strip()]
+    if not isinstance(raw, str) or len(raw) > 64:  # B43: the page sends a short string; anything else is not a hotkey
+        return None
+    parts = [part.strip().lower() for part in raw.split("+") if part.strip()]
     if len(parts) < 2:
         return None
     modifiers = 0
     for part in parts[:-1]:
         flag = {"alt": MOD_ALT, "option": MOD_ALT, "ctrl": MOD_CONTROL, "control": MOD_CONTROL,
                 "shift": MOD_SHIFT, "win": MOD_WIN, "cmd": MOD_WIN, "meta": MOD_WIN}.get(part)
-        if flag is None:
+        if flag is None or modifiers & flag:  # B43: each modifier at most once
             return None
         modifiers |= flag
     key = parts[-1]
@@ -89,14 +91,22 @@ def parse_accelerator(raw):
     return modifiers | MOD_NOREPEAT, vk
 
 
+def clamp_size(raw, default, low, high):
+    """B43: a page-supplied pixel size → int in [low, high]; anything that is not a finite number → default."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or raw != raw or raw in (float("inf"), float("-inf")):
+        return default
+    return max(low, min(int(raw), high))
+
+
 def safe_file_name(raw, ext):
     name = str(raw or "").strip()
     for bad in '<>:"/\\|?*':
         name = name.replace(bad, "-")
-    name = name.strip(". ") or "碧琪会话"
-    if not name.lower().endswith("." + ext):
-        name += "." + ext
-    return name[:180]
+    name = "".join("-" if ord(ch) < 32 else ch for ch in name).strip(". ")  # B43: control chars are not allowed in Windows names
+    has_ext = name.lower().endswith("." + ext)
+    stem, suffix = (name[:-len(ext) - 1], name[-len(ext) - 1:]) if has_ext else (name, "." + ext)
+    # B43: cut the stem, not the whole name, so a long title keeps its extension
+    return (stem[:180 - len(suffix)].rstrip(". ") or "碧琪会话") + suffix
 
 
 def write_markdown_export(target, markdown, assets, placeholder="__assets__"):
@@ -357,8 +367,8 @@ class WindowsNative:
             source = work / "export.html"
             source.write_text(html, encoding="utf-8")
             out = work / ("out." + ext)
-            height = max(400, min(int(message.get("height") or 1200), 16000))
-            command = edge_export_command(edge, source, out, pdf, int(message.get("width") or 900), height)
+            height = clamp_size(message.get("height"), 1200, 400, 16000)
+            command = edge_export_command(edge, source, out, pdf, clamp_size(message.get("width"), 900, 320, 2400), height)
             subprocess.run(command, timeout=90, capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             if not out.is_file() or out.stat().st_size == 0:
                 return {"ok": False, "error": ("PDF" if pdf else "长图") + "没生成出来"}
