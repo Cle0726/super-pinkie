@@ -2,9 +2,10 @@
 // runtime patches over to Windows by hand after the two installers drifted apart.
 // patches-wired.test.mjs counts a patch as shipped as soon as the macOS installer
 // runs it, so the Windows install / repair path (install.ps1 -> apply-theme.ps1)
-// can silently miss one: on main@f5b4191d it skipped 6 (preflight / overflow
-// compaction events, retry-user-preservation, steer-images, work-first-media-gate,
-// fake-ip-benchmark-v6). Release builds hide this because build-win.ps1 overlays
+// can silently miss one: on main@f5b4191d apply-theme.ps1 lacked 9 of them, and 6
+// of those (preflight / overflow compaction events, retry-user-preservation,
+// steer-images, work-first-media-gate, fake-ip-benchmark-v6) were not run by
+// install.ps1 either. Release builds hide this because build-win.ps1 overlays
 // the installed Mac runtime. Keep the Windows list equal to the macOS one, in order.
 import test from 'node:test';
 import assert from 'node:assert/strict';
