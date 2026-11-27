@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 2, "reason": "界面计划 T3 #3 会话内查找（L19，linux/L19）：Metre 查找条 laolao-metre-find.css / .js 只能在头片段登记加载（?v=@hash），各一行，放在 laolao-metre-suggest.js 后面；功能本身全在这两个新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 2, "reason": "界面计划 T3 #3（L19）：laolao-metre-find.css / .js 登记在已有的 metre 区域 files 里各一行，没有新区域、新根选择器或跨区域 CSS 放行。"}
+]
