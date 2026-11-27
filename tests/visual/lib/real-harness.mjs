@@ -530,9 +530,12 @@ const FAKE_GATEWAY_EXT_SCRIPT = `(() => {
         }
         if ((frame.method === 'chat.metadata' || frame.method === 'models.list') && Array.isArray(window.__realHarnessModels)) {
           const models = window.__realHarnessModels;
-          Promise.resolve().then(() => {
-            this._raw?.({type: 'res', id: frame.id, ok: true, payload: {models}});
-          });
+          const reply = () => this._raw?.({type: 'res', id: frame.id, ok: true, payload: {models}});
+          // Only the readiness regression test sets this (via opts.initScript): the catalog
+          // reply is parked until the test releases it, i.e. it arrives late the way it can on
+          // a slow runner. Unset, the reply stays a microtask as before.
+          if (frame.method === 'chat.metadata' && window.__realHarnessHoldCatalog) (window.__realHarnessHeldCatalog ||= []).push(reply);
+          else Promise.resolve().then(reply);
           return;
         }
         if (frame.method === 'pinkie.usage.get') {
@@ -1133,6 +1136,50 @@ export async function assertRealPageLoaded(page) {
   return proof;
 }
 
+// The model picker fills its list from an async catalog (laolao-model-picker.js
+// ensureFallbackData: chat.metadata + sessions.list), then re-sorts and re-renders.
+// A menu taller than 40px only means the shell is open, so a fixed wait after it can
+// shoot a half-filled or still-reordering list (model-picker-day 0.5–0.85% red on
+// #302 / #313). Ready = the catalog has landed (data-pinkie-fallback-ready="1", set
+// for both a list and an error) and the menu's text, option order, selection and
+// height stay the same for two frames in a row. Counts frames, not ms: the page's
+// Date is frozen. Returns what it settled on so tests can check it.
+export async function waitModelPickerReady(page, {timeout = 10_000} = {}) {
+  await page.waitForFunction(() => {
+    const details = document.querySelector('details.chat-controls__model[open], details.chat-controls__model-picker[open]');
+    const menu = details?.querySelector('.chat-controls__inline-select-menu--combined');
+    return Boolean(menu && menu.getBoundingClientRect().height > 40 && details.dataset.pinkieFallbackReady === '1');
+  }, {timeout});
+  return page.evaluate(async () => {
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    const read = () => {
+      const details = document.querySelector('details.chat-controls__model[open], details.chat-controls__model-picker[open]');
+      const menu = details?.querySelector('.chat-controls__inline-select-menu--combined');
+      if (!menu) return null;
+      const all = [...menu.querySelectorAll('.chat-controls__combined-model-option, [data-chat-model-option]')];
+      const options = all
+        .filter((el) => el.getClientRects().length)
+        .map((el) => `${el.textContent.trim()}|${el.getAttribute('aria-selected') || ''}`);
+      // The default 常用模型 tab can legitimately be empty (no favourites or recent models yet):
+      // rows are then in the DOM but hidden, and the picker shows its empty-state line instead.
+      // rows = every model row the catalog produced (hidden or not); empty = the visible empty line.
+      const emptyEl = menu.querySelector('.pinkie-model-empty');
+      const empty = emptyEl && emptyEl.getClientRects().length ? emptyEl.textContent.trim() : '';
+      return {options, rows: all.length, empty, height: Math.round(menu.getBoundingClientRect().height), text: menu.textContent.replace(/\s+/g, ' ').trim()};
+    };
+    let last = JSON.stringify(read());
+    let same = 0;
+    for (let i = 0; i < 600 && same < 2; i++) {
+      await frame();
+      const now = JSON.stringify(read());
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
+    if (same < 2) throw new Error(`model picker list never held still for two frames: ${last.slice(0, 200)}`);
+    return JSON.parse(last);
+  });
+}
+
 export async function openRealScenePage(browser, origin, sceneId, theme = 'day', opts = {}) {
   const meta = sceneMeta(sceneId);
   const isNight = theme === 'night';
@@ -1359,12 +1406,7 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     const triggerSel = 'details.chat-controls__model > summary, details.chat-controls__model-picker > summary';
     await page.waitForSelector(triggerSel, {timeout: 10_000});
     await page.click(triggerSel);
-    await page.waitForFunction(() => {
-      const details = document.querySelector('details.chat-controls__model[open], details.chat-controls__model-picker[open]');
-      const menu = details?.querySelector('.chat-controls__inline-select-menu--combined');
-      return Boolean(menu && menu.getBoundingClientRect().height > 40);
-    }, {timeout: 10_000});
-    await page.waitForTimeout(200);
+    await waitModelPickerReady(page);
   } else if (sceneId === 'settings') {
     const settingsLink = 'a.sidebar-footer-icon[aria-label="设置"]';
     await page.waitForSelector(settingsLink, {timeout: 10_000});
