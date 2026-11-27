@@ -42,7 +42,9 @@ const MEASURE = (rowSel) => {
   const card = document.querySelector('.pk-mpeek');
   if (!card) return {open: false};
   const r = card.getBoundingClientRect(), cs = getComputedStyle(card), bg = parse(cs.backgroundColor);
-  const row = document.querySelector(rowSel)?.getBoundingClientRect();
+  // 同一个 key 可能有一个隐藏的同名节点排在前面：只量看得见的那一行
+  const hostEl = [...document.querySelectorAll(rowSel)].find((n) => n.getClientRects().length && n.getBoundingClientRect().width > 0) || null;
+  const row = hostEl?.getBoundingClientRect();
   const side = document.querySelector('aside.sidebar')?.getBoundingClientRect();
   const part = (sel) => { const n = card.querySelector(sel); return n ? {text: n.textContent, contrast: bg ? Number(ratio(parse(getComputedStyle(n).color), bg).toFixed(2)) : null} : null; };
   return {
@@ -52,7 +54,7 @@ const MEASURE = (rowSel) => {
     rightOfSidebar: Boolean(side && r.left >= side.right),
     pointerEvents: cs.pointerEvents,
     title: part('.pk-mpeek__title'), text: part('.pk-mpeek__text'), meta: part('.pk-mpeek__meta'),
-    describedBy: document.querySelector(rowSel + ' > .sidebar-recent-session__link')?.getAttribute('aria-describedby') || null,
+    describedBy: hostEl?.querySelector(':scope > .sidebar-recent-session__link')?.getAttribute('aria-describedby') || null,
   };
 };
 
@@ -87,8 +89,9 @@ try {
         const rowSel = `${ROW}[data-session-key="${key}"]`;
         const base = `l28-${theme}-${width}`;
 
-        // 1. 悬停
-        await page.hover(rowSel + ' .sidebar-recent-session__name');
+        // 1. 悬停。同一个 key 在 aside.sidebar 里能匹配到两个节点，第一个是隐藏的（run 46027036797：
+        // page.hover 取第一个，报 element is not visible）；上面挑行只看可见行，这里按 key 重新找节点时也只取可见的那个。
+        await page.locator(rowSel + ' .sidebar-recent-session__name:visible').first().hover();
         await page.waitForSelector('.pk-mpeek', {state: 'visible', timeout: 5_000});
         await page.waitForTimeout(250);   // 入场动画 120ms 走完（场景已开减少动效，这里只是保险）
         entry.hover = await page.evaluate(MEASURE, rowSel);
@@ -103,7 +106,7 @@ try {
 
         // 3. 键盘
         await page.keyboard.press('Shift');   // 最近一次交互是键盘：随后的程序聚焦按 :focus-visible 算（同键盘 Tab 过来）
-        await page.focus(rowSel + ' > .sidebar-recent-session__link');
+        await page.locator(rowSel + ' > .sidebar-recent-session__link:visible').first().focus();   // 同上：只取可见的那个
         entry.focusVisible = await page.evaluate(() => document.activeElement?.matches?.(':focus-visible') ?? null);
         const opened = await page.waitForSelector('.pk-mpeek', {state: 'visible', timeout: 3_000}).then(() => true, () => false);
         entry.keyboard = opened ? await page.evaluate(MEASURE, rowSel) : {open: false};
