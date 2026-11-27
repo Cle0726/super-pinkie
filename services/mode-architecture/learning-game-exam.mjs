@@ -124,12 +124,34 @@ export class GameExam {
     game.modules.exam = this;
     this.audioTokens = new Map();
     this.real = new RealPapers(this, {materials: game.store?.materials || null, requestModel: game.requestModel, now: () => this.now(), dataRoot: game.store?.materials?.root || null});
-    // 插着 U 盘（App 开着）就备真题：每分钟看一眼，盘挂上 / 有没备好的卷就跑一轮。测试里不开（没有模型）。
-    if (game.requestModel && game.autoReal !== false) {
-      this.realTimer = setInterval(() => this.realTick(), 60000);
-      this.realTimer.unref?.();
-      setTimeout(() => this.realTick(), 15000).unref?.();
-    }
+    this.timers = new Set();
+    this.stopped = false;
+    this.startTimers();
+  }
+  // 插着 U 盘（App 开着）就备真题：每分钟看一眼，盘挂上 / 有没备好的卷就跑一轮。测试里不开（没有模型）。
+  // 只开一组：重复调用不叠加；stop() 之后可以再 start（服务重启）。
+  startTimers() {
+    this.stopped = false;
+    if (!this.game.requestModel || this.game.autoReal === false || this.realTimer) return;
+    this.realTimer = setInterval(() => this.realTick(), 60000);
+    this.realTimer.unref?.();
+    this.later(() => this.realTick(), 15000);
+  }
+  // 一次性定时器都记在 this.timers 里，stop() 能一把清掉；停了以后不再排新的。
+  later(fn, ms) {
+    if (this.stopped) return null;
+    const t = setTimeout(() => { this.timers.delete(t); if (!this.stopped) fn(); }, ms);
+    t.unref?.();
+    this.timers.add(t);
+    return t;
+  }
+  // 插件重载 / 网关停 / 服务停时调（registerLearningGame 挂好了）：否则旧实例的 60s 轮询和 15s 首轮会一直留在进程里，每加载一次多一组。
+  stop() {
+    this.stopped = true;
+    clearInterval(this.realTimer);
+    this.realTimer = null;
+    for (const t of this.timers) clearTimeout(t);
+    this.timers.clear();
   }
   realTick() {
     try {
@@ -238,7 +260,7 @@ export class GameExam {
       full.verify = await this.verifyPaper(full).catch(() => null);
       this.writeFull(full);
       this.game.mutate(state => { this.ensure(state).papers[paperId] = {paperId, exam, title: `B 级仿真卷 · ${beijingDate(this.now()).slice(5)}`, createdAt: this.now(), status: 'ready'}; });
-    })().catch(() => {}).finally(() => { this.jobs.delete(paperId); setTimeout(() => { try { this.keepSpare(exam); } catch { /* ignore */ } }, 5000).unref?.(); });
+    })().catch(() => {}).finally(() => { this.jobs.delete(paperId); this.later(() => { try { this.keepSpare(exam); } catch { /* ignore */ } }, 5000); });
     this.jobs.set(paperId, job);
     return paperId;
   }
