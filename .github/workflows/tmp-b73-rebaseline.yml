@@ -70,8 +70,7 @@ jobs:
         with:
           name: tmp-b73-rebaseline-linux
           path: |
-            tests/visual/real-baseline/linux/long-conversation-day.png
-            tests/visual/real-baseline/linux/long-conversation-night.png
+            tests/visual/real-baseline/linux
             tests/visual/pre-diff
             tests/visual/diff-real
           if-no-files-found: warn
@@ -137,8 +136,7 @@ jobs:
         with:
           name: tmp-b73-rebaseline-win32
           path: |
-            tests/visual/real-baseline/win32/long-conversation-night.png
-            tests/visual/real-baseline/win32/home-project-day.png
+            tests/visual/real-baseline/win32
             tests/visual/pre-diff
             tests/visual/diff-real
           if-no-files-found: warn
