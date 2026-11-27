@@ -59,6 +59,7 @@ const engine = process.env.PINKIE_SHOTS_ENGINE || 'chromium';
 const channel = process.env.PINKIE_UI_CHANNEL;
 const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' && channel ? {channel} : {})});
 const lines = [];
+const hashes = new Map();
 const ORIGIN = 'http://127.0.0.1:30134';
 try {
   for (const width of [1440, 820]) for (const night of [false, true]) for (const one of STATES) {
@@ -76,11 +77,18 @@ try {
       await tab.locator('.pk-eng-menu .pk-eng-menu__item').first().waitFor({timeout: 15_000});
       const section = await tab.locator('.pk-eng-menu .pk-eng-menu__levels').count();
       if (Boolean(section) !== one.section) throw new Error(`${one.state} ${tag}: 「放手程度」一节 ${section ? '有' : '没有'}，应该${one.section ? '有' : '没有'}`);
+      // 「放手程度」在菜单最底下；取清单失败时「外部引擎没打开」的提示块把菜单撑高，菜单要滚动，
+      // 停在顶部就看不到这一节（uireview 7221589715）。拍之前把菜单的滚动区滚到底，并核实确实到底了。
+      await tab.evaluate(() => { const box = document.querySelector('.pk-eng-menu .pk-eng-menu__body'); if (box) box.scrollTop = box.scrollHeight; });
       await tab.mouse.move(0, 0);
       await tab.waitForTimeout(300);
+      const left = await tab.evaluate(() => { const box = document.querySelector('.pk-eng-menu .pk-eng-menu__body'); return box ? box.scrollHeight - box.clientHeight - box.scrollTop : -1; });
+      if (left < 0 || left > 1) throw new Error(`${one.state} ${tag}: 菜单没滚到底（还差 ${left}px）`);
       const name = `134-${one.state}-${tag}`, file = name + '.png';
       const buf = await tab.screenshot({path: path.join(out, file)});
-      lines.push({name, file, os: process.platform, browser: engine, width, height, bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex')});
+      const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+      hashes.set(`${one.state} ${tag}`, sha256);
+      lines.push({name, file, os: process.platform, browser: engine, width, height, bytes: buf.length, sha256});
     } finally {
       await ctx.close();
     }
@@ -91,3 +99,11 @@ try {
 fs.appendFileSync(path.join(out, 'shots.jsonl'), lines.map((l) => JSON.stringify(l) + '\n').join(''));
 console.log(`pr-shots #134: ${lines.length} 张 → ${out}`);
 if (lines.length !== 12) { console.error('expected 12 shots'); process.exit(1); }
+// 改前 / 改后两组图一样，就证明不了改动（uireview 7221589715）：每个尺寸 × 日夜都必须不同。
+const same = [];
+for (const width of [1440, 820]) for (const night of [false, true]) {
+  const tag = `${width}-${night ? 'night' : 'day'}`;
+  const a = hashes.get(`fail-before ${tag}`), b = hashes.get(`fail ${tag}`);
+  if (!a || !b || a === b) same.push(tag);
+}
+if (same.length) { console.error(`fail-before 和 fail 的截图哈希相同：${same.join(', ')}`); process.exit(1); }
