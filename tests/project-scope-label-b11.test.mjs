@@ -6,7 +6,10 @@
 //   ① 日间五个碧琪模式：字 ≥ 11px，对白底 ≥ 4.5:1；
 //   ② 反例：换回 main 原来的规则块，同一套量法必须是 9px 且不到 4.5:1；
 //   ③ 夜间五个模式：颜色和 main 逐项相同（夜间由 laolao-night.css 的无类 div 规则管）；
-//   ④ Metre 日夜仍然不显示；非项目模式未绑定时仍然不显示（laolao-composer-tray.css:22）。
+//   ④ Metre 日夜仍然不显示；非项目模式未绑定时仍然不显示（laolao-composer-tray.css:22）；
+//   ⑤ 820 截断（uireview 08:11Z）：标签在输入框网格第 9 列（弹性列），id 规则的 max-width: 42% 压过 theme.css 的 100%，
+//      820 下只能用这一格的 42%，「未绑定项目文件夹」被截成「未绑定项目…」，右边还空着。改成 100%；
+//      这里按 820 / 1440 的第 9 列宽量 scrollWidth ≤ clientWidth，反例（只把 100% 换回 42%）820 下必须截断。
 import {test, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -19,11 +22,13 @@ const sheets = Object.fromEntries(FILES.map((f) => [f, read(`../ui/injections/${
 const head = read('../ui/injections/laolao-head.fragment.html');
 
 // 改动只在 #laolao-project-scope 这一块：padding 去掉 !important（没有别的规则设它的 padding），换成同一行写颜色，行数和 !important 数都不变。
-const FIXED = '#laolao-project-scope {\n  order: 20;\n  max-width: 42%;\n  margin-left: auto;\n  padding: 0 4px; /* B11 #261 #6';
+const FIXED = '#laolao-project-scope {\n  order: 20;\n  max-width: 100%;\n  margin-left: auto;\n  padding: 0 4px; /* B11 #261 #6';
 const MAIN = '#laolao-project-scope {\n  order: 20;\n  max-width: 42%;\n  margin-left: auto;\n  padding: 0 4px !important;\n  font-size: 9px !important;\n}';
 const fixed = sheets['laolao-ui-subtraction.css'];
 const blockAt = fixed.indexOf(FIXED), blockEnd = blockAt < 0 ? -1 : fixed.indexOf('\n}', blockAt) + 2;
 const reverted = blockAt < 0 ? fixed : fixed.slice(0, blockAt) + MAIN + fixed.slice(blockEnd);
+// ⑤ 的反例：只把 id 规则的 max-width 换回 42%（18cf659b 的写法）。
+const capped = blockAt < 0 ? fixed : fixed.slice(0, blockAt) + fixed.slice(blockAt, blockEnd).replace('max-width: 100%;', 'max-width: 42%;') + fixed.slice(blockEnd);
 
 const MODES = ['chat', 'project', 'thinking', 'learning', 'unrestricted'];
 
@@ -34,6 +39,8 @@ test('B11 #261 #6：样式表顺序和本测试一致，反例确实换回了 ma
   assert.ok(blockAt >= 0, '没找到改过的 #laolao-project-scope 块');
   assert.match(fixed.slice(blockAt, blockEnd), /font-size: 11px !important; color: var\(--muted-strong\) !important;\n\}$/);
   assert.notEqual(reverted, fixed);
+  assert.ok(fixed.slice(blockAt, blockEnd).includes('max-width: 100%;'), 'id 规则的 max-width 应是 100%');
+  assert.notEqual(capped, fixed, '反例没把 max-width 换回 42%');
   assert.ok(reverted.includes('padding: 0 4px !important;\n  font-size: 9px !important;\n}'));
   const count = (s) => [s.split('\n').length, (s.match(/!important/g) || []).length];
   assert.deepEqual(count(fixed), count(reverted), '行数或 !important 数和 main 不一样');
@@ -136,6 +143,44 @@ test('B11 #261 #6：Metre 日夜、非项目模式未绑定时仍然不显示', 
     for (const mode of MODES.filter((m) => m !== 'project')) {
       await p.setContent(page(mode, false, fixed, false));
       assert.equal((await measure(p)).display, 'none', `${mode} 未绑定时露出了「未绑定项目文件夹」`);
+    }
+  });
+  if (why) t.skip(why);
+});
+
+// ⑤ 820 截断。第 9 列宽 = 输入框宽 − 第 10 列（模型芯片的替身，固定 300px）；前 8 列和 11、12 列这里没东西，宽 0。
+const gridPage = (night, subtraction, col) => `<!doctype html><html data-theme="light" data-laolao-mode="project"${night ? ' data-pinkie-night=""' : ''}><head>
+${FILES.map((f) => `<style>${f === 'laolao-ui-subtraction.css' ? subtraction : sheets[f]}</style>`).join('\n')}
+<style>body{margin:0;background:#fff}</style></head><body>
+<div class="agent-chat__input" style="width:${col + 300}px"><div id="laolao-project-scope" role="status" data-error="false" data-bound="false">未绑定项目文件夹</div><div class="chat-composer-model-control" style="width:300px;height:28px"></div></div>
+</body></html>`;
+async function fit(p) {
+  return p.evaluate(() => {
+    const n = document.getElementById('laolao-project-scope');
+    const cols = getComputedStyle(n.parentElement).gridTemplateColumns.split(' ').map(parseFloat);
+    return {scroll: n.scrollWidth, client: n.clientWidth, col: cols[8], text: n.textContent};
+  });
+}
+
+// 820：uireview 图上截断后的标签右边到模型芯片还空约 120px，0.58 × 列宽 − 8 ≈ 120 → 第 9 列约 221px。
+// 1440：第 9 列宽得多，取 600px。另加一档只比文字多 2px 的（8 是 theme.css 给的 margin-left）。
+test('B11 #261 #6：第 9 列放得下时标签不截断（820 / 1440 / 刚好）；反例 max-width 42% 在 820 下截断', async (t) => {
+  const why = await withPage(async (p) => {
+    await p.setContent(gridPage(false, fixed, 1100));
+    const base = await fit(p);
+    for (const night of [false, true]) {
+      for (const [name, col] of [['820', 221], ['1440', 600], ['刚好', base.scroll + 8 + 2]]) {
+        await p.setContent(gridPage(night, fixed, col));
+        const got = await fit(p);
+        t.diagnostic(`${night ? 'night' : 'day'} ${name} col=${got.col} scroll=${got.scroll} client=${got.client}`);
+        assert.ok(Math.abs(got.col - col) <= 1, `${name} 第 9 列是 ${got.col}px，应为 ${col}px（网格没按预期排）`);
+        assert.ok(got.scroll <= got.client, `${night ? '夜间' : '日间'} ${name}：「${got.text}」被截断（${got.scroll} > ${got.client}）`);
+        if (name !== '820') continue;
+        await p.setContent(gridPage(night, capped, col));
+        const old = await fit(p);
+        t.diagnostic(`${night ? 'night' : 'day'} 820 反例 scroll=${old.scroll} client=${old.client}`);
+        assert.ok(old.scroll > old.client, `反例没生效：max-width 42% 在 820 下也没截断（${old.scroll} ≤ ${old.client}）`);
+      }
     }
   });
   if (why) t.skip(why);
