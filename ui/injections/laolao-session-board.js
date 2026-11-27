@@ -174,14 +174,20 @@
     }
     // 放在快捷键那一组前面、不放进去：会话列表每次重画都会清空那一组。
     if (pill.nextElementSibling !== controls) controls.before(pill);
-    pill.dataset.skin = skinOf();
-    pill.hidden = !(n > 0) && !isOpen();
+    // 只写有变化的值：侧栏重画靠 domWatch 观察整页，同值写回也算一次变化，会再触发这里 → 每帧重画（#229 windows-checks 慢一倍）。
     const ask = (view?.rows || []).some((r) => r.state === 'ask');
-    pill.dataset.ask = ask ? '1' : '0';
-    pill.textContent = `在跑 ${n || 0}`;
-    pill.setAttribute('aria-expanded', String(isOpen()));
     // 提示和数字同一来源；侧栏悬停后改读 data-pinkie-tooltip（laolao-sidebar.js showSidebarTooltip），两处一起写。
-    pill.title = pill.dataset.pinkieTooltip = summary(closed ? {running: badge, rows: []} : view, skinOf());
+    const tip = summary(closed ? {running: badge, rows: []} : view, skinOf());
+    const text = `在跑 ${n || 0}`;
+    const hidden = !(n > 0) && !isOpen();
+    const expanded = String(isOpen());
+    if (pill.dataset.skin !== skinOf()) pill.dataset.skin = skinOf();
+    if (pill.hidden !== hidden) pill.hidden = hidden;
+    if (pill.dataset.ask !== (ask ? '1' : '0')) pill.dataset.ask = ask ? '1' : '0';
+    if (pill.textContent !== text) pill.textContent = text;
+    if (pill.getAttribute('aria-expanded') !== expanded) pill.setAttribute('aria-expanded', expanded);
+    if (pill.title !== tip) pill.title = tip;
+    if (pill.dataset.pinkieTooltip !== tip) pill.dataset.pinkieTooltip = tip;
   }
   function buildPanel() {
     panel = document.createElement('section');
