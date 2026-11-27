@@ -628,14 +628,18 @@ function contractTimeBoundary() {
     // installed just before begin() keeps its equal-tick timestamp.
     const sleeper = new Int32Array(new SharedArrayBuffer(4));
     const deadline = performance.now() + CONTRACT_TICK_LIMIT_MS;
-    for (let index = 0; ; index += 1) {
+    // B67: a probe is stamped when its write starts, but the write can return much
+    // later (Defender scanning on close, a stalled CI runner). Never give up on a
+    // probe stamped before the deadline: after it passes, write one last probe.
+    for (let index = 0, expired = false; ; index += 1) {
       const probe = path.join(directory, `probe-${index}`);
       fs.writeFileSync(probe, '', {flag: 'wx', mode: 0o600});
       if (fs.statSync(probe, {bigint: true}).ctimeNs > markerNs) {
         return {startedAt: Date.now(), contractCutoffNs: markerNs.toString()};
       }
-      if (performance.now() >= deadline) break;
-      Atomics.wait(sleeper, 0, 0, 1);
+      if (expired) break;
+      expired = performance.now() >= deadline;
+      if (!expired) Atomics.wait(sleeper, 0, 0, 1);
     }
     // The clock never ticked past the marker (a filesystem with second-level
     // timestamps): fail closed so the marker's own tick already counts as this
