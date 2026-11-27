@@ -187,14 +187,26 @@ function hostFileMutationReceipt(toolName = '', result = null) {
   return /Successfully (?:wrote [1-9]\d* bytes|replaced [1-9]\d* block)|Success\. Updated the following files/i.test(text);
 }
 
-function patchPaths(params = {}) {
-  const text = resultText(params, 200_000);
-  const paths = [];
-  for (const match of text.matchAll(/\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*([^\n]+)|(?:^|[\s"'])((?:\/|[A-Za-z]:[\\/])[^\s"']+)/g)) {
-    const value = String(match[1] || match[2] || '').trim();
-    if (value) paths.push(value);
+function stringLeaves(value, out = [], depth = 0) {
+  if (typeof value === 'string') out.push(value);
+  else if (value && typeof value === 'object' && depth < 4) {
+    for (const item of Object.values(value)) stringLeaves(item, out, depth + 1);
   }
-  return [...new Set(paths)];
+  return out;
+}
+
+// 补丁正文必须按原文逐行读：先 JSON.stringify 的话换行变成字面 `\n`，`File:` 后面会一路吃到字符串结尾
+// （2026-11-26 M6 隔离实跑：apply_patch 删的 c.txt 解析成 `c.txt\n*** End Patch"}`，检查点和门禁都看不见）。
+const PATCH_HEADER = /^\*\*\*\s+(?:(?:Update|Add|Delete)\s+File|Move\s+to):\s*(.+?)\s*$/gm;
+const PATCH_ABSOLUTE = /(?:^|[\s"'])((?:\/|[A-Za-z]:[\\/])[^\s"']+)/g;
+function patchPaths(params = {}) {
+  const primary = [params?.input, params?.patch].filter(value => typeof value === 'string' && value);
+  const texts = (primary.length ? primary : stringLeaves(params)).map(text => text.slice(0, 200_000));
+  const headers = texts.flatMap(text => [...text.matchAll(PATCH_HEADER)].map(match => match[1]));
+  // 有文件头时只认文件头：正文里 `+const p = '/usr/bin'` 这类绝对路径不是补丁目标。
+  const paths = headers.length ? headers
+    : texts.flatMap(text => [...text.matchAll(PATCH_ABSOLUTE)].map(match => match[1]));
+  return [...new Set(paths.filter(Boolean))];
 }
 
 // 工具参数里的相对路径（write/edit 的 path: "cle-lab/x.py"）是相对 agent 工作区的。以前这里只收绝对路径，
@@ -392,23 +404,31 @@ function parseIsoMs(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function probeImageFile(file) {
-  const checked = spawnSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', file], {
+// 探测工具没装、超时、退出码非 0 要分开说，并带上 stderr：只说「无法解码」会让人去怀疑文件，而真正的原因是工具。
+function probeFailure(checked, tool, message) {
+  if (checked.error) return new Error(checked.error.code === 'ENOENT' ? `${message}（本机没有 ${tool}）`
+    : checked.error.code === 'ETIMEDOUT' ? `${message}（${tool} 超时）` : `${message}（${tool} 没能运行：${checked.error.message}）`);
+  const detail = String(checked.stderr || '').trim().slice(-300);
+  return new Error(`${message}（${tool} 退出码 ${checked.status ?? checked.signal}${detail ? `：${detail}` : ''}）`);
+}
+
+function probeImageFile(file, {run = spawnSync} = {}) {
+  const checked = run('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', file], {
     encoding: 'utf8', timeout: 15_000, maxBuffer: 256 * 1024,
   });
-  if (checked.status !== 0) throw new Error(`图片无法解码：${file}`);
+  if (checked.error || checked.status !== 0) throw probeFailure(checked, 'sips', `图片无法解码：${file}`);
   const width = Number(/pixelWidth:\s*(\d+)/i.exec(checked.stdout || '')?.[1]);
   const height = Number(/pixelHeight:\s*(\d+)/i.exec(checked.stdout || '')?.[1]);
   if (!width || !height || fs.statSync(file).size < 1024) throw new Error(`图片不是有效证据：${file}`);
   return {width, height};
 }
 
-function probeVideoFile(file) {
-  const checked = spawnSync('ffprobe', [
+function probeVideoFile(file, {run = spawnSync} = {}) {
+  const checked = run('ffprobe', [
     '-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,pix_fmt,sample_rate',
     '-of', 'json', file,
   ], {encoding: 'utf8', timeout: 20_000, maxBuffer: 1024 * 1024});
-  if (checked.status !== 0) throw new Error(`视频无法解析：${file}`);
+  if (checked.error || checked.status !== 0) throw probeFailure(checked, 'ffprobe', `视频无法解析：${file}`);
   let data;
   try { data = JSON.parse(checked.stdout || '{}'); } catch { throw new Error(`视频探测结果无效：${file}`); }
   const video = (data.streams || []).find(stream => stream.codec_type === 'video');
@@ -628,14 +648,18 @@ function contractTimeBoundary() {
     // installed just before begin() keeps its equal-tick timestamp.
     const sleeper = new Int32Array(new SharedArrayBuffer(4));
     const deadline = performance.now() + CONTRACT_TICK_LIMIT_MS;
-    for (let index = 0; ; index += 1) {
+    // B67: a probe is stamped when its write starts, but the write can return much
+    // later (Defender scanning on close, a stalled CI runner). Never give up on a
+    // probe stamped before the deadline: after it passes, write one last probe.
+    for (let index = 0, expired = false; ; index += 1) {
       const probe = path.join(directory, `probe-${index}`);
       fs.writeFileSync(probe, '', {flag: 'wx', mode: 0o600});
       if (fs.statSync(probe, {bigint: true}).ctimeNs > markerNs) {
         return {startedAt: Date.now(), contractCutoffNs: markerNs.toString()};
       }
-      if (performance.now() >= deadline) break;
-      Atomics.wait(sleeper, 0, 0, 1);
+      if (expired) break;
+      expired = performance.now() >= deadline;
+      if (!expired) Atomics.wait(sleeper, 0, 0, 1);
     }
     // The clock never ticked past the marker (a filesystem with second-level
     // timestamps): fail closed so the marker's own tick already counts as this

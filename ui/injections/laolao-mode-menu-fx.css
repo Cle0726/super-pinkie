@@ -22,40 +22,11 @@
   transform-origin: 50% 82%;
 }
 
-.laolao-mode-button__portrait[data-mode="chat"],
-.laolao-mode-fx-burst[data-mode="chat"] {
-  --laolao-mode-fx-a: #e94f91;
-  --laolao-mode-fx-b: #f6bd69;
-  --laolao-mode-fx-c: #e94f91;
-}
-
-.laolao-mode-button__portrait[data-mode="project"],
-.laolao-mode-fx-burst[data-mode="project"] {
-  --laolao-mode-fx-a: #e75d9c;
-  --laolao-mode-fx-b: #59aaa5;
-  --laolao-mode-fx-c: #59aaa5;
-}
-
-.laolao-mode-button__portrait[data-mode="thinking"],
-.laolao-mode-fx-burst[data-mode="thinking"] {
-  --laolao-mode-fx-a: #9d74c8;
-  --laolao-mode-fx-b: #8bc6df;
-  --laolao-mode-fx-c: #9d74c8;
-}
-
-.laolao-mode-button__portrait[data-mode="learning"],
-.laolao-mode-fx-burst[data-mode="learning"] {
-  --laolao-mode-fx-a: #b277c7;
-  --laolao-mode-fx-b: #f4c66d;
-  --laolao-mode-fx-c: #f4c66d;
-}
-
-.laolao-mode-button__portrait[data-mode="unrestricted"],
-.laolao-mode-fx-burst[data-mode="unrestricted"] {
-  --laolao-mode-fx-a: #ef568f;
-  --laolao-mode-fx-b: #f3ca63;
-  --laolao-mode-fx-c: #63bfe9;
-}
+.laolao-mode-button__portrait[data-mode="chat"], .laolao-mode-fx-burst[data-mode="chat"] { --laolao-mode-fx-a: #e94f91; --laolao-mode-fx-b: #f6bd69; --laolao-mode-fx-c: #e94f91; }
+.laolao-mode-button__portrait[data-mode="project"], .laolao-mode-fx-burst[data-mode="project"] { --laolao-mode-fx-a: #e75d9c; --laolao-mode-fx-b: #59aaa5; --laolao-mode-fx-c: #59aaa5; }
+.laolao-mode-button__portrait[data-mode="thinking"], .laolao-mode-fx-burst[data-mode="thinking"] { --laolao-mode-fx-a: #9d74c8; --laolao-mode-fx-b: #8bc6df; --laolao-mode-fx-c: #9d74c8; }
+.laolao-mode-button__portrait[data-mode="learning"], .laolao-mode-fx-burst[data-mode="learning"] { --laolao-mode-fx-a: #b277c7; --laolao-mode-fx-b: #f4c66d; --laolao-mode-fx-c: #f4c66d; }
+.laolao-mode-button__portrait[data-mode="unrestricted"], .laolao-mode-fx-burst[data-mode="unrestricted"] { --laolao-mode-fx-a: #ef568f; --laolao-mode-fx-b: #f3ca63; --laolao-mode-fx-c: #63bfe9; }
 
 /* 覆盖主题原本直接写在 img 上的 hover transform；头像的动效只由本层完成。 */
 .laolao-mode-button__portrait > img:not(.laolao-mode-button__portrait-leaving) {
@@ -590,3 +561,9 @@ html[data-theme-mode="dark"] .laolao-mode-button__portrait[data-mode="project"] 
 
   .laolao-mode-button__portrait.is-current .laolao-mode-button__halo { opacity: .74; filter: none; }
 }
+
+/* 日间模式名要在侧栏玻璃底上也到 4.5:1：主题原色（唠嗑 #b34f7c、项目 #3e8584、思考 #965b98）走查实测只有 4.29–4.36。
+   夜间字色由 laolao-night.css 直接给、Metre 由 metre-skin 给，这里不碰。 */
+html:not([data-pinkie-night]):not([data-theme-mode="dark"]):not([data-laolao-mode="metre"]) :is(.laolao-mode-switcher, .laolao-mode-menu__option)[data-mode="chat"] { --mode-button-ink: #a0456e; }
+html:not([data-pinkie-night]):not([data-theme-mode="dark"]):not([data-laolao-mode="metre"]) :is(.laolao-mode-switcher, .laolao-mode-menu__option)[data-mode="project"] { --mode-button-ink: #336e6e; }
+html:not([data-pinkie-night]):not([data-theme-mode="dark"]):not([data-laolao-mode="metre"]) :is(.laolao-mode-switcher, .laolao-mode-menu__option)[data-mode="thinking"] { --mode-button-ink: #875289; }
