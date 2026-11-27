@@ -41,7 +41,7 @@
   };
   const tokens = (n) => (!Number.isFinite(n) ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n)));
   const money = (n) => (!Number.isFinite(n) ? '—' : '$' + n.toFixed(n < 0.1 ? 3 : 2));
-
+  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-perm]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志
   // ---------- P2 放手程度 ----------
   const LEVELS = [
     {id: 'auto', name: '自动', hint: '命令直接跑（默认，和 Metre 一直以来一样）', security: 'full', ask: 'off'},
@@ -192,7 +192,7 @@
       if (row) row.querySelector('.pk-perm-q__acts').replaceChildren(el('span', 'pk-perm-q__done', decision === 'deny' ? '已拒绝' : '已允许'));
     } catch (error) {
       row?.querySelectorAll('button').forEach((b) => { b.disabled = false; });
-      if (row) row.dataset.error = '没批成：' + clip(error?.message || error, 40);
+      if (row) row.dataset.error = '没批成：' + clip(zh(error, '网关暂时没有回应，请稍后再试'), 40);
     }
   }
   // 原生 openclaw-modal-dialog 用 top/left 50% + translate(-50%, -50%) 居中：卡高是奇数时上下边落在半像素上，
@@ -282,7 +282,7 @@
       item.onclick = async () => {
         item.disabled = true;
         try { await setLevel(lv.id); closeMenu(); window.__laolaoSidebar?.toast?.('放手程度：' + lv.name); }
-        catch (error) { item.disabled = false; window.__laolaoSidebar?.toast?.('没改成：' + clip(error?.message || error, 50)); }
+        catch (error) { item.disabled = false; window.__laolaoSidebar?.toast?.('没改成：' + clip(zh(error, '网关暂时没有回应，请稍后再试'), 50)); }
       };
       menu.append(item);
     }
@@ -353,7 +353,7 @@
   async function togglePlan() {
     const key = state.key; if (!METRE.test(key)) return;
     try { state.planOn = (await rpc('pinkie.metre.planMode.set', {sessionKey: key, on: !state.planOn}, 8000))?.on === true; }
-    catch (error) { window.__laolaoSidebar?.toast?.('没改成：' + clip(error?.message || error, 50)); }
+    catch (error) { window.__laolaoSidebar?.toast?.('没改成：' + clip(zh(error, '网关暂时没有回应，请稍后再试'), 50)); }
     paint(true);
   }
   async function approvePlan() {
@@ -361,7 +361,7 @@
     try {
       await rpc('pinkie.metre.planMode.set', {sessionKey: key, on: false}, 8000); state.planOn = false; paint(true);
       await rpc('chat.send', {sessionKey: key, message: '照这个方案做。', idempotencyKey: uid()}, 30000);
-    } catch (error) { window.__laolaoSidebar?.toast?.('没发出去：' + clip(error?.message || error, 50)); }
+    } catch (error) { window.__laolaoSidebar?.toast?.('没发出去：' + clip(zh(error, '网关暂时没有回应，请稍后再试'), 50)); }
   }
   function chip(cls, label, tip, onclick) {
     const b = el('button', 'pk-eng-chip pk-perm-chip ' + cls); b.type = 'button';
