@@ -20,9 +20,16 @@ const SHORT_INIT = new Function(`window.__fakeSeedHistory = ${JSON.stringify(SHO
 export async function openScene(browser, origin, scene, theme, width) {
   const opts = scene === 'short-answers' ? {initScript: SHORT_INIT} : {};
   const opened = await openRealScenePage(browser, origin, 'long-conversation', theme, opts);
-  await opened.page.setViewportSize({width, height: 900});
-  await opened.page.waitForSelector(FOOTER_KEY, {state: 'attached', timeout: 10_000});
+  await useWidth(opened.page, width);
   return opened;
+}
+
+// 换宽度：openRealScenePage 本来就是按 1280 开页、再改到要量的宽度，所以同一页从 1440 改到 820 与新开一页再改到 820 走的是同一条路。
+// 先把鼠标挪开，免得上一宽度留下的 :hover 带进来（悬停由 hoverKeyGroup 每次重新做并在页内确认）。
+export async function useWidth(page, width) {
+  await page.mouse.move(0, 0);
+  await page.setViewportSize({width, height: 900});
+  await page.waitForSelector(FOOTER_KEY, {state: 'attached', timeout: 10_000});
 }
 
 // asMain=true：把键临时塞回它对应的气泡（main 的挂法，样式走 .chat-bubble > .pinkie-fork-action 的绝对定位），同步量完再放回，作反例。
@@ -115,7 +122,20 @@ export async function hoverKeyGroup(page, index) {
     if (!p.ok) { last = {attempt, ...p}; continue; }
     await page.mouse.move(p.x - 1, p.y);
     await page.mouse.move(p.x, p.y);
-    await page.waitForTimeout(250);
+    // 原来固定等 250ms 再看 :hover；改成等条件：本组 :hover、键 opacity=1、.chat-thread scrollTop 不动，连续 3 帧都成立。
+    // 键的 opacity 没有过渡，:hover 一成立就是 1；等不到（被贴底拉走）就落到下面照旧判、重来。
+    await page.waitForFunction(({index: i, sel}) => {
+      const key = document.querySelectorAll(sel)[i];
+      const thread = document.querySelector('.chat-thread');
+      const st = thread ? Math.round(thread.scrollTop) : 0;
+      const ok = Boolean(key?.closest('.chat-group')?.matches(':hover')) && getComputedStyle(key).opacity === '1';
+      const w = window.__pkFkHover || (window.__pkFkHover = {st, n: 0});
+      w.n = ok && w.st === st ? w.n + 1 : 0;
+      w.st = st;
+      if (w.n >= 3) { delete window.__pkFkHover; return true; }
+      return false;
+    }, {index, sel: FOOTER_KEY}, {polling: 'raf', timeout: 2_000}).catch(() => {});
+    await page.evaluate(() => { delete window.__pkFkHover; });
     const s = await page.evaluate(hoverState, {index, sel: FOOTER_KEY, x: p.x, y: p.y});
     if (s.groupHover) return {...p, attempt};
     last = {attempt, x: Math.round(p.x), y: Math.round(p.y), hitAtPick: p.hit, stAtPick: p.st, ...s};
