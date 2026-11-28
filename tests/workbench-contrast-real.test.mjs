@@ -160,9 +160,22 @@ function statusOverlap(oldCss) {
     sidesCross: lb.right > rb.left + 0.5, candidates: cands.length, overlap};
 }
 
+// 等右半边现场连续两次快照一致（代替固定睡眠）：先等两帧让 resize 触发的 ResizeObserver 回调排上去，再轮询到稳定。
+async function waitStable(page, snapshot, {timeout = 2000, interval = 30} = {}) {
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const start = Date.now();
+  let prev = JSON.stringify(await snapshot());
+  while (Date.now() - start < timeout) {
+    await new Promise((r) => setTimeout(r, interval));
+    const cur = JSON.stringify(await snapshot());
+    if (cur === prev) return;
+    prev = cur;
+  }
+}
+
 async function openBench(page, width, bound) {
   await page.setViewportSize({width, height: 900});
-  await page.waitForTimeout(400);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.waitForFunction(() => typeof window.__pinkieWorkbench?.show === 'function', null, {timeout: 15_000});
   await page.evaluate(() => window.__pinkieWorkbench.show());
   if (bound) {
@@ -181,7 +194,7 @@ async function openBench(page, width, bound) {
   } else {
     await page.waitForFunction(() => document.querySelector('.pk-wb-open-project'), null, {timeout: 15_000});
   }
-  await page.waitForTimeout(300);
+  await waitStable(page, () => page.evaluate(measure), {timeout: 300});
 }
 
 const fmt = (items) => items.map((i) => `${i.name} ${i.ink} on ${i.bg} ${i.ratio.toFixed(2)}`).join('; ');
@@ -221,7 +234,7 @@ test('B11·workbench 项目 / 无限模式：工作台五项日夜 × 1440/820 �
             assert.deepEqual(ov.overlap, [], `${tag}: 状态栏有互压 ${JSON.stringify(ov)}`);
           }
           const old = await page.addStyleTag({content: OLD_RECIPE});
-          await page.waitForTimeout(300);
+          await waitStable(page, () => page.evaluate(measure), {timeout: 300});
           bad[width].push(...(await page.evaluate(measure)).items.map((i) => ({...i, name: `${pre}/${i.name}`})));
           if (bound && width === 820) {
             const ov = await page.evaluate(statusOverlap, OLD_STATUS);
