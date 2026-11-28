@@ -310,27 +310,32 @@ def recover_stale_system_proxy(manager: Any = None, store: Any = None, port_list
 
     shutdown() 只管本进程起过的 FanVPN；taskkill /F、崩溃、删了 App 文件夹都跳过它，
     注册表里留着指向死端口的 PAC / 代理，全机浏览器断网，快照却没人读。
-    只有三条都成立才动注册表：有快照、当前设置还是我们写的（环回 + 我们那份
-    ProxyOverride）、对应端口没人听。返回 restored / not-ours / in-use / none / error，
+    只有三条都成立才动注册表：有快照、当前受管值和接管时记下的（apply_system_proxy
+    写的 applied 记录）逐项相同、记录里的端口没人听。光看「环回 + 我们那份
+    ProxyOverride」不够：别的本机代理换了端口或 PAC 路径也可能原样留着这份绕过列表，
+    那是人家正在用的，不能拿旧快照盖掉。没有接管记录（旧版本留下的快照）就确认不了，
+    注册表和快照都不动。返回 restored / not-ours / unconfirmed / in-use / none / error，
     从不抛（启动路径）。
     """
     try:
         _ensure_path()
-        from win_sysproxy import DEFAULT_OVERRIDE, SnapshotStore, SystemProxyManager
+        from win_sysproxy import SnapshotStore, SystemProxyManager
 
         store = store or SnapshotStore()
         snap = store.load()
         if snap is None:
             return "none"
+        applied = store.load_applied()
+        if applied is None:
+            LOG.info("FanVPN snapshot without an applied record: left alone")
+            return "unconfirmed"
         manager = manager or SystemProxyManager()
-        current = manager.current()
-        if not manager.is_managed() or str(current.get("ProxyOverride") or "") != DEFAULT_OVERRIDE:
-            store.clear()  # 用户 / 公司后来改过：不拿旧快照盖掉，只删过期快照
-            LOG.info("stale FanVPN snapshot dropped: current proxy is not ours")
+        if manager.current() != applied["values"]:
+            store.clear()  # 用户 / 公司 / 别的代理后来改过：不拿旧快照盖掉，只删过期快照
+            LOG.info("stale FanVPN snapshot dropped: current proxy is not the one we wrote")
             return "not-ours"
         listening = port_listening or _port_listening
-        port = DEFAULT_PANEL_PORT if current.get("AutoConfigURL") else DEFAULT_PROXY_PORT
-        if listening(port):
+        if listening(applied["port"]):
             return "in-use"  # 另一个碧琪还在用，留给它退出时还原
         manager.restore(snap)
         store.clear()

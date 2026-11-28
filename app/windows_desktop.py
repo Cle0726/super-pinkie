@@ -495,7 +495,7 @@ def recover_stale_fanvpn_proxy(recover=None, log=None):
                 from app import fanvpn_bridge
             recover = fanvpn_bridge.recover_stale_system_proxy
         result = recover()
-        if result in ("restored", "not-ours", "error"):
+        if result in ("restored", "not-ours", "unconfirmed", "error"):
             log("launcher", f"stale FanVPN system proxy check: {result}")
         return result
     except Exception as error:  # noqa: BLE001 - startup must go on
