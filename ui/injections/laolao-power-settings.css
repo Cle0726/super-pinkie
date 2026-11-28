@@ -319,8 +319,7 @@
 }
 
 /* ── 黑夜 ───────────────────────────────────────────────── */
-html[data-pinkie-night] #pinkie-power,
-html[data-theme-mode="dark"] #pinkie-power {
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power {
   --pp-ink: #f6dce9;
   --pp-muted: #c9a3b8;
   --pp-line: rgba(255, 150, 200, .2);
@@ -329,29 +328,28 @@ html[data-theme-mode="dark"] #pinkie-power {
   --pp-soft: rgba(255, 143, 191, .12);
   background: rgba(10, 4, 8, .55);
 }
-html[data-pinkie-night] #pinkie-power .pinkie-power__hero,
-html[data-theme-mode="dark"] #pinkie-power .pinkie-power__hero {
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__hero {
   background:
     radial-gradient(120px 90px at 88% 18%, rgba(255, 211, 110, .22), transparent 70%),
     radial-gradient(160px 120px at 70% 110%, rgba(143, 211, 255, .2), transparent 70%),
     linear-gradient(135deg, #5b2442 0%, #6d2a50 50%, #4a2140 100%);
 }
-html[data-pinkie-night] #pinkie-power :is(.pinkie-power__title, .pinkie-power__level-title, .pinkie-power__card-title),
-html[data-theme-mode="dark"] #pinkie-power :is(.pinkie-power__title, .pinkie-power__level-title, .pinkie-power__card-title) { color: #ff9ac4; }
-html[data-pinkie-night] #pinkie-power .pinkie-power__lede,
-html[data-theme-mode="dark"] #pinkie-power .pinkie-power__lede { color: #eac2d6; }
-html[data-pinkie-night] #pinkie-power :is(.pinkie-power__eyebrow, .pinkie-power__close),
-html[data-theme-mode="dark"] #pinkie-power :is(.pinkie-power__eyebrow, .pinkie-power__close) { background: rgba(255, 255, 255, .12); color: #ff9ac4; }
-html[data-pinkie-night] #pinkie-power .pinkie-power__level.is-on,
-html[data-theme-mode="dark"] #pinkie-power .pinkie-power__level.is-on { background: linear-gradient(160deg, rgba(255, 143, 191, .16), rgba(255, 143, 191, .06)); }
-html[data-pinkie-night] #pinkie-power .pinkie-power__opt:hover,
-html[data-theme-mode="dark"] #pinkie-power .pinkie-power__opt:hover { background: rgba(255, 255, 255, .08); }
-html[data-pinkie-night] #pinkie-power .pinkie-power__reset,
-html[data-theme-mode="dark"] #pinkie-power .pinkie-power__reset { background: transparent; color: #ff9ac4; }
-html[data-pinkie-night] #pinkie-power .pinkie-power__foot,
-html[data-theme-mode="dark"] #pinkie-power .pinkie-power__foot { background: rgba(0, 0, 0, .12); }
-html[data-pinkie-night] #pinkie-power .pinkie-power__cost,
-html[data-theme-mode="dark"] #pinkie-power .pinkie-power__cost { color: #a9849a; }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power :is(.pinkie-power__title, .pinkie-power__level-title, .pinkie-power__card-title) { color: #ff9ac4; }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__lede { color: #eac2d6; }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power :is(.pinkie-power__eyebrow, .pinkie-power__close) { background: rgba(255, 255, 255, .12); color: #ff9ac4; }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__level.is-on { background: linear-gradient(160deg, rgba(255, 143, 191, .16), rgba(255, 143, 191, .06)); }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__opt:hover { background: rgba(255, 255, 255, .08); }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__reset { background: transparent; color: #ff9ac4; }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__foot { background: rgba(0, 0, 0, .12); }
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__cost { color: #a9849a; }
+
+/* B80 夜：关闭钮、重置钮、右栏入口的悬停 / 选中态对比度（WCAG，UI ≥3、文字 ≥4.5） */
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__close { background: rgba(42, 16, 32, .5); color: #ffd0e4; }   /* 暗底：hero 最亮支（#6d2a50 叠 .22 黄光晕）上约 8.0 */
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__close:hover { background: rgba(42, 16, 32, .35); color: #ffd0e4; }   /* 略浅约 6.7，不再翻成白底 */
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__reset { border-color: #b07a96; }   /* 对 foot 4.97 */
+:is(html[data-pinkie-night], html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #pinkie-power .pinkie-power__reset:hover { border-color: var(--pp-accent); }   /* #e0508f 对 foot 4.68 */
+html[data-pinkie-night] #pinkie-power-entry:hover { box-shadow: inset 0 0 0 1px #ff9ac4bf; }   /* 对夜间 rail 5.28、hover 底 4.52 */
+html[data-pinkie-night][data-pinkie-power-open] #pinkie-power-entry { box-shadow: inset 0 0 0 1.5px #ff87b8; }   /* 7.35 / 6.00 */
 
 /* 右侧工作栏里的入口：和「派对空间」「灵感圆桌」同一个样子 */
 #pinkie-power-entry {
