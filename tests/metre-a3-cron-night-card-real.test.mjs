@@ -14,6 +14,7 @@ import {
   launchRealBrowser,
   openRealScenePage,
   startRealUiServer,
+  waitForStableEval,
 } from './visual/lib/real-harness.mjs';
 
 // 页面里：假网关赋 window.WebSocket 时接住它，把 cron.* 请求答成三条示例任务（和 tests/metre-a3-cron-btn-edge-real.test.mjs 同一套）。
@@ -107,7 +108,7 @@ async function openCron(browser, origin, theme) {
     });
     await page.waitForFunction(() => document.querySelectorAll('openclaw-cron-page .cron-job-actions .btn').length >= 3, null, {timeout: 20_000});
     await page.mouse.move(1, 899);
-    await page.waitForTimeout(600);   // Metre 皮肤的颜色过渡
+    await waitForStableEval(page, readLayers);   // Metre 皮肤的颜色过渡，等 readLayers() 连续两帧不再变
     return opened;
   } catch (e) {
     await context.close();
@@ -154,7 +155,7 @@ test('real page: night /cron task rows sit one layer below the outer card (--met
           return n;
         }, {frag: RULE, night: RULE_NIGHT.source});
         assert.equal(removed, 1, `反例：页面上没找到那条夜间新规则（找到 ${removed} 条）`);
-        await page.waitForTimeout(600);   // 保留：删规则后等皮肤颜色过渡走完，过渡没有可观察的结束标记
+        await waitForStableEval(page, readLayers);   // 删规则后等皮肤颜色过渡走完，等连续两帧不再变
         const bad = (await page.evaluate(readLayers)).rows;
         console.log(`ℹ night without the new rule: ${fmt(bad)}`);
         assert.equal(bad.length, 3, `反例：删掉后量不到任务行 — ${fmt(bad)}`);

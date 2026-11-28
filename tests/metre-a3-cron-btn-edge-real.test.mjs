@@ -12,6 +12,7 @@ import {
   launchRealBrowser,
   openRealScenePage,
   startRealUiServer,
+  waitForStableEval,
 } from './visual/lib/real-harness.mjs';
 
 // 页面里：假网关赋 window.WebSocket 时接住它，把 cron.* 请求答成三条示例任务（和 tools/pr-shots/98-a3-cron.mjs 同一套形状）。
@@ -116,7 +117,7 @@ async function openCron(browser, origin, theme) {
   await page.waitForFunction(() => location.pathname === '/cron'
     && document.querySelectorAll('openclaw-cron-page .cron-job-actions .btn').length >= 3, null, {timeout: 20_000});
   await page.mouse.move(1, 899);   // 指针不在任何键上，量的是平时的边框
-  await page.waitForTimeout(600);   // Metre 皮肤的颜色过渡
+  await waitForStableEval(page, readEdges);   // Metre 皮肤的颜色过渡，等 readEdges() 连续两帧不再变
   return opened;
 }
 
@@ -158,7 +159,7 @@ test('#98 real page: /cron Run / Edit / ••• / Refresh borders use --pk-a3-
           return n;
         }, RULE);
         assert.equal(removed, 2, `反例：页面上没找到那两条新规则（找到 ${removed} 条）`);
-        await page.waitForTimeout(600);   // 保留：删规则后等皮肤颜色过渡走完，过渡没有可观察的结束标记
+        await waitForStableEval(page, readEdges);   // 删规则后等皮肤颜色过渡走完，等连续两帧不再变
         const bad = (await page.evaluate(readEdges)).items;
         console.log(`ℹ day without the new rule: ${fmt(bad)}`);
         assert.ok(bad.length >= 10, `反例：删掉后量不到按键 — ${fmt(bad)}`);
