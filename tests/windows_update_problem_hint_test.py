@@ -7,15 +7,30 @@ ships) changed only the hint.
 """
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
 SCRATCH = Path(tempfile.mkdtemp(prefix='pinkie-update-hint-'))
 (SCRATCH / 'claude').mkdir()
 (SCRATCH / 'codex').mkdir()
+# Importing this module mutates process-wide env vars below; restore them in
+# tearDownModule so later test files in the same `unittest discover` run see
+# whatever was there before, not whatever we set.
+_PRIOR_ENV = {key: os.environ.get(key) for key in ('CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'OPENAI_API_KEY')}
 os.environ['CLAUDE_CONFIG_DIR'] = str(SCRATCH / 'claude')
 os.environ['CODEX_HOME'] = str(SCRATCH / 'codex')
 os.environ.pop('OPENAI_API_KEY', None)
+
+
+def tearDownModule():
+    for key, value in _PRIOR_ENV.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+    shutil.rmtree(SCRATCH, ignore_errors=True)
+
 
 from app.windows_ps_templates import UPDATE_UI_PS
 from app.windows_updater import WindowsUpdater
