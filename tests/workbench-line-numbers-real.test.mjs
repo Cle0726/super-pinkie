@@ -64,26 +64,29 @@ const measure = () => {
   return {mode: document.documentElement.dataset.laolaoMode, theme: window.monaco?.editor ? 'monaco' : null, rows};
 };
 
-async function lineNumbers(browser, origin, mode, theme, width, revert = false) {
-  const {context, page, pageErrors} = await openRealScenePage(browser, origin, SCENES[mode], theme, {initScript});
+// 日夜由 context 的 colorScheme 决定，所以每个 (mode, theme) 只开一个页面：同页先切宽量 1440 / 820 正例；
+// 日间页最后挂上换回旧写法的路由再 reload 量反例（反例改的是脚本本身，必须排在正例之后）。
+// 切宽后 resize → sync / place（防抖 60 / 30 ms）→ ResizeObserver 下一帧 editor.layout，等两帧再留 400 ms。
+async function lineNumbersAt(page, width) {
+  await page.setViewportSize({width, height: 900});
+  await page.evaluate(() => window.__pinkieWorkbench?.show?.());
+  await page.evaluate(() => window.__pinkieWorkbench.open('/proj/a.js', {pinned: true}));
+  await page.waitForFunction(() => document.querySelectorAll('.pk-wb-editor .monaco-editor .line-numbers').length >= 10, null, {timeout: 20_000});
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.waitForTimeout(400);
+  return page.evaluate(measure);
+}
+
+async function revertAndMeasure(context, page, width) {
   let swapped = 0;
-  try {
-    if (revert) {
-      await context.route(/laolao-workbench\.js(\?|$)/, async (route) => {
-        const res = await route.fetch();
-        const text = (await res.text()).replace(NEW_LINE, () => { swapped++; return OLD_LINE; });
-        await route.fulfill({response: res, body: text});
-      });
-      await page.reload();
-    }
-    await page.setViewportSize({width, height: 900});
-    await page.evaluate(() => window.__pinkieWorkbench?.show?.());
-    await page.evaluate(() => window.__pinkieWorkbench.open('/proj/a.js', {pinned: true}));
-    await page.waitForFunction(() => document.querySelectorAll('.pk-wb-editor .monaco-editor .line-numbers').length >= 10, null, {timeout: 20_000});
-    await page.waitForTimeout(400);
-    const m = await page.evaluate(measure);
-    return {...m, swapped, pageErrors};
-  } finally { await context.close(); }
+  await context.route(/laolao-workbench\.js(\?|$)/, async (route) => {
+    const res = await route.fetch();
+    const text = (await res.text()).replace(NEW_LINE, () => { swapped++; return OLD_LINE; });
+    await route.fulfill({response: res, body: text});
+  });
+  await page.reload();
+  const m = await lineNumbersAt(page, width);
+  return {...m, swapped};
 }
 
 test('工作台编辑器行号 real page：项目 / 无限 × 日夜 × 1440 / 820 行号与当前行号 ≥4.5:1，换回旧写法日间变红', async (t) => {
@@ -101,25 +104,31 @@ test('工作台编辑器行号 real page：项目 / 无限 × 日夜 × 1440 / 8
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
-  for (const mode of Object.keys(SCENES)) for (const theme of ['day', 'night']) for (const width of [1440, 820]) {
-    await t.test(`${mode} ${theme} ${width}`, async (tt) => {
-      const m = await lineNumbers(browser, server.origin, mode, theme, width);
-      const where = JSON.stringify(m);
-      tt.diagnostic(where);
-      assert.ok(m.rows.length >= 10, `行号没画够 10 行：${where}`);
-      assert.ok(m.rows.some((r) => r.n === '10'), `第 10 行行号不在：${where}`);
-      for (const r of m.rows) assert.ok(r.ratio >= 4.5, `${mode} ${theme} ${width} 第 ${r.n} 行${r.active ? '（当前行）' : ''}行号 ${r.ratio}:1 < 4.5。${where}`);
-      assert.deepEqual(m.pageErrors, [], '页面不该报错');
+  for (const mode of Object.keys(SCENES)) for (const theme of ['day', 'night']) {
+    await t.test(`${mode} ${theme}`, async (tt) => {
+      const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, SCENES[mode], theme, {initScript});
+      try {
+        for (const width of [1440, 820]) {
+          await tt.test(`${mode} ${theme} ${width}`, async (ttt) => {
+            const m = {...await lineNumbersAt(page, width), pageErrors};
+            const where = JSON.stringify(m);
+            ttt.diagnostic(where);
+            assert.ok(m.rows.length >= 10, `行号没画够 10 行：${where}`);
+            assert.ok(m.rows.some((r) => r.n === '10'), `第 10 行行号不在：${where}`);
+            for (const r of m.rows) assert.ok(r.ratio >= 4.5, `${mode} ${theme} ${width} 第 ${r.n} 行${r.active ? '（当前行）' : ''}行号 ${r.ratio}:1 < 4.5。${where}`);
+            assert.deepEqual(m.pageErrors, [], '页面不该报错');
+          });
+        }
+        if (theme === 'day') {
+          await tt.test(`反例：${mode} 日间 1440 换回 hex(c.muted, 0.7) / hex(c.accent)，行号掉到 4.5 以下`, async (ttt) => {
+            const m = {...await revertAndMeasure(context, page, 1440), pageErrors};
+            ttt.diagnostic(JSON.stringify(m));
+            assert.ok(m.swapped >= 1, `反例没换上：页面拿到的 laolao-workbench.js 里没找到新写法（${mode}）`);
+            const plain = m.rows.filter((r) => !r.active);
+            assert.ok(plain.length >= 9 && plain.every((r) => r.ratio < 4.5), `反例没生效：${mode} 日间旧写法行号仍有够 4.5 的：${JSON.stringify(plain)}`);
+          });
+        }
+      } finally { await context.close(); }
     });
   }
-
-  await t.test('反例：换回 hex(c.muted, 0.7) / hex(c.accent)，项目 / 无限日间行号掉到 4.5 以下', async (tt) => {
-    for (const mode of Object.keys(SCENES)) {
-      const m = await lineNumbers(browser, server.origin, mode, 'day', 1440, true);
-      tt.diagnostic(JSON.stringify(m));
-      assert.ok(m.swapped >= 1, `反例没换上：页面拿到的 laolao-workbench.js 里没找到新写法（${mode}）`);
-      const plain = m.rows.filter((r) => !r.active);
-      assert.ok(plain.length >= 9 && plain.every((r) => r.ratio < 4.5), `反例没生效：${mode} 日间旧写法行号仍有够 4.5 的：${JSON.stringify(plain)}`);
-    }
-  });
 });

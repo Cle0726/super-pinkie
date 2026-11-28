@@ -190,20 +190,21 @@ test('B11·workbench 项目 / 无限模式：工作台五项日夜 × 1440/820 �
   try { browser = await launchRealBrowser(); }
   catch (err) { t.skip(`Chromium is not installed: ${err.message.split('\n')[0]}`); return; }
 
+  // 每个 (mode, theme, bound) 只开一个上下文，依次量 1440、820：旧配方量完即撤；撤 fitStatus 的反例改 DOM，只在最后一个宽度 820 做。
+  assert.equal(WIDTHS.at(-1), 820, '改 DOM 的状态栏反例必须排在最后一个宽度');
   for (const {scene, mode} of SCENES) for (const theme of ['day', 'night']) {
-    const badAll = [];
-    for (const width of WIDTHS) {
-      const tag = `${mode} ${theme} ${width}`;
-      const good = []; const bad = [];
-      for (const bound of [true, false]) {
-        const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, scene, theme, {timezoneId: 'Asia/Shanghai', initScript: makeInit(bound, mode)});
-        try {
+    const good = Object.fromEntries(WIDTHS.map((w) => [w, []])); const bad = Object.fromEntries(WIDTHS.map((w) => [w, []]));
+    for (const bound of [true, false]) {
+      const pre = bound ? '已绑定' : '空态';
+      const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, scene, theme, {timezoneId: 'Asia/Shanghai', initScript: makeInit(bound, mode)});
+      try {
+        for (const width of WIDTHS) {
+          const tag = `${mode} ${theme} ${width}`;
           await openBench(page, width, bound);
           const r = await page.evaluate(measure);
           assert.equal(r.mode, mode, `${tag}: 模式不对（${r.mode}）`);
           assert.equal(r.night, theme === 'night', `${tag}: 日夜没切对`);
-          const pre = bound ? '已绑定' : '空态';
-          good.push(...r.items.map((i) => ({...i, name: `${pre}/${i.name}`})));
+          good[width].push(...r.items.map((i) => ({...i, name: `${pre}/${i.name}`})));
           if (bound) {
             const ov = await page.evaluate(statusOverlap, '');
             console.log(`ℹ ${tag} 状态栏: ${JSON.stringify(ov)}`);
@@ -211,38 +212,43 @@ test('B11·workbench 项目 / 无限模式：工作台五项日夜 × 1440/820 �
             assert.equal(ov.sidesCross, false, `${tag}: 状态栏左右两半相交 ${JSON.stringify(ov)}`);
             assert.deepEqual(ov.overlap, [], `${tag}: 状态栏有互压 ${JSON.stringify(ov)}`);
           }
-          await page.addStyleTag({content: OLD_RECIPE});
+          const old = await page.addStyleTag({content: OLD_RECIPE});
           await page.waitForTimeout(300);
-          bad.push(...(await page.evaluate(measure)).items.map((i) => ({...i, name: `${pre}/${i.name}`})));
+          bad[width].push(...(await page.evaluate(measure)).items.map((i) => ({...i, name: `${pre}/${i.name}`})));
           if (bound && width === 820) {
             const ov = await page.evaluate(statusOverlap, OLD_STATUS);
             console.log(`ℹ ${tag} 状态栏（反例：撤掉 fitStatus + B50 前规则）: ${JSON.stringify(ov)}`);
             assert.ok(ov && ov.overlap.length >= 1, `${tag}: 反例没生效：撤掉 fitStatus 后仍不互压 ${JSON.stringify(ov)}`);
           }
-          assert.deepEqual(pageErrors, [], `${tag}: 页面不该报错`);
-        } finally { await context.close(); }
-      }
-      console.log(`ℹ ${tag}: ${fmt(good)}`);
-      console.log(`ℹ ${tag} 旧配方: ${fmt(bad)}`);
-      const names = new Set(good.map((i) => i.name));
+          await old.evaluate((el) => el.remove());
+        }
+        assert.deepEqual(pageErrors, [], `${mode} ${theme} ${pre}: 页面不该报错`);
+      } finally { await context.close(); }
+    }
+    const badAll = [];
+    for (const width of WIDTHS) {
+      const tag = `${mode} ${theme} ${width}`;
+      console.log(`ℹ ${tag}: ${fmt(good[width])}`);
+      console.log(`ℹ ${tag} 旧配方: ${fmt(bad[width])}`);
+      const names = new Set(good[width].map((i) => i.name));
       const required = width >= 1440
         ? ['已绑定/tag·字', '已绑定/mark·图标', '已绑定/files·图标', '空态/tag·字', '空态/open-project·字', '空态/open-project·边框']
         : ['已绑定/mark·图标', '已绑定/views「对话」·字'];
-      for (const n of required) assert.ok(names.has(n), `${tag}: 没量到「${n}」（量不到不能算通过） — ${fmt(good)}`);
-      assert.deepEqual(low(good).map((i) => i.name), [], `${tag}: 对比度不够 — ${fmt(low(good))}`);
-      for (const b of bad) {
-        const g = good.find((i) => i.name === b.name);
+      for (const n of required) assert.ok(names.has(n), `${tag}: 没量到「${n}」（量不到不能算通过） — ${fmt(good[width])}`);
+      assert.deepEqual(low(good[width]).map((i) => i.name), [], `${tag}: 对比度不够 — ${fmt(low(good[width]))}`);
+      for (const b of bad[width]) {
+        const g = good[width].find((i) => i.name === b.name);
         assert.ok(g && b.ratio <= g.ratio + 0.01, `${tag}: 旧配方反而更好「${b.name}」— 改后 ${g?.ratio.toFixed(2)}，旧配方 ${b.ratio.toFixed(2)}`);
       }
       if (theme === 'day') {
         const mustLow = width >= 1440 ? ['已绑定/tag·字', '空态/open-project·边框'] : ['已绑定/views「对话」·字'];
-        const lowNames = new Set(low(bad).map((i) => i.name));
-        for (const n of mustLow) assert.ok(lowNames.has(n), `${tag}: 反例没生效「${n}」— ${fmt(bad)}`);
+        const lowNames = new Set(low(bad[width]).map((i) => i.name));
+        for (const n of mustLow) assert.ok(lowNames.has(n), `${tag}: 反例没生效「${n}」— ${fmt(bad[width])}`);
         // main 的可见渐变在项目模式日间量出约 3.1，不一定低于 3；只加底色不动渐变时改后值等于旧值，按差值必红。
-        const gm = good.find((i) => i.name === '已绑定/mark·图标'); const bm = bad.find((i) => i.name === '已绑定/mark·图标');
+        const gm = good[width].find((i) => i.name === '已绑定/mark·图标'); const bm = bad[width].find((i) => i.name === '已绑定/mark·图标');
         assert.ok(gm && bm && gm.ratio >= bm.ratio + 1, `${tag}: 标志只加底色没动可见渐变 — 改后 ${gm?.ratio.toFixed(2)}，main 渐变 ${bm?.ratio.toFixed(2)}`);
       }
-      badAll.push(...bad);
+      badAll.push(...bad[width]);
     }
     // 夜间标签规则只在 is-light 下改，旧值本来达标；按整套主题汇总要求反例至少一项不合格（标志、空态字）。
     assert.ok(low(badAll).length >= 1, `${theme}: 反例没生效：贴回旧配方后仍全部达标 — ${fmt(badAll)}`);

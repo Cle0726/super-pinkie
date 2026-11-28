@@ -16,6 +16,9 @@ const PS = read('laolao-power-settings.css');
 const NIGHT = read('laolao-night.css');
 const ENTRIES = ['html[data-pinkie-night]', 'html[data-theme-mode="dark"]', 'html[data-theme="dark"]', 'html[data-color-scheme="dark"]'];
 const B80_BLOCK = /\/\* B80 夜：[^\n]*\*\/\n(?:[^\n]+\n)+?\n/;
+const RESET_DAY = '#pinkie-power .pinkie-power__reset { border: 1.5px solid #b0648c;';
+const RESET_DAY_OLD = '#pinkie-power .pinkie-power__reset { border: 1.5px solid var(--pp-line);';
+const undoDay = (css) => { assert.ok(css.includes(RESET_DAY), '找到日间重置钮描边'); return css.replace(RESET_DAY, RESET_DAY_OLD); };
 
 test('静态：进阶调节夜间块每条规则都认 4 个入口；B80 新规则不用 !important', () => {
   const night = PS.slice(PS.indexOf('/* ── 黑夜'), PS.indexOf('/* 右侧工作栏里的入口'));
@@ -118,6 +121,8 @@ test('真浏览器：进阶调节在 4 个夜间入口下悬停 / 选中都达�
       t.diagnostic(`${theme} ${JSON.stringify(brief(ps))}`);
       if (theme === 'day') {
         assert.equal(ps['close:hover'].bg, 'rgb(255, 255, 255)', '日间关闭钮悬停仍是白底');
+        assert.ok(ps.reset.ratio >= 3, `day 重置钮静息边框 ${ps.reset.fg}：${ps.reset.ratio}`);
+        assert.ok(ps['reset:hover'].ratio >= 3, `day 重置钮悬停边框 ${ps['reset:hover'].fg}：${ps['reset:hover'].ratio}`);
         continue;
       }
       for (const [k, r] of Object.entries(ps)) assert.ok(r.ratio >= NEED[r.kind], `${theme} ${k} ${r.kind} ${r.fg}：${r.ratio}`);
@@ -136,8 +141,11 @@ test('真浏览器：进阶调节在 4 个夜间入口下悬停 / 选中都达�
 test('真浏览器反例：改回旧写法 → 夜间跌破阈值', {timeout: 90_000}, async (t) => {
   const browser = await launch(t); if (!browser) return;
   try {
-    const psOld = PS.replace(B80_BLOCK, '');
+    const psOld = undoDay(PS.replace(B80_BLOCK, ''));
     assert.notEqual(psOld, PS);
+    const day = await measure(browser, powerPage(undoDay(PS), THEMES.day), [['reset', 'border']]);
+    t.diagnostic(`反例 day ${JSON.stringify(brief(day))}`);
+    assert.ok(day.reset.ratio < 3, `反例 day 重置钮边框应 <3，实际 ${day.reset.ratio}`);
     for (const theme of RAIL_NIGHTS) {
       const ps = await measure(browser, powerPage(psOld, THEMES[theme]), [['close', 'text'], ['close', 'text', true], ['reset', 'border']]);
       const en = await measure(browser, powerPage(NIGHT + '\n' + psOld, THEMES[theme]), ENTRY_PROBES);
@@ -147,7 +155,7 @@ test('真浏览器反例：改回旧写法 → 夜间跌破阈值', {timeout: 90
       assert.ok(ps.reset.ratio < 3, `反例 ${theme} 重置钮边框应 <3，实际 ${ps.reset.ratio}`);
       assert.ok(en['entry:hover'].ratio < 3, `反例 ${theme} 入口悬停应 <3，实际 ${en['entry:hover'].ratio}`);
     }
-    const psTwo = PS.replaceAll('html[data-theme="dark"]', 'html[data-x-theme="dark"]');
+    const psTwo = undoDay(PS).replaceAll('html[data-theme="dark"]', 'html[data-x-theme="dark"]');
     const two = await measure(browser, powerPage(psTwo, THEMES['theme-attr-only']), [['reset', 'border']]);
     assert.ok(two.reset.ratio < 3, `反例 夜间块不认 data-theme 时重置钮边框应 <3，实际 ${two.reset.ratio}`);
   } finally { await browser.close(); }
