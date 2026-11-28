@@ -9,7 +9,7 @@ import sys
 import tempfile
 import types
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 from app import windows_app_window as appwin
@@ -101,6 +101,39 @@ class NavigationRuleTest(AppCase):
         for url in ("javascript:alert(1)", "mailto:a@b.example", "ms-settings:", "ftp://x.example/", "", "not a url",
                     "ws://api.dictionary.example/"):
             self.assertFalse(self.ok(url), url)
+
+    def test_own_page_allowed_when_state_root_runs_through_a_link(self):
+        # B112: %LOCALAPPDATA% moved to D:\ and linked back (junction), or
+        # PINKIE_STATE_ROOT pointing at a link. run() opens the unresolved
+        # URL, so the guard must accept that spelling as well.
+        real = self.root / "real"
+        (real / APP).mkdir(parents=True)
+        link = self.root / "link"
+        try:
+            link.symlink_to(real, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"no symlinks here: {error}")
+        app = dict(self.app, dir=link / APP)
+        self.assertTrue(appwin.navigation_allowed((link / APP / "index.html").as_uri(), app))
+        self.assertTrue(appwin.navigation_allowed((real / APP / "sub" / "p.html").as_uri(), app))
+        self.assertFalse(appwin.navigation_allowed((link / (APP + "x") / "index.html").as_uri(), app))
+        self.assertFalse(appwin.navigation_allowed((link / "index.json").as_uri(), app))
+        self.assertFalse(appwin.navigation_allowed((link / APP).as_uri() + "/../index.json", app))
+
+    def test_own_page_allowed_on_a_mapped_drive_with_a_chinese_user_name(self):
+        # B112: on a mapped drive Windows resolve() gives \\server\share\...,
+        # whose file: URL has a host; the window itself loads Z:\... .
+        drive = PureWindowsPath("Z:/Users/张三 Li/AppData/Local/SuperPinkie/apps") / APP
+        unc = PureWindowsPath("//nas/home/Users/张三 Li/AppData/Local/SuperPinkie/apps") / APP
+        app = dict(self.app, dir=drive)
+        with mock.patch.object(appwin.Path, "absolute", lambda self: drive), \
+                mock.patch.object(appwin.Path, "resolve", lambda self, strict=False: unc):
+            self.assertTrue(appwin.navigation_allowed((drive / "index.html").as_uri(), app))
+            self.assertTrue(appwin.navigation_allowed((drive / "sub" / "p.html").as_uri(), app))
+            self.assertFalse(appwin.navigation_allowed((drive.parent / (APP + "x") / "index.html").as_uri(), app))
+            self.assertFalse(appwin.navigation_allowed((drive.parent / "index.json").as_uri(), app))
+            self.assertFalse(appwin.navigation_allowed((unc / "index.html").as_uri(), app),
+                             "a file: URL with a host (SMB) stays blocked")
 
     def test_read_app_carries_the_ticked_origins(self):
         (self.root / "index.json").write_text(json.dumps({"apps": {APP: {"name": "单词小游戏", "network": ["https://a.example", 3]}}}),
