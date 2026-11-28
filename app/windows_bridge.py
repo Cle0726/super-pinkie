@@ -994,8 +994,10 @@ class NativeBridge(InAppBrowserBridge):
         if info.get("error") or info.get("temporaryError"):
             try:
                 info = self._updater.check(force=True, route="mirror")
-            except Exception:
-                pass
+            except Exception as error:
+                # The first failure is logged above; without this line the log
+                # never shows that the mirror was tried and failed too.
+                append_log("updater", f"startup update check via mirror failed: {error}")
         if not info.get("available"):
             return {"ok": False, "stage": "none",
                     "message": info.get("message") or "已经是最新版。可以先点「自动修复设置」，或者打开日志文件夹把记录发给我们"}
