@@ -15,9 +15,26 @@ const WIDTHS = [1440, 820];
 const TEXT_MIN = 4.5;
 const ENGINE = process.env.PINKIE_VISUAL_ENGINE || 'webkit';
 
-const settle = (page) => page.waitForFunction(
-  () => document.getAnimations().filter((a) => a instanceof CSSTransition).every((a) => a.playState !== 'running'),
-  null, {timeout: 5000});
+// 只等会动到量值的过渡：落在撤销条 / 输入框外壳 / 侧栏本身、其祖先或子孙上的。CI 上换宽后偶有过渡 5s 还在 running
+// （#96 7231513547，量值却都合格），那时打出卡住的元素和属性、finish 掉再量；量得对不对仍由下面的原有断言判。
+const RELEVANT = ['.pinkie-archive-undo', '.agent-chat__composer-shell', 'aside.sidebar'];
+const runningTransitions = (sels) => {
+  const keys = sels.flatMap((s) => [...document.querySelectorAll(s)]);
+  return document.getAnimations().filter((a) => a instanceof CSSTransition && a.playState === 'running').map((a) => {
+    const el = a.effect?.target;
+    const near = Boolean(el && keys.some((k) => k === el || k.contains(el) || el.contains(k)));
+    const cls = el && typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+    return {near, el: el ? el.tagName.toLowerCase() + cls : null, prop: a.transitionProperty};
+  });
+};
+const QUIET = `(${runningTransitions})(${JSON.stringify(RELEVANT)}).every((r) => !r.near)`;
+async function settle(page, label) {
+  if (await page.waitForFunction(QUIET, null, {timeout: 5000}).then(() => true, () => false)) return;
+  console.log(`ℹ ${label}: 5s 后过渡仍在跑，finish 后再量 ${JSON.stringify(await page.evaluate(runningTransitions, RELEVANT))}`);
+  await page.evaluate(() => document.getAnimations().forEach((a) => { if (a instanceof CSSTransition && a.playState === 'running') a.finish(); }));
+  if (await page.waitForFunction(QUIET, null, {timeout: 2000}).then(() => true, () => false)) return;
+  console.log(`ℹ ${label}: finish 后过渡又起来了 ${JSON.stringify(await page.evaluate(runningTransitions, RELEVANT))}`);
+}
 const fmt = (m) => `${m.mode}${m.night ? '/夜' : '/日'} 撤销 ${m.ratio}:1 bar=${JSON.stringify(m.bar)} shell=${JSON.stringify(m.shell)} 压到=${JSON.stringify(m.hits)} bottom=${m.inlineBottom || '(css)'}`;
 
 // 上一宽度的撤销条要先拿掉，否则 archiveOneRow 的 waitForSelector 会直接认旧条。
@@ -25,10 +42,10 @@ async function measureAt(page, width, label) {
   await page.evaluate(() => document.querySelectorAll('.pinkie-archive-undo').forEach((n) => n.remove()));
   await page.setViewportSize({width, height: 900});
   await page.waitForTimeout(400);
-  await settle(page);
+  await settle(page, `${label} 换宽`);
   await openDrawer(page);
   await archiveOneRow(page);
-  await settle(page);
+  await settle(page, `${label} 撤销条`);
   const m = await measureUndo(page);
   assert.ok(m, `${label}: 撤销条没出现`);
   return m;
