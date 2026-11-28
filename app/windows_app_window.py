@@ -20,6 +20,7 @@ import json
 import os
 import re
 import posixpath
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -258,6 +259,17 @@ class AppShortcuts:
                 path.unlink()
             except FileNotFoundError:
                 pass
+            except PermissionError:
+                # Windows refuses to delete a read-only file (users and sync tools mark desktop
+                # icons read-only). Clear the flag on our own .lnk and try once more; a link that
+                # is really in use stays in the ledger and goes next time.
+                try:
+                    os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    left.append(str(path))
             except OSError:
                 left.append(str(path))
         return left
