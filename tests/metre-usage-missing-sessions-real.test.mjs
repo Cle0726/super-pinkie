@@ -3,6 +3,8 @@
 // 修法在 ui/injections/laolao-metre-usage.js 的 guardUsagePage：原生 willUpdate 之后把缺的 sessions 补成 []，页面走它自己的空状态。
 // 这里在真实安装的 OpenClaw Control UI + 碧琪注入上打开 /usage；隔离假网关对 sessions.usage / usage.cost 本来就回 {}，正好是缺字段的样子。
 // 反例：页面载入前设 Pinkie.metreUsageGuardOff = true，只关护栏（侧栏「用量」入口照旧装）——必须报那个 TypeError、停在「加载中」。
+// L111（内核 job 提速）：原来两条各死等 2.5s 再量；改成等到各自的结果真出现（正例：sessions 已补成 [] 且原生空状态出来；
+// 反例：页面报出 TypeError reading 'length'），最多 15s，等不到也照样往下量，由原断言报错。断言一条没改。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -16,6 +18,23 @@ import {
 const withoutGuard = () => {
   const ns = (window.Pinkie = window.Pinkie || {});
   ns.metreUsageGuardOff = true;
+};
+
+const LENGTH_ERROR = /reading 'length'/;
+const lengthError = (errors) => errors.filter((e) => LENGTH_ERROR.test(e));
+
+// 正例要等的：用量结果到了、sessions 是数组、原生空状态文案出来了。
+const emptyStateShown = (page) => page.waitForFunction(() => {
+  const el = document.querySelector('openclaw-usage-page');
+  return Boolean(el?.usageResult) && Array.isArray(el.usageResult.sessions)
+    && /从日期范围开始|无数据/.test(el.textContent || '');
+}, null, {timeout: 15_000});
+
+// 反例要等的：页面报出 TypeError reading 'length'。先看已经收到的（openRealScenePage 建页时就在收 pageerror），
+// 没有再等下一条；查和挂监听在同一段同步代码里，中间漏不掉事件。
+const lengthErrorThrown = async (page, pageErrors) => {
+  if (lengthError(pageErrors.map((e) => String(e?.message || e))).length) return;
+  await page.waitForEvent('pageerror', {predicate: (e) => LENGTH_ERROR.test(String(e?.message || e)), timeout: 15_000});
 };
 
 let ctx = null;
@@ -36,7 +55,7 @@ test.after(async () => {
   ctx.installed.cleanup();
 });
 
-async function openUsage(t, initScript) {
+async function openUsage(t, initScript, settled) {
   const c = await setup();
   if (c.skip) { t.skip(c.skip); return null; }
   const {context, page, pageErrors} = await openRealScenePage(c.browser, c.server.origin, 'metre-board', 'day', initScript ? {initScript} : {});
@@ -48,7 +67,7 @@ async function openUsage(t, initScript) {
       else { history.pushState({}, '', '/usage'); dispatchEvent(new PopStateEvent('popstate')); }
     });
     await page.waitForSelector('openclaw-usage-page', {timeout: 15_000});
-    await page.waitForTimeout(2500);
+    await settled(page, pageErrors).catch((error) => t.diagnostic(`等待没等到，照样量：${String(error?.message || error).slice(0, 200)}`));
     const state = await page.evaluate(() => {
       const el = document.querySelector('openclaw-usage-page');
       return {
@@ -66,10 +85,8 @@ async function openUsage(t, initScript) {
   }
 }
 
-const lengthError = (errors) => errors.filter((e) => /reading 'length'/.test(e));
-
 test('网关回的 sessions.usage 缺 sessions：用量页不报错，走原生空状态（从日期范围开始）', async (t) => {
-  const r = await openUsage(t, null);
+  const r = await openUsage(t, null, emptyStateShown);
   if (!r) return;
   t.diagnostic(JSON.stringify(r));
   assert.equal(r.state.path, '/usage');
@@ -79,7 +96,7 @@ test('网关回的 sessions.usage 缺 sessions：用量页不报错，走原生�
 });
 
 test('反例：只关护栏（Pinkie.metreUsageGuardOff）时，同样的回包让用量页报 TypeError reading length', async (t) => {
-  const r = await openUsage(t, withoutGuard);
+  const r = await openUsage(t, withoutGuard, lengthErrorThrown);
   if (!r) return;
   t.diagnostic(JSON.stringify(r));
   assert.equal(r.state.path, '/usage');
