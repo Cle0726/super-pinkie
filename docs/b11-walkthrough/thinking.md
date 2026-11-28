@@ -87,8 +87,8 @@ T1 说明：菜单的 `role="menu"` 读屏要用，不宜去掉；更像是在 `
 | `laolao-session-tools.css`：`.pinkie-chip--mode > span`（「想法取向」） | 日，1440/820 | 输入框取向按钮字淡 | 3.55 | 已修：#457 `mac/b11-mode-chip-contrast`（日间默认态改用 `--pt-quiet`，≥4.5） |
 | `laolao-session-tools.css`：`.pinkie-temp-entry`（「临时」及图标） | 日，1440 | 同 learning.md | 字 2.67、图标 2.67 | 别人占着：#349 |
 | `laolao-sidebar.css` / `laolao-sidebar-surface.css`：`.laolao-group__label` / `__count` / `__action`、`time.pinkie-session-time` | 日，1440 | 同 learning.md | 3.45 / 4.16 | `laolao-sidebar-surface.css` 别人占着：#346；`laolao-sidebar.css` 无 |
-| `laolao-theme.css`：`.laolao-mode-dock-trigger` | 日/夜，1440 | 同 learning.md | 1.46 | 别人占着：#320 |
-| `laolao-theme.css`：`button.laolao-followup-mode-btn` 边框 | chat-live / chat-thought，日/夜，1440/820 | 进行中输入框追问方式按钮边框淡 | 1.42 / 1.73 | 别人占着：#320 |
+| `laolao-theme.css`：`.laolao-mode-dock-trigger` | 日/夜，1440 | 同 learning.md | 1.46 → 日 ≥3.80 / 夜 ≥6.88（静态） | 已修：#461 `mac/b11-dock-followup-edge` |
+| `laolao-theme.css`：`button.laolao-followup-mode-btn` 边框 | chat-live / chat-thought，日/夜，1440/820 | 进行中输入框追问方式按钮边框淡 | 1.42 / 1.73 → 日 ≥3.80 / 夜 ≥6.88（静态） | 已修：#461 `mac/b11-dock-followup-edge` |
 | `laolao-run-status.css` / `laolao-metre-chat.css`：`button.chat-new-messages`（「有新消息」）边框 | chat-done / deepthink / picker，日/夜 | 「有新消息」胶囊边框贴底 | 1.27~1.29 | 无 |
 | `laolao-motion-system.css`：`.topbar-search` | 日/夜，820 | 同 learning.md | 1.24~1.26 | 无 |
 | `laolao-settings-user.js`：`.qs-segmented__btn`（「高级」） | settings，日 | 同 learning.md | 4.13 | 别人占着：#328 |
