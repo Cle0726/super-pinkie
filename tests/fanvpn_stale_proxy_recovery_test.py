@@ -1,0 +1,116 @@
+"""B109: FanVPN 系统代理被强杀 / 崩溃 / 删文件夹后不还原。
+
+正常退出时 atexit -> fanvpn_bridge.shutdown() 会按快照还原 WinINET 代理；
+但更新器 taskkill /F、任务管理器结束、崩溃都跳过 atexit，注册表里留着指向
+127.0.0.1 死端口的 PAC / 代理，全机浏览器断网。快照
+%LOCALAPPDATA%/FanVPN/sysproxy_backup.json 还在，可下次启动没有任何地方读它
+（只有用户再开 FanVPN 才会碰）。
+
+recover_stale_system_proxy() 在启动时跑一次：
+* 快照在、当前设置仍是我们写的（环回 + 我们写的 ProxyOverride）、端口没人听 -> 按快照还原、删快照；
+* 当前设置已不是我们的（用户 / 公司后来改了）-> 不动注册表，只删过期快照；
+* 端口还有人听（另一个碧琪实例在用）-> 什么都不动。
+
+全部走 JsonFileBackend + 临时目录，不碰真注册表、不起监听。
+"""
+
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+for sub in ("app", "app/fanvpn"):
+    if str(ROOT / sub) not in sys.path:
+        sys.path.append(str(ROOT / sub))
+import fanvpn_bridge as fb  # noqa: E402
+import win_sysproxy as ws  # noqa: E402
+
+CORP_PAC = "http://wpad.corp.example/proxy.pac"
+
+
+class StaleProxyRecovery(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        self.backend = ws.JsonFileBackend(root / "fake_registry.json")
+        self.manager = ws.SystemProxyManager(backend=self.backend, notify=False)
+        self.store = ws.SnapshotStore(root / "FanVPN" / "sysproxy_backup.json")
+        # 用户原本：开着公司静态代理
+        key = ws.INTERNET_SETTINGS
+        self.backend.write(key, "ProxyEnable", ws.REG_DWORD, 1)
+        self.backend.write(key, "ProxyServer", ws.REG_SZ, "corp-proxy:8080")
+        self.original = self.manager.current()
+
+    def take_over(self, method="pac"):
+        """照 FanVpnService.apply_system_proxy：先拍快照再接管，然后进程被强杀（不还原）。"""
+        self.store.save(self.manager.snapshot())
+        if method == "pac":
+            self.manager.apply_pac(ws.pac_url_for(fb.DEFAULT_PANEL_PORT))
+        else:
+            self.manager.apply_direct(ws.proxy_server_for(fb.DEFAULT_PROXY_PORT))
+
+    def recover(self, listening=False):
+        return fb.recover_stale_system_proxy(
+            manager=self.manager, store=self.store, port_listening=lambda port: listening,
+        )
+
+    def test_killed_with_pac_on_next_start_restores_user_proxy(self):
+        self.take_over("pac")
+        self.assertTrue(self.manager.is_managed())
+        result = self.recover()
+        self.assertEqual(result, "restored")
+        self.assertEqual(self.manager.current(), self.original)
+        self.assertIsNone(self.store.load(), "快照还原后要删掉，免得下次又还原一遍")
+
+    def test_killed_with_direct_proxy_on_next_start_restores_user_proxy(self):
+        self.take_over("direct")
+        self.assertEqual(self.recover(), "restored")
+        self.assertEqual(self.manager.current(), self.original)
+        self.assertIsNone(self.store.load())
+
+    def test_user_changed_proxy_since_is_left_alone(self):
+        self.take_over("pac")
+        # 之后用户 / 公司把 PAC 换成了自己的：不是我们的了，不能拿旧快照盖掉
+        self.backend.write(ws.INTERNET_SETTINGS, "AutoConfigURL", ws.REG_SZ, CORP_PAC)
+        before = self.manager.current()
+        self.assertEqual(self.recover(), "not-ours")
+        self.assertEqual(self.manager.current(), before)
+        self.assertIsNone(self.store.load(), "过期快照要删，否则以后再开 FanVPN 会还原到很久以前的状态")
+
+    def test_loopback_proxy_of_someone_else_is_left_alone(self):
+        # 用户自己的本机代理（如 Clash 7890）也是环回，但 ProxyOverride 不是我们写的那份
+        self.take_over("direct")
+        key = ws.INTERNET_SETTINGS
+        self.backend.write(key, "ProxyServer", ws.REG_SZ, "127.0.0.1:7890")
+        self.backend.write(key, "ProxyOverride", ws.REG_SZ, "<local>")
+        before = self.manager.current()
+        self.assertEqual(self.recover(), "not-ours")
+        self.assertEqual(self.manager.current(), before)
+
+    def test_port_still_answering_means_another_instance_owns_it(self):
+        self.take_over("pac")
+        before = self.manager.current()
+        self.assertEqual(self.recover(listening=True), "in-use")
+        self.assertEqual(self.manager.current(), before)
+        self.assertIsNotNone(self.store.load(), "别的实例还在用，快照得留给它退出时还原")
+
+    def test_no_snapshot_does_nothing(self):
+        before = self.manager.current()
+        self.assertEqual(self.recover(), "none")
+        self.assertEqual(self.manager.current(), before)
+
+    def test_never_raises(self):
+        class Broken:
+            def load(self):
+                raise OSError("disk gone")
+
+        self.assertEqual(
+            fb.recover_stale_system_proxy(manager=self.manager, store=Broken(), port_listening=lambda p: False),
+            "error",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
