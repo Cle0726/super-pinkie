@@ -308,7 +308,8 @@ void main() {
     }
     async setImage(src) {
       const ticket = (this.ticket = (this.ticket || 0) + 1);
-      const data = await prepare(src);
+      let data;
+      try { data = await prepare(src); } catch { return false; }   // 图没加载出来：留着当前这张，不在控制台冒未处理的 reject
       if (ticket !== this.ticket || this.dead) return false;
       let item = this.items.get(src);
       if (!item) {
