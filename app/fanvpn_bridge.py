@@ -295,3 +295,47 @@ def shutdown() -> None:
         bridge, _bridge = _bridge, None
     if bridge is not None:
         bridge.stop()
+
+
+def _port_listening(port: int) -> bool:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.3)
+        return sock.connect_ex(("127.0.0.1", int(port))) == 0
+
+
+def recover_stale_system_proxy(manager: Any = None, store: Any = None, port_listening: Any = None) -> str:
+    """启动时跑一次：上次被强杀留下的系统代理按快照还原（B109）。
+
+    shutdown() 只管本进程起过的 FanVPN；taskkill /F、崩溃、删了 App 文件夹都跳过它，
+    注册表里留着指向死端口的 PAC / 代理，全机浏览器断网，快照却没人读。
+    只有三条都成立才动注册表：有快照、当前设置还是我们写的（环回 + 我们那份
+    ProxyOverride）、对应端口没人听。返回 restored / not-ours / in-use / none / error，
+    从不抛（启动路径）。
+    """
+    try:
+        _ensure_path()
+        from win_sysproxy import DEFAULT_OVERRIDE, SnapshotStore, SystemProxyManager
+
+        store = store or SnapshotStore()
+        snap = store.load()
+        if snap is None:
+            return "none"
+        manager = manager or SystemProxyManager()
+        current = manager.current()
+        if not manager.is_managed() or str(current.get("ProxyOverride") or "") != DEFAULT_OVERRIDE:
+            store.clear()  # 用户 / 公司后来改过：不拿旧快照盖掉，只删过期快照
+            LOG.info("stale FanVPN snapshot dropped: current proxy is not ours")
+            return "not-ours"
+        listening = port_listening or _port_listening
+        port = DEFAULT_PANEL_PORT if current.get("AutoConfigURL") else DEFAULT_PROXY_PORT
+        if listening(port):
+            return "in-use"  # 另一个碧琪还在用，留给它退出时还原
+        manager.restore(snap)
+        store.clear()
+        LOG.warning("system proxy left by a killed FanVPN restored")
+        return "restored"
+    except Exception:  # noqa: BLE001 - 启动路径绝不能抛
+        LOG.exception("stale system proxy recovery failed")
+        return "error"

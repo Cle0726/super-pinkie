@@ -481,6 +481,31 @@ def gateway_closed_marker():
     return state_root() / "gateway-closed-by-app"
 
 
+def recover_stale_fanvpn_proxy(recover=None, log=None):
+    """Startup: undo the system proxy a killed FanVPN left behind (B109).
+
+    The exit hook only restores it when the process exits normally. Never raises.
+    """
+    log = log or append_log
+    try:
+        if recover is None:
+            try:
+                import fanvpn_bridge
+            except ImportError:  # imported as app.windows_desktop (tests)
+                from app import fanvpn_bridge
+            recover = fanvpn_bridge.recover_stale_system_proxy
+        result = recover()
+        if result in ("restored", "not-ours", "error"):
+            log("launcher", f"stale FanVPN system proxy check: {result}")
+        return result
+    except Exception as error:  # noqa: BLE001 - startup must go on
+        try:
+            log("launcher", f"stale FanVPN system proxy check failed: {error!r}")
+        except Exception:  # noqa: BLE001
+            pass
+        return "error"
+
+
 def kill_process_tree(pid, timeout=8):
     subprocess.run(
         ["taskkill", "/PID", str(pid), "/T", "/F"],
@@ -971,6 +996,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # the gateway, adding ~5 s to every start on Windows. Run them beside
         # the gateway instead, like the Mac launcher does.
         threading.Thread(target=start_services, name="pinkie-services", daemon=True).start()
+        # B109: a FanVPN that was killed (taskkill /F, crash) left every browser on a dead local proxy.
+        threading.Thread(target=recover_stale_fanvpn_proxy, name="pinkie-fanvpn-recover", daemon=True).start()
         # Setup can fail or take a long time. The splash only leaves when the
         # gateway answers, so a setup error must not skip starting it.
         started = time.monotonic()

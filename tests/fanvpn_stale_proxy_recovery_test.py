@@ -112,5 +112,32 @@ class StaleProxyRecovery(unittest.TestCase):
         )
 
 
+class StartupHook(unittest.TestCase):
+    """windows_desktop 启动时真的会跑一次，而且失败只记日志。"""
+
+    def test_bootstrap_starts_the_recovery(self):
+        src = (ROOT / "app" / "windows_desktop.py").read_text(encoding="utf-8")
+        body = src.split("    def bootstrap():", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("target=recover_stale_fanvpn_proxy", body)
+
+    def test_hook_logs_and_never_raises(self):
+        import os
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as state, mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": state}):
+            from app.windows_desktop import recover_stale_fanvpn_proxy
+
+            lines = []
+
+            def boom():
+                raise RuntimeError("registry locked")
+
+            self.assertEqual(recover_stale_fanvpn_proxy(recover=boom, log=lambda *a: lines.append(a)), "error")
+            self.assertEqual(recover_stale_fanvpn_proxy(recover=lambda: "restored", log=lambda *a: lines.append(a)), "restored")
+            self.assertEqual(recover_stale_fanvpn_proxy(recover=lambda: "none", log=lambda *a: lines.append(a)), "none")
+        self.assertEqual(len(lines), 2, lines)  # 「none」是常态，不刷日志
+        self.assertIn("registry locked", lines[0][1])
+
+
 if __name__ == "__main__":
     unittest.main()
