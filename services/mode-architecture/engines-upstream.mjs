@@ -23,6 +23,11 @@ export const ENV_NAMES = Object.freeze(['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TO
   'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL',
   'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC']);
 const MAX_BODY = 32 * 1024 * 1024;
+// 等上游回响应头最多这么久（#96 L117）。只管「上游一直不回头」，头到了以后流式正文照常一直转，长回答不会被掐。
+// 和 Node 自带 fetch 默认的 headersTimeout 一样长，不比原来更早断非流式的长回答；但不再依赖 fetchImpl 自己会不会超时，
+// 到点回 504 和一句明白话，不是含糊的 502。
+export const UPSTREAM_HEADERS_TIMEOUT_MS = 300_000;
+const TIMED_OUT = Symbol('upstream-headers-timeout');
 const PASS_HEADERS = ['content-type', 'anthropic-version', 'anthropic-beta', 'accept'];
 // Codex 那条路只转这几个；别的（cookie、ChatGPT 账号头之类）一律不转。
 const OPENAI_PASS_HEADERS = ['content-type', 'accept', 'openai-beta'];
@@ -162,8 +167,9 @@ export function readCapped(req, max) {
 
 // 本机转发口。config()：每次请求现读碧琪配置（钥匙不留在这个对象上）。fetchImpl 给测试换。
 export class PinkieRelay {
-  constructor({config = () => ({}), logger = null, fetchImpl = globalThis.fetch, token = crypto.randomBytes(32).toString('base64url')} = {}) {
-    this.config = config; this.logger = logger; this.fetchImpl = fetchImpl;
+  constructor({config = () => ({}), logger = null, fetchImpl = globalThis.fetch, token = crypto.randomBytes(32).toString('base64url'),
+    headersTimeoutMs = UPSTREAM_HEADERS_TIMEOUT_MS} = {}) {
+    this.config = config; this.logger = logger; this.fetchImpl = fetchImpl; this.headersTimeoutMs = headersTimeoutMs;
     Object.defineProperty(this, 'token', {value: token, enumerable: false});
     // defaultModel：Claude Code 那条路的默认模型；codexModel：Codex 那条路的。
     this.server = null; this.port = 0; this.defaultModel = ''; this.codexModel = ''; this.chatModel = '';
@@ -246,7 +252,18 @@ export class PinkieRelay {
     for (const name of openai ? OPENAI_PASS_HEADERS : PASS_HEADERS) if (req.headers[name]) headers[name] = String(req.headers[name]);
     headers['content-type'] ||= 'application/json';
     if (!openai) headers['anthropic-version'] ||= '2023-06-01';
-    const upstream = await this.fetchImpl(base + url.pathname, {method: 'POST', headers, body: JSON.stringify({...body, model: route.model})});
+    // 等响应头限时：到点就 abort 掉这次上游请求、回 504。和 fetchImpl 赛跑，fetchImpl 不理 signal 也挂不住。头到了就撤掉计时。
+    const controller = new AbortController();
+    let timer;
+    const timedOut = new Promise(resolve => { timer = setTimeout(() => resolve(TIMED_OUT), this.headersTimeoutMs); });
+    const pending = (async () => this.fetchImpl(base + url.pathname, {method: 'POST', headers, body: JSON.stringify({...body, model: route.model}), signal: controller.signal}))();
+    pending.catch(() => {}); // 超时后被 abort 的那次失败没人等，别变成未处理的拒绝。
+    let upstream;
+    try { upstream = await Promise.race([pending, timedOut]); } finally { clearTimeout(timer); }
+    if (upstream === TIMED_OUT) {
+      controller.abort();
+      return this.fail(res, 504, 'timeout_error', '上游太久没回应，已断开', opts);
+    }
     const out = {'content-type': upstream.headers.get('content-type') || 'application/json'};
     for (const name of ['retry-after', 'anthropic-ratelimit-requests-reset', 'anthropic-ratelimit-tokens-reset', 'request-id',
       'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-request-id']) {
