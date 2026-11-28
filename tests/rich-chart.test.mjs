@@ -6,7 +6,7 @@
 //       「数据表」「复制图片」键的边：日夜、Metre 和非 Metre、普通和按下，对键底和图卡底都 ≥ 3:1（反例换回 --pk-faint 要红）。
 // 反例：格式不对（不是 JSON、个数对不上、数里有字、类型不认识、一个数都没有、饼图两组、没有 labels）一律不画，原代码块露出来，
 //       上面说清哪里不对，页面不报错；把模块里的校验换成「照单全收」，同一组检查要红。
-import {test} from 'node:test';
+import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +18,20 @@ const inj = (name) => fs.readFileSync(path.join(root, 'ui', 'injections', name),
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 const launch = () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
 const ORIGIN = 'http://127.0.0.1:30131';
+
+// L111（内核 job 提速）：原来 5 条测试各自 launch() 一次浏览器，现在整个文件只起一个（after 先注册，before 里起）。
+// 每条测试拿一个「浏览器」外壳：newPage 走共用浏览器，并记下本条开过的页；close() 只关这些页、不关浏览器。
+// browser.newPage 开的页各自带独立 context，页内改原型 / 剪贴板 / 路由都随页关掉，条与条之间不串。
+let shared = null;
+after(async () => { await shared?.close(); });
+before(async () => { shared = await launch(); });
+function sharedBrowser() {
+  const pages = [];
+  return {
+    async newPage(options) { const p = await shared.newPage(options); pages.push(p); return p; },
+    async close() { await Promise.all(pages.splice(0).map((p) => p.close().catch(() => {}))); },
+  };
+}
 
 const GOOD = {type: 'bar', title: '吃饭花销连降两个月', labels: ['8月', '9月', '10月'], series: [{name: '吃饭', data: [2400, 2050, 1760]}], unit: '元'};
 const TWO = {type: 'line', title: '两组', labels: ['一', '二', '三'], series: [{name: '甲', data: [1, 2, 3]}, {name: '乙', data: [3, null, 1]}]};
@@ -79,7 +93,7 @@ const badProblems = (tab) => tab.evaluate((expect) => [...document.querySelector
 }).filter(Boolean), BAD.map((b) => b[2]));
 
 test('图表：格式对的画成图，「数据表」来回切，原代码块藏起来、点「源码」能看', async () => {
-  const browser = await launch();
+  const browser = sharedBrowser();
   try {
     const {tab, errors} = await open(browser, [JSON.stringify(GOOD), JSON.stringify(TWO)]);
     assert.ok(await tab.evaluate(() => typeof window.Chart === 'function'), '前提：Chart.js 是 rich 自己按需加载的');
@@ -128,7 +142,7 @@ test('图表：格式对的画成图，「数据表」来回切，原代码块�
 });
 
 test('图表：「复制图片」放进剪贴板的是实底、带标题的 PNG；剪贴板用不了就存成文件', async () => {
-  const browser = await launch();
+  const browser = sharedBrowser();
   try {
     const {tab, errors} = await open(browser, [JSON.stringify(GOOD)]);
     await tab.evaluate(() => {
@@ -222,7 +236,7 @@ test('图表：「复制图片」放进剪贴板的是实底、带标题的 PNG�
 });
 
 test('图表：配色跟着日夜和模式走（Metre 用自己的强调色），切模式、切日夜会重画', async () => {
-  const browser = await launch();
+  const browser = sharedBrowser();
   try {
     const read = (tab) => tab.evaluate(() => {
       const b = document.querySelector('.pk-rich--chart');
@@ -252,7 +266,7 @@ test('图表：配色跟着日夜和模式走（Metre 用自己的强调色）�
 });
 
 test('图表：格式不对一律不画，原代码块露出来、说清哪里不对，页面不报错；反例（校验照单全收）要红', async () => {
-  const browser = await launch();
+  const browser = sharedBrowser();
   try {
     const {tab, errors} = await open(browser, BAD.map((b) => b[1]));
     assert.deepEqual(await badProblems(tab), [], '每个错块都要退回原文');
@@ -299,7 +313,7 @@ const keyEdgeProblems = (tab) => tab.evaluate(() => {
 });
 
 test('图表：「数据表」「复制图片」键的边日夜、Metre 和非 Metre、普通和按下都 ≥ 3:1；反例（边换回 --pk-faint）要红', async () => {
-  const browser = await launch();
+  const browser = sharedBrowser();
   try {
     const measure = async (opts) => {
       const {tab, errors} = await open(browser, [JSON.stringify(GOOD)], opts);

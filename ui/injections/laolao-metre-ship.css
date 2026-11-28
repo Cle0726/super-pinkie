@@ -1,0 +1,35 @@
+/* laolao-metre-ship.css —— T3 #22（L34）引擎台「改动」面板最底下的「提交 / 开 PR」一条（laolao-metre-ship.js，.pk-ship*）。只在 Metre。
+ * 颜色全跟着 Metre 皮肤变量走，日夜一样；按钮的样子和引擎台的 .pk-eng-btn 一致（同一组变量），确认键是实底的那种。 */
+html[data-laolao-mode="metre"] .pk-ship {
+  display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--metre-line, #E8E6DC);
+  background: var(--metre-bg, #FAF9F5); color: var(--metre-text, #1F1E1D); font: 400 13px/1.45 var(--metre-sans, system-ui, sans-serif);
+}
+html[data-laolao-mode="metre"] .pk-ship__head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+html[data-laolao-mode="metre"] .pk-ship__title { font: italic 400 15px/1 var(--metre-serif, Georgia, serif); }
+html[data-laolao-mode="metre"] .pk-ship__where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--metre-muted, #73726C); font-size: 12.5px; }
+html[data-laolao-mode="metre"] .pk-ship__link { border: 0; background: none; padding: 0; color: var(--metre-muted, #73726C); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+html[data-laolao-mode="metre"] .pk-ship__acts { display: flex; flex-wrap: wrap; gap: 8px; }
+html[data-laolao-mode="metre"] .pk-ship__btn {
+  border: 1px solid var(--metre-line-strong, #D9D6CC); background: var(--metre-surface, #fff); color: var(--metre-text, #1F1E1D);
+  border-radius: 9px; padding: 6px 12px; cursor: pointer; font: 400 13px/1.35 var(--metre-sans, system-ui, sans-serif); white-space: nowrap;
+}
+html[data-laolao-mode="metre"] .pk-ship__btn:hover { background: var(--metre-hover, #F0EEE6); }
+html[data-laolao-mode="metre"] .pk-ship__btn--main { background: var(--metre-text, #1F1E1D); color: var(--metre-bg, #FAF9F5); border-color: transparent; }
+html[data-laolao-mode="metre"] .pk-ship__btn--main:hover { background: var(--metre-text, #1F1E1D); opacity: 0.88; }
+html[data-laolao-mode="metre"] .pk-ship__btn:disabled { opacity: 0.5; cursor: default; }
+html[data-laolao-mode="metre"] .pk-ship__btn:focus-visible,
+html[data-laolao-mode="metre"] .pk-ship__link:focus-visible { outline: 2px solid var(--metre-accent, #96681C); outline-offset: 1px; }
+html[data-laolao-mode="metre"] .pk-ship__note { margin: 0; color: var(--metre-muted, #73726C); font-size: 12.5px; }
+html[data-laolao-mode="metre"] .pk-ship__note--warn { color: var(--metre-warn, #9A4A1F); }
+html[data-laolao-mode="metre"] .pk-ship__done { margin: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] .pk-ship__done a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-ship__ask { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 10px; background: var(--metre-surface, #fff); }
+html[data-laolao-mode="metre"] .pk-ship__q { margin: 0; }
+html[data-laolao-mode="metre"] .pk-ship__files { margin: 0; padding: 0; list-style: none; max-height: 9em; overflow: auto; font: 400 12px/1.5 var(--metre-mono, ui-monospace, monospace); color: var(--metre-muted, #73726C); }
+html[data-laolao-mode="metre"] .pk-ship__files li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-laolao-mode="metre"] .pk-ship__input {
+  box-sizing: border-box; width: 100%; padding: 6px 9px; border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 8px;
+  background: var(--metre-bg, #FAF9F5); color: var(--metre-text, #1F1E1D); font: 400 13px/1.4 var(--metre-sans, system-ui, sans-serif); resize: vertical;
+}
+html[data-laolao-mode="metre"] .pk-ship__input:focus { outline: 0; border-color: var(--metre-text, #1F1E1D); }
+html[data-laolao-mode="metre"] .pk-ship__check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--metre-muted, #73726C); }

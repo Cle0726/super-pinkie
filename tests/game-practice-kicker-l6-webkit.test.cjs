@@ -5,28 +5,42 @@ const assert = require('node:assert/strict');
 let harnessModule;
 const controlUIRoots = [process.env.PINKIE_CONTROL_UI_ROOT, '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui', require('node:path').resolve(__dirname, '../../sandbox/try/dist/control-ui')].filter(Boolean);
 const needsControlUI = controlUIRoots.some(root => require('node:fs').existsSync(require('node:path').join(root, 'index.html'))) ? {} : {skip: '没有构建好的 control-ui'};
-test.before(async () => { harnessModule = await import('../tools/study-desk/harness.mjs'); });
-
-async function openPractice(fn) {
-  const harness = await harnessModule.startHarness({
+let harness, browser, page;
+const errors = [];
+// B55：清理先于启动注册，逆序关闭（page → browser → harness），前一层失败不挡后一层。
+test.after(async () => {
+  try { await page?.context().close(); } finally {
+    try { await browser?.close(); } finally { await harness?.close(); }
+  }
+});
+test.before(async () => {
+  harnessModule = await import('../tools/study-desk/harness.mjs');
+  if (needsControlUI.skip) return;
+  harness = await harnessModule.startHarness({
     handler(method) {
       if (method === 'pinkie.learning.game.practice.overview') return {total: 0, papers: 0, points: [], reserved: [], wrong: 0};
       throw Error('unknown method: ' + method);
     },
   });
-  const browser = await harnessModule.launchWithHarness(harness, () => harnessModule.playwright().webkit.launch({headless: true}));
   try {
-    const page = await browser.newPage({viewport: {width: 1440, height: 900}});
-    const errors = [];
-    page.on('pageerror', e => errors.push(e.message));
-    await page.goto(harness.url);
-    await page.locator('#pinkie-study-desk').waitFor();
-    await page.evaluate(() => __pinkieStudyDesk.go('gamepractice'));
-    await page.locator('.pkp-home .pkb-kicker').first().waitFor();
-    await page.locator('.pkp-home .pkp-empty').first().waitFor();
-    await fn(page);
-    assert.deepEqual(errors, []);
-  } finally { try { await browser.close(); } finally { await harness.close(); } }
+    browser = await harnessModule.launchWithHarness(harness, () => harnessModule.playwright().webkit.launch({headless: true}));
+  } catch (error) {
+    harness = null; // launchWithHarness 失败时已自己关掉 harness
+    throw error;
+  }
+  page = await browser.newPage({viewport: {width: 1440, height: 900}});
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(harness.url);
+  await page.locator('#pinkie-study-desk').waitFor();
+  await page.evaluate(() => __pinkieStudyDesk.go('gamepractice'));
+  await page.locator('.pkp-home .pkb-kicker').first().waitFor();
+  await page.locator('.pkp-home .pkp-empty').first().waitFor();
+});
+
+// 两个测试共用同一页面：日间只读在前，夜间切主题在后；pageerror 按页累计，后面的测试连同前面的一起检查。
+async function onPractice(fn) {
+  await fn(page);
+  assert.deepEqual(errors, []);
 }
 
 function measure(page) {
@@ -57,7 +71,7 @@ function measure(page) {
 }
 
 test('L6 WebKit：日间刷题首页 kicker 与实际底色对比度 ≥4.5:1', needsControlUI, async () => {
-  await openPractice(async page => {
+  await onPractice(async page => {
     assert.notEqual(await page.locator('#pinkie-study-desk').getAttribute('data-theme'), 'night');
     const m = await measure(page);
     assert.ok(m.ratio >= 4.5, `日间对比度 ${m.ratio.toFixed(2)}:1（字 ${m.color}，底 rgb(${m.bg})）`);
@@ -65,7 +79,7 @@ test('L6 WebKit：日间刷题首页 kicker 与实际底色对比度 ≥4.5:1', 
 });
 
 test('L6 WebKit：夜间 kicker 字色不变，仍是 --pkg-ink-3 夜间值 #8E8294', needsControlUI, async () => {
-  await openPractice(async page => {
+  await onPractice(async page => {
     await page.evaluate(() => document.documentElement.setAttribute('data-theme-mode', 'dark'));
     await page.waitForFunction(() => document.querySelector('#pinkie-study-desk')?.getAttribute('data-theme') === 'night');
     const m = await measure(page);

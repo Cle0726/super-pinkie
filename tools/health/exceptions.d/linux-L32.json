@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 2, "reason": "Metre 时间线缩略条（界面吸收计划 T3 #4，#96 L32）：laolao-metre-minimap.css / .js 只能在头片段登记加载（?v=@hash），各一行，放在 laolao-metre-files.js 后面；功能本身全在这两个新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 2, "reason": "Metre 时间线缩略条（T3 #4，#96 L32）：laolao-metre-minimap.css / .js 在 metre 区域 files 里各登记一行（ui-region-ownership 要求头片段加载的每个文件都归属一个区域）；没有新区域、新根选择器或跨区域 CSS 放行。"}
+]

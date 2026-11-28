@@ -1,0 +1,14 @@
+[
+  {
+    "file": "ui/injections/laolao-head.fragment.html",
+    "metric": "lines",
+    "add": 1,
+    "reason": "I5 工具箱「截图」新文件 laolao-composer-shot.js 只能在这里登记加载（?v=@hash），功能全在新文件里。"
+  },
+  {
+    "file": "ui/injections/regions.json",
+    "metric": "lines",
+    "add": 1,
+    "reason": "composer 区域登记新文件 laolao-composer-shot.js 一行，没有新区域、新根选择器或跨区域放行。"
+  }
+]

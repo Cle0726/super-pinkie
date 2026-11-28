@@ -76,6 +76,8 @@ function Apply-UISkin {
         Write-Utf8NoBom $serviceWorker $worker
         # 文件没变（ETag 相同）就不再往 Service Worker 缓存里重写一遍。
         python (Join-Path $RepoRoot 'tools\ui-parity\sw_cache.py') $serviceWorker
+        # Same as macOS (set -e there): a failed native call does not throw under Stop.
+        if ($LASTEXITCODE -ne 0) { throw "Service Worker ETag cache patch failed (sw_cache.py exit $LASTEXITCODE)" }
     }
     Write-Host "  patched shared UI: $UiRoot"
 }

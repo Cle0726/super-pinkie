@@ -364,8 +364,9 @@ class WindowsUpdater:
                     handle.write(chunk)
                     publish()
             publish(final=True)
-        if declared is not None and received != start + declared:
-            raise ValueError(f"update package download was cut short ({received} of {start + declared} bytes)")
+        expected = start + declared if declared is not None else total  # 206 无 Content-Length 时按 Content-Range 总长核对
+        if expected is not None and received != expected:
+            raise ValueError(f"update package download was cut short ({received} of {expected} bytes)")
         if received < 1024 * 1024:
             raise ValueError("update package is incomplete")
 

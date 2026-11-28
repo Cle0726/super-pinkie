@@ -35,10 +35,13 @@ const state = () => {
   };
 };
 
-async function openMetre(browser, origin, width, theme) {
+async function openMetrePage(browser, origin, theme) {
   const opened = await openRealScenePage(browser, origin, 'metre-board', theme);
-  const {page} = opened;
-  await page.evaluate(() => window.__pinkieMetreBoard?.close?.());
+  await opened.page.evaluate(() => window.__pinkieMetreBoard?.close?.());
+  return opened;
+}
+
+async function fitWidth(page, width) {
   await page.setViewportSize({width, height: 800});
   // 保留死等：改窗口宽度后要等布局 / 媒体查询切换（宽屏侧栏 ↔ 抽屉）稳定下来，没有统一的可等状态。
   await page.waitForTimeout(400);
@@ -51,7 +54,20 @@ async function openMetre(browser, origin, width, theme) {
     await page.waitForTimeout(300);
   }
   await page.waitForSelector(FILTER, {timeout: 5_000});
-  return opened;
+}
+
+// 同一页面换宽度复用：每档宽度前后把筛选复位成「全部会话」、菜单关掉，上一档失败留下的状态不带进下一档。
+async function resetFilter(page) {
+  if (await page.evaluate(() => Boolean(document.querySelector('.pk-mw-filter-menu')))) {
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.pk-mw-filter-menu'), null, {timeout: 3_000});
+  }
+  if (await page.evaluate(() => document.documentElement.hasAttribute('data-pk-mw-filter'))) {
+    await page.click(FILTER);
+    await page.waitForSelector('.pk-mw-filter-menu', {timeout: 3_000});
+    await page.locator('.pk-mw-filter-menu__item[data-filter=""]').click();
+    await page.waitForFunction(() => !document.documentElement.hasAttribute('data-pk-mw-filter') && !document.querySelector('.pk-mw-filter-menu'), null, {timeout: 3_000});
+  }
 }
 
 // 侧栏各键图标（::before 的 mask；模式切换键的箭头 mask 在元素自己身上）和「筛选」键上的文字
@@ -87,12 +103,20 @@ let sharedBrowser;
 // 安装（拷上游包 + bundle install/stamp/check）也整个文件只做一次：CI 上一次约 25s，原来两个顶层测试各做一遍。
 // 装不上时记住那次失败，两个测试都重抛（不改成跳过）。
 let sharedInstall;
+// 假服务也整个文件只起一个（原来两个顶层测试各起一个）：两个测试都不写会话偏好（筛选只挂 <html> 属性，Esc 不落盘），
+// 共用不串状态。起不来时两个测试收到同一次失败，不改成跳过。
+let sharedServer;
 after(async () => {
   try {
     const browser = sharedBrowser && await sharedBrowser.catch(() => null);
     if (browser) await browser.close();
   } finally {
-    sharedInstall?.installed?.cleanup();
+    try {
+      const server = sharedServer && await sharedServer.catch(() => null);
+      if (server) await server.close();
+    } finally {
+      sharedInstall?.installed?.cleanup();
+    }
   }
 });
 function browserForFile() {
@@ -107,148 +131,156 @@ function installForFile() {
   if (sharedInstall.error) throw sharedInstall.error;
   return sharedInstall.installed;
 }
-// 假服务仍是每个顶层测试各起一个：它在 runDir 下落盘会话偏好（pinkie.session.prefs.set），
-// 每个测试给一个新的 state 子目录，两个测试互相看不到对方写的偏好；子目录随安装目录一起删。
-async function serverForTest(t) {
-  const installed = installForFile();
-  const runDir = fs.mkdtempSync(path.join(installed.runDir, 'state-'));
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir});
-  t.after(() => server.close());
-  return server;
+// 假服务在 runDir 下的 state 子目录落盘，子目录随安装目录一起删；关闭由上面的文件级 after 收拾。
+function serverForFile() {
+  sharedServer ??= (async () => {
+    const installed = installForFile();
+    const runDir = fs.mkdtempSync(path.join(installed.runDir, 'state-'));
+    return startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir});
+  })();
+  return sharedServer;
 }
 
 test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下态有底色、0 条有空态、菜单盖满列表、图标固定（三宽 × 日夜）', async (t) => {
-  // 假服务的关闭在 serverForTest 里起好就登记；浏览器起不来时假服务照样关，node 能退出。
-  // 浏览器和安装目录是全文件共用的，由文件级 after 收拾。
-  const server = await serverForTest(t);
+  // 假服务、浏览器和安装目录都是全文件共用的，由文件级 after 收拾（先于启动登记）。
+  const server = await serverForFile();
   const browser = await browserForFile();
 
+  // CI 提速：每个 theme 只开一次 metre-board 页面，依次测 1440 / 1024 / 820；每档宽度前后复位筛选。
   for (const theme of ['day', 'night']) {
-    for (const width of [1440, 1024, 820]) {
-      await t.test(`${width} ${theme}`, async () => {
-        const {context, page, pageErrors} = await openMetre(browser, server.origin, width, theme);
-        try {
-          const drawer = width < 1100;
-          const s0 = await page.evaluate(state);
-          assert.equal(s0.sideLeft, 0, '前提：侧栏在窗口里');
-          if (drawer) assert.ok(s0.drawerOpen, '前提：抽屉开着');
-          assert.ok(s0.rows > 0, '前提：有会话行');
-          const idle = await restingBackground(page, width);
-          assert.match(idle, TRANSPARENT, `没在筛选时「筛选」键是透明底（实际 ${idle}）`);
-          const k0 = await page.evaluate(keys);
-          assert.ok(k0.filter && k0.filter !== 'none', `「筛选」键有图标（实际 ${k0.filter}）`);
-          for (const [name, m] of Object.entries(k0.others)) assert.notEqual(k0.filter, m, `「筛选」键图标和${name}不同`);
+    await t.test(theme, async (tt) => {
+      const {context, page, pageErrors} = await openMetrePage(browser, server.origin, theme);
+      try {
+        for (const width of [1440, 1024, 820]) {
+          await tt.test(`${width} ${theme}`, async () => {
+            await fitWidth(page, width);
+            await resetFilter(page);
+            try {
+              const drawer = width < 1100;
+              const s0 = await page.evaluate(state);
+              assert.equal(s0.sideLeft, 0, '前提：侧栏在窗口里');
+              if (drawer) assert.ok(s0.drawerOpen, '前提：抽屉开着');
+              assert.ok(s0.rows > 0, '前提：有会话行');
+              const idle = await restingBackground(page, width);
+              assert.match(idle, TRANSPARENT, `没在筛选时「筛选」键是透明底（实际 ${idle}）`);
+              const k0 = await page.evaluate(keys);
+              assert.ok(k0.filter && k0.filter !== 'none', `「筛选」键有图标（实际 ${k0.filter}）`);
+              for (const [name, m] of Object.entries(k0.others)) assert.notEqual(k0.filter, m, `「筛选」键图标和${name}不同`);
 
-          // 第 1 条：鼠标点菜单项
-          await page.click(FILTER);
-          await page.waitForSelector('.pk-mw-filter-menu', {timeout: 3_000});
-          const geo = await page.evaluate((sel) => {
-            const menu = document.querySelector('.pk-mw-filter-menu');
-            const b = document.querySelector(sel).getBoundingClientRect();
-            const m = menu.getBoundingClientRect();
-            return {inNav: Boolean(menu.closest('.shell-nav')), dx: Math.round(m.left - b.left), dy: Math.round(m.top - b.bottom), right: Math.round(m.right), bottom: Math.round(m.bottom)};
-          }, FILTER);
-          assert.ok(geo.inNav, '菜单挂在 .shell-nav 里（不在 body 上）');
-          assert.ok(Math.abs(geo.dx) <= 2 && Math.abs(geo.dy - 4) <= 2, `菜单在按键正下方：${JSON.stringify(geo)}`);
-          assert.ok(geo.right <= width && geo.bottom <= 800, `菜单在窗口内：${JSON.stringify(geo)}`);
-          // 第 4 条：菜单盖满侧栏列表那一栏，右边不露出列表残片
-          const cover = await page.evaluate((sel) => {
-            const menu = document.querySelector('.pk-mw-filter-menu');
-            const b = document.querySelector(sel).getBoundingClientRect();
-            const m = menu.getBoundingClientRect();
-            const bg = getComputedStyle(menu).backgroundColor;
-            const alpha = /rgba\([^)]*,\s*([\d.]+)\)/.exec(bg)?.[1];
-            const leak = [];
-            for (const e of document.querySelectorAll('#laolao-session-manager *')) {
-              if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
-              const cs = getComputedStyle(e);
-              if (cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
-              for (const r of e.getClientRects()) {
-                if (r.width < 1 || r.bottom <= m.top + 1 || r.top >= m.bottom - 1) continue;
-                if (r.right > m.right + 0.5) leak.push(`${e.textContent.trim().slice(0, 12)}@${Math.round(r.left)}..${Math.round(r.right)}`);
-              }
+              // 第 1 条：鼠标点菜单项
+              await page.click(FILTER);
+              await page.waitForSelector('.pk-mw-filter-menu', {timeout: 3_000});
+              const geo = await page.evaluate((sel) => {
+                const menu = document.querySelector('.pk-mw-filter-menu');
+                const b = document.querySelector(sel).getBoundingClientRect();
+                const m = menu.getBoundingClientRect();
+                return {inNav: Boolean(menu.closest('.shell-nav')), dx: Math.round(m.left - b.left), dy: Math.round(m.top - b.bottom), right: Math.round(m.right), bottom: Math.round(m.bottom)};
+              }, FILTER);
+              assert.ok(geo.inNav, '菜单挂在 .shell-nav 里（不在 body 上）');
+              assert.ok(Math.abs(geo.dx) <= 2 && Math.abs(geo.dy - 4) <= 2, `菜单在按键正下方：${JSON.stringify(geo)}`);
+              assert.ok(geo.right <= width && geo.bottom <= 800, `菜单在窗口内：${JSON.stringify(geo)}`);
+              // 第 4 条：菜单盖满侧栏列表那一栏，右边不露出列表残片
+              const cover = await page.evaluate((sel) => {
+                const menu = document.querySelector('.pk-mw-filter-menu');
+                const b = document.querySelector(sel).getBoundingClientRect();
+                const m = menu.getBoundingClientRect();
+                const bg = getComputedStyle(menu).backgroundColor;
+                const alpha = /rgba\([^)]*,\s*([\d.]+)\)/.exec(bg)?.[1];
+                const leak = [];
+                for (const e of document.querySelectorAll('#laolao-session-manager *')) {
+                  if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+                  const cs = getComputedStyle(e);
+                  if (cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
+                  for (const r of e.getClientRects()) {
+                    if (r.width < 1 || r.bottom <= m.top + 1 || r.top >= m.bottom - 1) continue;
+                    if (r.right > m.right + 0.5) leak.push(`${e.textContent.trim().slice(0, 12)}@${Math.round(r.left)}..${Math.round(r.right)}`);
+                  }
+                }
+                return {keyL: Math.round(b.left), keyR: Math.round(b.right), menuL: Math.round(m.left), menuR: Math.round(m.right), bg, opaque: alpha == null || Number(alpha) === 1, leak: leak.slice(0, 6)};
+              }, FILTER);
+              t.diagnostic(`${width} ${theme} 菜单 ${JSON.stringify(cover)}`);
+              assert.ok(cover.menuL <= cover.keyL + 1 && cover.menuR >= cover.keyR - 1, `菜单和按键等宽、盖满侧栏列表那一栏：${JSON.stringify(cover)}`);
+              assert.ok(cover.opaque, `菜单底不透明（实际 ${cover.bg}）`);
+              assert.deepEqual(cover.leak, [], '菜单上下范围内没有会话列表的字露在菜单右边');
+              // 第 5 条：菜单打开时（指针还停在键上）图标和文字不跳
+              const k1 = await page.evaluate(keys);
+              assert.equal(k1.filter, k0.filter, '菜单打开时「筛选」键图标不变');
+              assert.equal(k1.label, k0.label, '菜单打开时「筛选」键文字不变');
+              await page.locator('.pk-mw-filter-menu__item[data-filter="unread"]').click();
+              // 保留死等：这里要证明「鼠标选项后抽屉没被收掉」（不该发生的事），得留一段时间窗让错误的收起有机会发生。
+              await page.waitForTimeout(400);
+              const s1 = await page.evaluate(state);
+              assert.equal(s1.filter, 'unread', '选中了「未读」');
+              assert.equal(s1.menu, false, '菜单收起');
+              assert.equal(s1.sideLeft, 0, `鼠标选项后侧栏仍在 x=0（实际 ${s1.sideLeft}）`);
+              if (drawer) assert.ok(s1.drawerOpen, '鼠标选项后抽屉仍开着（shell--nav-drawer-open 还在）');
+
+              // 第 2 条：按下态底色
+              const pressed = await restingBackground(page, width);
+              t.diagnostic(`${width} ${theme} 按下态底色 ${pressed}`);
+              assert.doesNotMatch(pressed, TRANSPARENT, `按下态有底色（实际 ${pressed}）`);
+              const k2 = await page.evaluate(keys);
+              assert.equal(k2.filter, k0.filter, '筛选=未读时「筛选」键图标不变');
+              assert.equal(k2.label, '筛选 · 未读');
+              await page.click(FILTER);
+              await page.waitForSelector('.pk-mw-filter-menu', {timeout: 3_000});
+              const k3 = await page.evaluate(keys);
+              assert.equal(k3.filter, k0.filter, '未读时再打开菜单，图标不变');
+              assert.equal(k3.label, k2.label, '未读时再打开菜单，文字不变');
+              await page.keyboard.press('Escape');
+              // 等菜单节点被删掉（laolao-metre-workspace.js 的 closeMenu 同步 remove）；等不到不在这里报错，交给下面原有断言。
+              await page.waitForFunction(() => !document.querySelector('.pk-mw-filter-menu'), null, {timeout: 3_000}).catch(() => {});
+              assert.equal(await page.evaluate(() => Boolean(document.querySelector('.pk-mw-filter-menu'))), false, 'Esc 关菜单');
+              assert.equal((await page.evaluate(keys)).label, k2.label, '关菜单后文字不变');
+
+              // 第 3 条：0 条空态
+              assert.equal(s1.rows, 0, '预置会话没有未读，筛完 0 行');
+              const empty = await page.evaluate(() => {
+                const box = document.querySelector('#laolao-session-manager .pk-mw-filter-empty');
+                if (!box || !box.getClientRects().length) return null;
+                const side = document.querySelector('aside.sidebar').getBoundingClientRect();
+                const r = box.getBoundingClientRect();
+                const text = box.querySelector('.pk-mw-filter-empty__text');
+                const all = box.querySelector('.pk-mw-filter-empty__all');
+                const ar = all.getBoundingClientRect();
+                const trunc = (n) => n.scrollWidth > n.clientWidth + 1;
+                // color-mix 的计算值是 color(srgb r g b [/ a])，通道 0–1；rgb()/rgba() 是 0–255
+                const rgb = (c) => { const v = (c.match(/[\d.]+/g) || []).map(Number); return c.startsWith('color(srgb') ? v.map((x, i) => (i < 3 ? x * 255 : x)) : v; };
+                const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+                const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+                let bgc = null;
+                for (let n = text; n && !bgc; n = n.parentElement) { const c = rgb(getComputedStyle(n).backgroundColor); if (c.length >= 3 && (c.length < 4 || c[3] === 1)) bgc = c; }
+                const fg = rgb(getComputedStyle(text).color);
+                const [hi, lo] = [lum(fg), lum(bgc || [255, 255, 255])].sort((a, b) => b - a);
+                const ratio = Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+                return {fg: getComputedStyle(text).color, bg: bgc ? `rgb(${bgc.slice(0, 3).join(', ')})` : null, ratio, text: text.textContent, all: all.textContent, inside: r.left >= side.left - 1 && r.right <= side.right + 1 && ar.right <= side.right + 1, trunc: trunc(text) || trunc(all), h: Math.round(r.height)};
+              });
+              assert.ok(empty, '0 条时有空态提示');
+              assert.equal(empty.text, '没有未读的会话');
+              assert.equal(empty.all, '显示全部');
+              assert.ok(empty.inside && !empty.trunc, `空态不截断、不出侧栏：${JSON.stringify(empty)}`);
+              t.diagnostic(`${width} ${theme} 空态正文 ${empty.fg} 底 ${empty.bg} 对比度 ${empty.ratio}:1`);
+              assert.ok(empty.bg && empty.ratio >= 4.5, `空态正文对比度 ≥ 4.5:1：${JSON.stringify(empty)}`);
+
+              await page.click('#laolao-session-manager .pk-mw-filter-empty__all');
+              // 保留死等：同上，要证明点「显示全部」不收抽屉（不该发生的事），留时间窗；列表重画也在这段里完成。
+              await page.waitForTimeout(400);
+              const s2 = await page.evaluate(state);
+              assert.equal(s2.filter, null, '「显示全部」清掉筛选');
+              assert.ok(s2.rows > 0, '列表回来了');
+              assert.equal(s2.sideLeft, 0, '点「显示全部」不收抽屉');
+              if (drawer) assert.ok(s2.drawerOpen);
+              assert.equal(await page.evaluate(() => Boolean(document.querySelector('#laolao-session-manager .pk-mw-filter-empty')?.getClientRects().length)), false, '有会话时不显示空态');
+              assert.deepEqual(pageErrors, [], '页面没有报错');
+            } finally {
+              await resetFilter(page).catch(() => {});
             }
-            return {keyL: Math.round(b.left), keyR: Math.round(b.right), menuL: Math.round(m.left), menuR: Math.round(m.right), bg, opaque: alpha == null || Number(alpha) === 1, leak: leak.slice(0, 6)};
-          }, FILTER);
-          t.diagnostic(`${width} ${theme} 菜单 ${JSON.stringify(cover)}`);
-          assert.ok(cover.menuL <= cover.keyL + 1 && cover.menuR >= cover.keyR - 1, `菜单和按键等宽、盖满侧栏列表那一栏：${JSON.stringify(cover)}`);
-          assert.ok(cover.opaque, `菜单底不透明（实际 ${cover.bg}）`);
-          assert.deepEqual(cover.leak, [], '菜单上下范围内没有会话列表的字露在菜单右边');
-          // 第 5 条：菜单打开时（指针还停在键上）图标和文字不跳
-          const k1 = await page.evaluate(keys);
-          assert.equal(k1.filter, k0.filter, '菜单打开时「筛选」键图标不变');
-          assert.equal(k1.label, k0.label, '菜单打开时「筛选」键文字不变');
-          await page.locator('.pk-mw-filter-menu__item[data-filter="unread"]').click();
-          // 保留死等：这里要证明「鼠标选项后抽屉没被收掉」（不该发生的事），得留一段时间窗让错误的收起有机会发生。
-          await page.waitForTimeout(400);
-          const s1 = await page.evaluate(state);
-          assert.equal(s1.filter, 'unread', '选中了「未读」');
-          assert.equal(s1.menu, false, '菜单收起');
-          assert.equal(s1.sideLeft, 0, `鼠标选项后侧栏仍在 x=0（实际 ${s1.sideLeft}）`);
-          if (drawer) assert.ok(s1.drawerOpen, '鼠标选项后抽屉仍开着（shell--nav-drawer-open 还在）');
-
-          // 第 2 条：按下态底色
-          const pressed = await restingBackground(page, width);
-          t.diagnostic(`${width} ${theme} 按下态底色 ${pressed}`);
-          assert.doesNotMatch(pressed, TRANSPARENT, `按下态有底色（实际 ${pressed}）`);
-          const k2 = await page.evaluate(keys);
-          assert.equal(k2.filter, k0.filter, '筛选=未读时「筛选」键图标不变');
-          assert.equal(k2.label, '筛选 · 未读');
-          await page.click(FILTER);
-          await page.waitForSelector('.pk-mw-filter-menu', {timeout: 3_000});
-          const k3 = await page.evaluate(keys);
-          assert.equal(k3.filter, k0.filter, '未读时再打开菜单，图标不变');
-          assert.equal(k3.label, k2.label, '未读时再打开菜单，文字不变');
-          await page.keyboard.press('Escape');
-          // 等菜单节点被删掉（laolao-metre-workspace.js 的 closeMenu 同步 remove）；等不到不在这里报错，交给下面原有断言。
-          await page.waitForFunction(() => !document.querySelector('.pk-mw-filter-menu'), null, {timeout: 3_000}).catch(() => {});
-          assert.equal(await page.evaluate(() => Boolean(document.querySelector('.pk-mw-filter-menu'))), false, 'Esc 关菜单');
-          assert.equal((await page.evaluate(keys)).label, k2.label, '关菜单后文字不变');
-
-          // 第 3 条：0 条空态
-          assert.equal(s1.rows, 0, '预置会话没有未读，筛完 0 行');
-          const empty = await page.evaluate(() => {
-            const box = document.querySelector('#laolao-session-manager .pk-mw-filter-empty');
-            if (!box || !box.getClientRects().length) return null;
-            const side = document.querySelector('aside.sidebar').getBoundingClientRect();
-            const r = box.getBoundingClientRect();
-            const text = box.querySelector('.pk-mw-filter-empty__text');
-            const all = box.querySelector('.pk-mw-filter-empty__all');
-            const ar = all.getBoundingClientRect();
-            const trunc = (n) => n.scrollWidth > n.clientWidth + 1;
-            // color-mix 的计算值是 color(srgb r g b [/ a])，通道 0–1；rgb()/rgba() 是 0–255
-            const rgb = (c) => { const v = (c.match(/[\d.]+/g) || []).map(Number); return c.startsWith('color(srgb') ? v.map((x, i) => (i < 3 ? x * 255 : x)) : v; };
-            const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-            const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-            let bgc = null;
-            for (let n = text; n && !bgc; n = n.parentElement) { const c = rgb(getComputedStyle(n).backgroundColor); if (c.length >= 3 && (c.length < 4 || c[3] === 1)) bgc = c; }
-            const fg = rgb(getComputedStyle(text).color);
-            const [hi, lo] = [lum(fg), lum(bgc || [255, 255, 255])].sort((a, b) => b - a);
-            const ratio = Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
-            return {fg: getComputedStyle(text).color, bg: bgc ? `rgb(${bgc.slice(0, 3).join(', ')})` : null, ratio, text: text.textContent, all: all.textContent, inside: r.left >= side.left - 1 && r.right <= side.right + 1 && ar.right <= side.right + 1, trunc: trunc(text) || trunc(all), h: Math.round(r.height)};
           });
-          assert.ok(empty, '0 条时有空态提示');
-          assert.equal(empty.text, '没有未读的会话');
-          assert.equal(empty.all, '显示全部');
-          assert.ok(empty.inside && !empty.trunc, `空态不截断、不出侧栏：${JSON.stringify(empty)}`);
-          t.diagnostic(`${width} ${theme} 空态正文 ${empty.fg} 底 ${empty.bg} 对比度 ${empty.ratio}:1`);
-          assert.ok(empty.bg && empty.ratio >= 4.5, `空态正文对比度 ≥ 4.5:1：${JSON.stringify(empty)}`);
-
-          await page.click('#laolao-session-manager .pk-mw-filter-empty__all');
-          // 保留死等：同上，要证明点「显示全部」不收抽屉（不该发生的事），留时间窗；列表重画也在这段里完成。
-          await page.waitForTimeout(400);
-          const s2 = await page.evaluate(state);
-          assert.equal(s2.filter, null, '「显示全部」清掉筛选');
-          assert.ok(s2.rows > 0, '列表回来了');
-          assert.equal(s2.sideLeft, 0, '点「显示全部」不收抽屉');
-          if (drawer) assert.ok(s2.drawerOpen);
-          assert.equal(await page.evaluate(() => Boolean(document.querySelector('#laolao-session-manager .pk-mw-filter-empty')?.getClientRects().length)), false, '有会话时不显示空态');
-          assert.deepEqual(pageErrors, [], '页面没有报错');
-        } finally {
-          await context.close();
         }
-      });
-    }
+      } finally {
+        await context.close();
+      }
+    });
   }
 });
 
@@ -296,8 +328,8 @@ const addFakeStop = () => {
 const removeFakeStop = () => document.querySelector('.pk-test-fake-stop')?.remove();
 
 test('M5 b6 real page: K2 Esc——关着的上下文查看器不挡 Esc；两下 Esc 清空、Esc 点停止键；查看器开着时让路（1440 日 / 820 夜）', async (t) => {
-  // 浏览器和安装目录全文件共用（文件级 after 收拾）；假服务本测试自己一个，起好就登记关闭。
-  const server = await serverForTest(t);
+  // 假服务、浏览器和安装目录全文件共用（文件级 after 收拾）。
+  const server = await serverForFile();
   const browser = await browserForFile();
 
   for (const [width, theme] of [[1440, 'day'], [820, 'night']]) {

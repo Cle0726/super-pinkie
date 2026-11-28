@@ -106,9 +106,15 @@ async function openCron(browser, origin, theme) {
   const opened = await openRealScenePage(browser, origin, 'metre-board', theme, {initScript, timezoneId: 'Asia/Shanghai'});
   const {page} = opened;
   await page.setViewportSize({width: 1440, height: 900});
-  const u = new URL(page.url()); u.pathname = '/cron';
-  await page.goto(u.href);
-  await page.waitForFunction(() => document.querySelectorAll('openclaw-cron-page .cron-job-actions .btn').length >= 3, null, {timeout: 20_000});
+  // 站内路由切到 /cron，不再二次整页冷加载（和 metre-usage-missing-sessions-real 同一条路）
+  await page.evaluate(() => {
+    const shell = document.querySelector('openclaw-app-shell');
+    const nav = [shell, shell?.context].find((o) => typeof o?.navigate === 'function');
+    if (nav) nav.navigate('cron');
+    else { history.pushState({}, '', '/cron'); dispatchEvent(new PopStateEvent('popstate')); }
+  });
+  await page.waitForFunction(() => location.pathname === '/cron'
+    && document.querySelectorAll('openclaw-cron-page .cron-job-actions .btn').length >= 3, null, {timeout: 20_000});
   await page.mouse.move(1, 899);   // 指针不在任何键上，量的是平时的边框
   await page.waitForTimeout(600);   // Metre 皮肤的颜色过渡
   return opened;

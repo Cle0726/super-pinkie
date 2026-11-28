@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,58 @@ from unittest import mock
 from app import windows_native
 from app.windows_native import (DEFAULT_HOTKEY, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, WindowsNative,
                                 edge_export_command, parse_accelerator, safe_file_name)
+
+
+def finished_edge(fake_run):
+    """Popen stand-in for an Edge that writes its output and exits at once."""
+    def popen(command, **kwargs):
+        fake_run(command, **kwargs)
+        process = mock.MagicMock(pid=4321, returncode=0)
+        process.wait.return_value = 0
+        process.__enter__.return_value = process
+        return process
+    return popen
+
+
+class UnboundedWait(Exception):
+    """Stands for a wait that would never return on a real machine."""
+
+
+class HungEdge:
+    """Headless Edge that outlives the export timeout (an Edge helper holds on).
+
+    Every wait with a limit times out; a wait without one is the hang (B111).
+    """
+
+    pid = 4321
+    returncode = None
+
+    def __init__(self):
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def _limited(self, name, timeout):
+        self.calls.append((name, timeout))
+        if timeout is None:
+            raise UnboundedWait(f"{name}() without a timeout")
+        raise subprocess.TimeoutExpired("msedge", timeout)
+
+    def communicate(self, input=None, timeout=None):
+        return self._limited("communicate", timeout)
+
+    def wait(self, timeout=None):
+        return self._limited("wait", timeout)
+
+    def kill(self):
+        self.calls.append(("kill", None))
+
+    def poll(self):
+        return None
 
 
 class FakeWindow:
@@ -262,7 +315,7 @@ class WindowsNativeTests(unittest.TestCase):
             Path(target).write_bytes(b"%PDF-1.4")
 
         with mock.patch.object(windows_native, "find_edge", return_value=Path("edge.exe")), \
-                mock.patch.object(windows_native.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(windows_native.subprocess, "Popen", side_effect=finished_edge(fake_run)), \
                 mock.patch.dict(os.environ, {"PINKIE_EXPORT_DIR": str(out_dir)}):
             result = self.native.handle({"type": "exportPDF", "html": "<p>x</p>", "fileName": "会话-20261111"})
         self.assertTrue(result["ok"], result)
@@ -290,13 +343,64 @@ class WindowsNativeTests(unittest.TestCase):
 
         cases = [([1], {}, "900,1200"), ("wide", "tall", "900,1200"), (10 ** 9, 10 ** 9, "2400,16000"), (900, 3000, "900,3000")]
         with mock.patch.object(windows_native, "find_edge", return_value=Path("edge.exe")), \
-                mock.patch.object(windows_native.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(windows_native.subprocess, "Popen", side_effect=finished_edge(fake_run)), \
                 mock.patch.dict(os.environ, {"PINKIE_EXPORT_DIR": str(out_dir)}):
             for index, (width, height, _) in enumerate(cases):
                 result = self.native.handle({"type": "exportImage", "html": "<p>x</p>", "fileName": f"s{index}",
                                              "width": width, "height": height})
                 self.assertTrue(result["ok"], (width, height, result))
         self.assertEqual(sizes, ["--window-size=" + expected for _, _, expected in cases])
+
+    def _export_with_hung_edge(self, kill=None):
+        out_dir = Path(self.tmp.name) / "hung"
+        out_dir.mkdir(exist_ok=True)
+        process = HungEdge()
+        with mock.patch.object(windows_native, "find_edge", return_value=Path("edge.exe")), \
+                mock.patch.object(windows_native.subprocess, "Popen", return_value=process), \
+                mock.patch.object(windows_native, "_taskkill", side_effect=kill, create=True) as tree, \
+                mock.patch.dict(os.environ, {"PINKIE_EXPORT_DIR": str(out_dir)}):
+            result = self.native.handle({"type": "exportPDF", "html": "<p>x</p>", "fileName": "hung"})
+        return result, process, tree, out_dir
+
+    def assert_edge_ended_within_limits(self, process, tree):
+        self.assertEqual(process.calls[0], ("wait", windows_native.EXPORT_TIMEOUT_S))
+        # taskkill /T ends msedge.exe and the helpers it started.
+        tree.assert_called_once_with(process.pid, 5)
+        self.assertIn(("kill", None), process.calls)
+        waits = [timeout for name, timeout in process.calls if name in ("communicate", "wait")]
+        self.assertNotIn(None, waits, process.calls)
+
+    def test_export_timeout_ends_edge_and_returns_b111(self):
+        # B111: a timed-out export used to wait with no limit after killing msedge.exe
+        result, process, tree, out_dir = self._export_with_hung_edge()
+        self.assertEqual(result, {"ok": False, "error": f"PDF导出超过 {windows_native.EXPORT_TIMEOUT_S} 秒没完成，已停止"})
+        self.assert_edge_ended_within_limits(process, tree)
+        self.assertEqual(list(out_dir.iterdir()), [])
+
+    def test_export_timeout_returns_even_if_taskkill_fails_b111(self):
+        result, process, tree, _ = self._export_with_hung_edge(kill=OSError("no taskkill"))
+        self.assertFalse(result["ok"])
+        self.assertIn("秒没完成", result["error"])
+        self.assert_edge_ended_within_limits(process, tree)
+
+    def test_edge_output_is_not_piped_b111(self):
+        # Nothing reads Edge's output, so nothing may be left to wait on.
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(kwargs)
+            target = next(part.split("=", 1)[1] for part in command if part.startswith("--print-to-pdf="))
+            Path(target).write_bytes(b"%PDF-1.4")
+
+        out_dir = Path(self.tmp.name) / "pipes"
+        out_dir.mkdir()
+        with mock.patch.object(windows_native, "find_edge", return_value=Path("edge.exe")), \
+                mock.patch.object(windows_native.subprocess, "Popen", side_effect=finished_edge(fake_run)), \
+                mock.patch.dict(os.environ, {"PINKIE_EXPORT_DIR": str(out_dir)}):
+            self.assertTrue(self.native.handle({"type": "exportPDF", "html": "<p>x</p>", "fileName": "p"})["ok"])
+        self.assertEqual(len(calls), 1)
+        for stream in ("stdin", "stdout", "stderr"):
+            self.assertEqual(calls[0].get(stream), subprocess.DEVNULL, stream)
 
     def test_export_markdown_copies_assets(self):
         out_dir = Path(self.tmp.name) / "md"

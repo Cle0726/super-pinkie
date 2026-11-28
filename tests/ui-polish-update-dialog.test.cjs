@@ -5,9 +5,16 @@ let playwright;
 try { playwright = require(process.env.PINKIE_PLAYWRIGHT_PATH || 'playwright'); } catch {}
 const ui = path.join(__dirname, '../ui/injections');
 
+// 整个文件只冷启动 1 次浏览器；每个测试各开一个新页面（页面里的 window 状态互不相通），test.after 兜底关浏览器。
+let launching;
+const newPage = async () => (await (launching ??= playwright.chromium.launch({headless:true, channel:'chrome'}))).newPage({viewport:{width:900,height:840}});
+test.after(async () => {
+  const browser = await launching?.catch(() => null);
+  await browser?.close();
+});
+
 test('real progress, unknown total, background continuation and retry', {skip: !playwright, timeout: 30000}, async () => {
-  const browser = await playwright.chromium.launch({headless:true, channel:'chrome'});
-  const page = await browser.newPage({viewport:{width:900,height:840}});
+  const page = await newPage();
   try {
     await page.setContent('<!doctype html><html data-pinkie-platform="windows" data-laolao-mode="chat"><head></head><body><button id="origin">更新</button></body></html>');
     await page.addStyleTag({path:path.join(ui,'laolao-update-dialog.css')});
@@ -56,12 +63,11 @@ test('real progress, unknown total, background continuation and retry', {skip: !
       assert.equal(await page.locator('#pinkie-update-v2').count(),1, mode);
       await page.getByRole('button',{name:'关闭更新窗口'}).click();
     }
-  } finally { await browser.close(); }
+  } finally { await page.close(); }
 });
 
 test('Mac native bridge carries unknown-size progress, release notes and install response', {skip: !playwright, timeout: 30000}, async () => {
-  const browser = await playwright.chromium.launch({headless:true, channel:'chrome'});
-  const page = await browser.newPage({viewport:{width:900,height:840}});
+  const page = await newPage();
   try {
     await page.setContent('<!doctype html><html data-laolao-mode="project"><head></head><body></body></html>');
     await page.addStyleTag({path:path.join(ui,'laolao-update-dialog.css')});
@@ -87,5 +93,5 @@ test('Mac native bridge carries unknown-size progress, release notes and install
     await page.evaluate(id=>window.__pinkieUpdateResult(id,{started:false,message:'安装暂不可用'}),request.request);
     await page.getByRole('heading',{name:'这次没更新成功'}).waitFor();
     assert.equal(await page.getByText('安装暂不可用').isVisible(),true);
-  } finally { await browser.close(); }
+  } finally { await page.close(); }
 });

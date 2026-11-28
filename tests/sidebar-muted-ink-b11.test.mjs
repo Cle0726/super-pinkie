@@ -79,8 +79,12 @@ async function measure(p) {
   }, PARTS);
 }
 
-let shared;
-after(async () => { const b = await shared; await b?.close?.(); });
+let shared, sharedPage;
+after(async () => {
+  const b = await shared;
+  const p = await sharedPage?.catch(() => null);
+  try { await p?.close(); } finally { await b?.close?.(); }
+});
 async function start() {
   let lib;
   try { lib = playwright(); } catch { return {why: 'Playwright is not installed here'}; }
@@ -89,12 +93,17 @@ async function start() {
   }
   return {why: 'no Chromium browser here'};
 }
+// 文件级只开 1 页：每次量都 setContent 换整页，各测试之间只剩鼠标位置会带过去，进来先把鼠标挪到角落。
+const openPage = (b) => b.newPage({viewport: {width: 320, height: 240}});
 async function withPage(fn) {
   shared ??= start();
   const b = await shared;
   if (b.why) return b.why;
-  const p = await b.newPage({viewport: {width: 320, height: 240}});
-  try { await fn(p); } finally { await p.close(); }
+  sharedPage ??= openPage(b);
+  let p = await sharedPage;
+  if (p.isClosed()) { sharedPage = openPage(b); p = await sharedPage; }
+  await p.mouse.move(318, 238);
+  await fn(p);
   return '';
 }
 const need = (k) => (k === 'action' ? 3 : 4.5);   // open 是带字按钮，按正文 4.5

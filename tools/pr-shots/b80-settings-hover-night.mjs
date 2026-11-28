@@ -18,7 +18,10 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const read = (f) => fs.readFileSync(path.join(repoRoot, 'ui/injections', f), 'utf8');
 
 const PS = read('laolao-power-settings.css');
-const PS_OLD = PS.replace(/\/\* B80 夜：[^\n]*\*\/\n(?:[^\n]+\n)+?\n/, '');
+const RESET_DAY = '#pinkie-power .pinkie-power__reset { border: 1.5px solid #b0648c;';
+if (!PS.includes(RESET_DAY)) throw new Error('日间重置钮描边没有命中，脚本与 CSS 不同步');
+const PS_OLD = PS.replace(/\/\* B80 夜：[^\n]*\*\/\n(?:[^\n]+\n)+?\n/, '')
+  .replace(RESET_DAY, '#pinkie-power .pinkie-power__reset { border: 1.5px solid var(--pp-line);');
 if (PS_OLD === PS) throw new Error('改前替换没有命中，脚本与 CSS 不同步');
 
 const MEASURE = ([sel, kind]) => {

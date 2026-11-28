@@ -481,6 +481,31 @@ def gateway_closed_marker():
     return state_root() / "gateway-closed-by-app"
 
 
+def recover_stale_fanvpn_proxy(recover=None, log=None):
+    """Startup: undo the system proxy a killed FanVPN left behind (B109).
+
+    The exit hook only restores it when the process exits normally. Never raises.
+    """
+    log = log or append_log
+    try:
+        if recover is None:
+            try:
+                import fanvpn_bridge
+            except ImportError:  # imported as app.windows_desktop (tests)
+                from app import fanvpn_bridge
+            recover = fanvpn_bridge.recover_stale_system_proxy
+        result = recover()
+        if result in ("restored", "not-ours", "unconfirmed", "error"):
+            log("launcher", f"stale FanVPN system proxy check: {result}")
+        return result
+    except Exception as error:  # noqa: BLE001 - startup must go on
+        try:
+            log("launcher", f"stale FanVPN system proxy check failed: {error!r}")
+        except Exception:  # noqa: BLE001
+            pass
+        return "error"
+
+
 def kill_process_tree(pid, timeout=8):
     subprocess.run(
         ["taskkill", "/PID", str(pid), "/T", "/F"],
@@ -942,15 +967,12 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def enforce_guard_exit():
         guard_force_exit["active"] = True
         guard_stop.set()
-        for fn in (services.close, computer.close, gateway.close):
-            try:
-                fn()
-            except Exception:
-                pass
-        try:
-            window.destroy()
-        except Exception:
-            pass
+        run_exit_steps("guard exit", [
+            ("services close", services.close),
+            ("computer close", computer.close),
+            ("gateway close", gateway.close),
+            ("window destroy", window.destroy),
+        ])
         run_finish_exit(force_close_gateway=True)
 
     def monitor_guard():
@@ -971,6 +993,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # the gateway, adding ~5 s to every start on Windows. Run them beside
         # the gateway instead, like the Mac launcher does.
         threading.Thread(target=start_services, name="pinkie-services", daemon=True).start()
+        # B109: a FanVPN that was killed (taskkill /F, crash) left every browser on a dead local proxy.
+        threading.Thread(target=recover_stale_fanvpn_proxy, name="pinkie-fanvpn-recover", daemon=True).start()
         # Setup can fail or take a long time. The splash only leaves when the
         # gateway answers, so a setup error must not skip starting it.
         started = time.monotonic()
@@ -1084,6 +1108,20 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     window.events.maximized += maximized
     window.events.restored += restored
     window.events.closed += closed
+
+    def exit_fallback(reason):
+        # Tray 「退出碧琪」 when the window would not close: closed() never ran,
+        # so do its part here, then the same final exit as a normal close.
+        append_log("launcher", f"{reason}; exiting through finish_exit")
+        guard_stop.set()
+        for name, fn in (("services close", services.close), ("computer close", computer.close)):
+            try:
+                fn()
+            except Exception as error:  # noqa: BLE001 - the exit path must not raise
+                append_log("launcher", f"tray quit: {name} failed: {error!r}")
+        run_finish_exit(force_close_gateway=True)
+
+    bridge._exit_fallback = exit_fallback  # private: js_api must not expose it to the page
     # Start local services independently of WebView2. A broken/slow renderer
     # must never prevent the Gateway from being launched.
 
@@ -1100,6 +1138,24 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         storage_path=str(webview_storage),
     )
     run_finish_exit(force_close_gateway=guard_force_exit["active"])
+
+
+def run_exit_steps(context, steps, log=None):
+    """Run every (name, fn) exit step, even when an earlier one raised.
+
+    Exit paths must not raise, but a step that fails silently is how a gateway
+    ends up still holding its port, or the process never exits because a window
+    is left: each failure goes to the launcher log with its step name.
+    """
+    log = log or append_log
+    for name, fn in steps:
+        try:
+            fn()
+        except Exception as error:  # noqa: BLE001 - the exit path must not raise
+            try:
+                log("launcher", f"{context}: {name} failed: {error!r}")
+            except Exception:  # noqa: BLE001 - nor may its logging
+                pass
 
 
 def restore_fanvpn_on_exit(shutdown=None, log=None):

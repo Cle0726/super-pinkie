@@ -658,7 +658,7 @@ img.chat-avatar.assistant {
   margin-left: 0;
   padding: 0;
   flex: 0 0 32px;
-  border: 1px solid rgba(205, 85, 137, .30);
+  border: 1px solid color-mix(in srgb, var(--accent) 80%, var(--text-strong));
   border-radius: 12px;
   color: var(--mode-button-ink, #ad4f7f);
   background: linear-gradient(145deg, rgba(255,255,255,.86), rgba(252,226,241,.58));
@@ -5229,7 +5229,7 @@ html:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--st
   padding: 0 10px !important;
   margin: 0 49px 0 0 !important;
   border-radius: 999px !important;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 80%, var(--text-strong)) !important;
   background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, .92)) !important;
   color: color-mix(in srgb, var(--accent) 82%, #3a2a32) !important;
   font: 600 11.5px/1 -apple-system, "PingFang SC", sans-serif !important;
@@ -5250,7 +5250,6 @@ html:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--st
 }
 html:not([data-laolao-plain-composer]) .agent-chat__input button.laolao-followup-mode-btn[data-pinkie-followup-mode="queue"] {
   background: color-mix(in srgb, var(--accent) 20%, #fff) !important;
-  border-color: color-mix(in srgb, var(--accent) 48%, transparent) !important;
 }
 html:not([data-laolao-plain-composer]) .agent-chat__input button.laolao-followup-mode-btn::before {
   content: attr(data-pinkie-followup-label);
