@@ -23,6 +23,20 @@ const ORDER = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'];
 const LONG = 'feat/metre-ui4-r5-turn-readonly';
 const NAMES = ['README.md', 'package.json', 'src/app.js'];
 
+// 等右半边现场稳定下来（代替固定睡眠）：先等两帧让 ResizeObserver 回调排上去，
+// 再轮询直到连续两次快照一致；比固定 sleep 快，环境慢时也能多等几轮不误判。
+async function waitStable(page, snapshot, {timeout = 2000, interval = 30} = {}) {
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const start = Date.now();
+  let prev = JSON.stringify(await snapshot());
+  while (Date.now() - start < timeout) {
+    await new Promise((r) => setTimeout(r, interval));
+    const cur = JSON.stringify(await snapshot());
+    if (cur === prev) return;
+    prev = cur;
+  }
+}
+
 // 假网关只回 {}：这里在页里接住工作台要的 pinkie.fs.*（和 tools/pr-shots/254-wb-diff-tabs.mjs 同一套做法）。
 const initScript = new Function(`
 const NAMES = ${JSON.stringify(NAMES)};
@@ -85,7 +99,7 @@ async function openBench(page, branch, width) {
   await page.waitForFunction(() => { const r = document.querySelector('.pk-wb-status > .pk-wb-status__side:last-child');
     return r && ['ln', 'pr', 'ai'].every((k) => r.querySelector(`:scope > [data-opt="${k}"]`)); }, null, {timeout: 15_000});
   await page.evaluate(() => window.__pinkieWorkbench.renderStatus());
-  await page.waitForTimeout(300);
+  await waitStable(page, () => page.evaluate(inspect, ORDER), {timeout: 300});
 }
 
 // 同一页换分支名：页里的 pinkie.fs.git 读 localStorage.b50Branch，refresh() 重问一次 git、renderStatus() 重画状态栏（含 fitStatus），
@@ -139,7 +153,7 @@ async function checkResize(page, pageErrors, tt) {
     editor: Math.round(document.querySelector('.pk-wb-editor')?.getBoundingClientRect().width || 0)}));
   const settle = async (before) => {
     await page.waitForFunction((w) => Math.round(document.querySelector('.pk-wb-status').getBoundingClientRect().width) !== w, before, {timeout: 5_000}).catch(() => {});
-    await page.waitForTimeout(200);   // editorResize 是 ResizeObserver + 一帧
+    await waitStable(page, () => page.evaluate(inspect, ORDER), {timeout: 400});   // editorResize 是 ResizeObserver + 一帧，等右半边现场不再变
   };
   await switchBranch(page, 'main');
   const wide = await page.evaluate(inspect, ORDER);
@@ -204,19 +218,20 @@ test('工作台状态栏 real page: 放不下按顺序整项藏，不留半截�
     try {
       await openBench(page, LONG, 1920);
       await page.evaluate(() => { const ed = document.querySelector('.pk-wb-editor'); ed.style.maxWidth = '640px'; ed.style.minWidth = '0'; });
-      await page.waitForTimeout(400);
+      await page.waitForFunction(() => Math.round(document.querySelector('.pk-wb-editor').getBoundingClientRect().width) <= 660, null, {timeout: 5_000}).catch(() => {});
+      await waitStable(page, () => page.evaluate(inspect, ORDER), {timeout: 400});
       const edW = await page.evaluate(() => Math.round(document.querySelector('.pk-wb-editor').getBoundingClientRect().width));
       assert.ok(edW > 600 && edW <= 660, '编辑卡宽 ' + edW + 'px，不在 601–660，测不到闪现提示');
       const before = await page.evaluate(inspect, ORDER);
       checkFit(before, '闪现前');
       await page.evaluate(() => window.__pinkieWorkbench.statusFlash('运行命令已发送到终端'));
-      await page.waitForTimeout(150);
+      await waitStable(page, () => page.evaluate(inspect, ORDER), {timeout: 300});
       const flashW = await page.evaluate(() => Math.round(document.querySelector('.pk-wb-status__flash')?.getBoundingClientRect().width || 0));
       const during = await page.evaluate(inspect, ORDER);
       checkFit(during, '闪现中（提示宽 ' + flashW + 'px）');
       assert.ok(flashW > 0 && during.fitHidden.length > before.fitHidden.length, '闪现提示应把右半边挤窄、多藏一项。现场 ' + JSON.stringify({edW, flashW, before, during}));
       await page.waitForFunction(() => !document.querySelector('.pk-wb-status__flash')?.textContent, null, {timeout: 6_000});
-      await page.waitForTimeout(150);
+      await waitStable(page, () => page.evaluate(inspect, ORDER), {timeout: 300});
       const after = await page.evaluate(inspect, ORDER);
       checkFit(after, '闪现后');
       assert.deepEqual(after.fitHidden, before.fitHidden, '提示走后藏掉的项应回来。现场 ' + JSON.stringify({before, after}));
