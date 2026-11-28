@@ -592,7 +592,7 @@
       const st = routeData.stats[p.model] ||= {ok: 0, fail: 0, avgMs: 0};
       if (p.result.ok) { st.ok++; st.avgMs = st.avgMs ? Math.round(st.avgMs * 0.7 + p.result.ms * 0.3) : p.result.ms; st.cooling = 0; st.streak = 0; } else { st.fail++; st.lastError = p.result.error; st.streak = (st.streak || 0) + 1; }
     }
-    if (p.finished) { scanLive = null; void wb.rpc('pinkie.ai.route.get', {}, 20000).then(r => { routeData = r; wb.refreshPage('ai-route'); }); wb.toast('扫描完了：' + (p.ok || 0) + ' / ' + (p.total || 0) + ' 个模型可用。可以点「按测速自动排序」'); return; }
+    if (p.finished) { scanLive = null; void wb.rpc('pinkie.ai.route.get', {}, 20000).then(r => { routeData = r; wb.refreshPage('ai-route'); }).catch(() => { /* 读不到：留着扫描中累计的数据 */ }); wb.toast('扫描完了：' + (p.ok || 0) + ' / ' + (p.total || 0) + ' 个模型可用。可以点「按测速自动排序」'); return; }
     // 进度刷新节流，免得输入框跟着重绘
     if (!scanRefresh) scanRefresh = setTimeout(() => { scanRefresh = 0; if (!document.activeElement?.closest?.('.pk-wb-route__filter')) wb.refreshPage('ai-route'); }, 700);
   });

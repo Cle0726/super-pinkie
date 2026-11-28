@@ -30,14 +30,14 @@ html[data-laolao-startup-home="1"] .pinkie-session-decisions { display:none }
 .pinkie-session-parent { display:block;flex:0 0 auto;max-width:100%;padding:6px 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit;font-size:12px;opacity:.78 }
 openclaw-chat-pane[data-pinkie-session-readonly] :is(.agent-chat__input,.agent-chat__composer-shell,.chat-composer) { display:none !important }
 .pinkie-chat-session-menu { min-width:28px;min-height:28px;padding:0;border:0;border-radius:7px;background:transparent;color:inherit;font-size:18px;cursor:pointer }
-.pinkie-chat-session-menu:hover { background:color-mix(in srgb,currentColor 8%,transparent) }
+.pinkie-chat-session-menu:hover,.chat-group-footer .pinkie-fork-action:hover { background:color-mix(in srgb,currentColor 8%,transparent) }
 .chat-group.assistant .chat-bubble[data-message-id] { position:relative }
-.chat-group.assistant .pinkie-fork-action { position:absolute;top:2px;right:4px;min-height:28px;padding:0 7px;border-radius:6px;background:var(--pinkie-card-action-bg,#fffafb);color:var(--accent,#d9508d);font-size:12px;opacity:0;pointer-events:none }
+.chat-group.assistant .chat-bubble > .pinkie-fork-action { position:absolute;top:2px;right:4px;min-height:28px;padding:0 7px;border-radius:6px;background:var(--pinkie-card-action-bg,#fffafb);color:var(--accent,#d9508d);font-size:12px;opacity:0;pointer-events:none }
 html[data-pinkie-night] .chat-group.assistant .pinkie-fork-action { --pinkie-card-action-bg:#30232d }
-.chat-group.assistant .chat-bubble:is(:hover,:focus-within) .pinkie-fork-action { opacity:1;pointer-events:auto }
+.chat-group.assistant .chat-group-footer .pinkie-fork-action { order:1;position:static;min-height:26px;padding:0 7px;border-radius:6px;background:transparent;color:color-mix(in srgb,currentColor 94%,transparent);font-size:12px;white-space:nowrap;opacity:0;pointer-events:none } /* 非 Metre：键在回答下方操作栏，悬停整组显示，不压正文 */
+.chat-group.assistant .chat-bubble:is(:hover,:focus-within) > .pinkie-fork-action,.chat-group.assistant:is(:hover,:focus-within) .chat-group-footer .pinkie-fork-action { opacity:1;pointer-events:auto }
 .pinkie-chat-session-menu:focus-visible,.pinkie-fork-action:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:1px;opacity:1;pointer-events:auto }
-/* 展开后的子会话汇报：Markdown 排成段落、小标题、列表 */
-.pinkie-session-card__body--md { white-space:normal }
+.pinkie-session-card__body--md { white-space:normal } /* 展开后的子会话汇报：Markdown 排成段落、小标题、列表 */
 .pinkie-session-card__body--md > :first-child { margin-top:0 }
 .pinkie-session-card__body--md p, .pinkie-session-card__body--md ul, .pinkie-session-card__body--md ol { margin:0 0 6px }
 .pinkie-session-card__body--md ul, .pinkie-session-card__body--md ol { padding-left:1.3em }

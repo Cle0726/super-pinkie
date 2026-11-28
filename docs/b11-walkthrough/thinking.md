@@ -30,7 +30,29 @@ PW-RESOLVE playwright=/Users/Admin/pinkie-mac/pw/node_modules/playwright/package
 
 32 页都没有出错项、pageErrors 都是 0；截断（trunc）32 页都是 0。截图人工看过：`deepthink-menu-820-day`、`deepthink-menu-1440-night`、`chat-live-1440-day`、`picker-effort-1440-night`。
 
-这次没拍到运行状态条（`section.pk-run` 在 32 页里都不存在：假网关跑 narrated 时没出现它），运行状态条的走查留给下一批。
+上面 32 页里没有运行状态条（`section.pk-run`）：假网关跑 narrated 时不会出现它。运行状态条单独补拍，见下一节。
+
+### 运行状态条 `section.pk-run` 补拍
+
+- 怎么拍：`PINKIE_WALK_ONLY=run` 只跑这一组。场景用 `home-thinking`（sessionKey `agent:thinking:dashboard:harness0001`），注入 `scripts/chat-ui-harness/run-status-shots.js`，沿用它的 11 个状态（同一条 `pinkie:gateway-event` 事件流，加上 `__fakeRunStatus` / `__fakePlan`），逐个状态调用 `window.__runStatusShot(i)` 后截图。
+- 拍了多少：1440 / 820 / 480 三种宽度 × 日 / 夜 × 11 个状态，共 66 张。480 宽是 dot 布局，脚本会先点开 `.pk-run__dot` 再量。
+- 数据来源：本机 Chromium（playwright 1.65.1，隔离目录），头 `a91942993fd2020434be44a030e9b95f645ba62b`（origin/main），持 `browser.lock.d` 从 10:35Z 起，EXIT 0，pageErrors 全部为 0。
+- 每张图记的字段：`runBar` / `runLayout` / `runOpen` / `runSummary`，以及 `runText`（条内每段文字的前景色、底色和对比度）。
+
+| 状态 | 条是否出现 | 说明 |
+| --- | --- | --- |
+| steps / background / second-version / reviewer / make-up / asking / stopped / reconnecting | 出现（66 张里都和预期一致） | 1440 / 820 为 bar 布局，480 为 dot 布局且已展开 |
+| thinking / done | 隐藏（符合预期） | 非 Metre 下按设计隐藏 plain 与 done（`laolao-run-status.js:208` / `:171`） |
+| slower-than-usual | 出现，但显示成审稿态 | 真页面 harness 冻结了 Date（固定在 2026-11-20T04:00Z），`phaseFor` 恒为 0，「比平时慢」的 slow 判定永远达不到，条上只显示成 review 态（「审稿员在打开成品核对 · 已用 1 秒 · 平时约 1 秒」）。slow 色调在真页面下测不到，只能靠单测覆盖 |
+
+量到的文字对比度（要求 4.5；日间条底是半透明珍珠玻璃，脚本按白底叠色，记为 approx）：
+
+| # | 文件:选择器 | 主题 / 状态 | 前景 / 底 | 数值 | 占用 |
+| --- | --- | --- | --- | --- | --- |
+| R1 | `laolao-run-status.css:51`：`.pk-run__meta`（「已用 1 秒」「· 平时约 1 秒」） | 日，除 stopped 外的全部出现态，三种宽度 | `#a36b82` / 白玻璃（`#fffdfe`→`#fff7fb`）；asking 态底为 `#ffe6f0` | 白底 4.21，玻璃渐变 4.00~4.16，asking 态 3.58 | 无 |
+| R2 | `laolao-run-status.css:75`：`.pk-run__btn[data-act="answer"]`（「去确认」） | 日，asking，三种宽度 | `#fff` / `#e94f91`（悬停 `#c2457c` 4.73） | 3.50 | 无 |
+
+其余文字都够：日间正文 `#623247` 10.16，reconnecting 正文 `#c2457c` 4.73，「停下」`#805269` 6.31；夜间正文 13.86~15.68，meta `#a8959f` 5.22~5.91，「停下」10.97~11.03，「去确认」`#fff6fa` / `#b0466f` 5.01。R1、R2 都只出现在日间，夜间已经够。
 
 「占用」一列按 11-26 19:05:48 UTC 的 `gh pr list --state open --limit 200 --json number,headRefName,files`（117 个开着的 PR）核对。
 
@@ -62,15 +84,15 @@ T1 说明：菜单的 `role="menu"` 读屏要用，不宜去掉；更像是在 `
 | --- | --- | --- | --- | --- |
 | `laolao-composer-tray.css`：`.pinkie-tray-btn > span`（「工具」） | 日，1440/820 | 同 learning.md | 3.36 | 别人占着：#349 |
 | `laolao-context-compact.js`（样式在 `laolao-theme.css` 一带）：`.laolao-context-viewer__percent`（「13%」） | 日，1440/820 | 同 learning.md | 3.36 | 别人占着：#320（`laolao-theme.css`） |
-| `laolao-session-tools.css`：`.pinkie-chip--mode > span`（「想法取向」） | 日，1440/820 | 输入框取向按钮字淡 | 3.55 | 别人占着：#349 |
+| `laolao-session-tools.css`：`.pinkie-chip--mode > span`（「想法取向」） | 日，1440/820 | 输入框取向按钮字淡 | 3.55 | 已修：#457 `mac/b11-mode-chip-contrast`（日间默认态改用 `--pt-quiet`，≥4.5） |
 | `laolao-session-tools.css`：`.pinkie-temp-entry`（「临时」及图标） | 日，1440 | 同 learning.md | 字 2.67、图标 2.67 | 别人占着：#349 |
 | `laolao-sidebar.css` / `laolao-sidebar-surface.css`：`.laolao-group__label` / `__count` / `__action`、`time.pinkie-session-time` | 日，1440 | 同 learning.md | 3.45 / 4.16 | `laolao-sidebar-surface.css` 别人占着：#346；`laolao-sidebar.css` 无 |
-| `laolao-theme.css`：`.laolao-mode-dock-trigger` | 日/夜，1440 | 同 learning.md | 1.46 | 别人占着：#320 |
-| `laolao-theme.css`：`button.laolao-followup-mode-btn` 边框 | chat-live / chat-thought，日/夜，1440/820 | 进行中输入框追问方式按钮边框淡 | 1.42 / 1.73 | 别人占着：#320 |
+| `laolao-theme.css`：`.laolao-mode-dock-trigger` | 日/夜，1440 | 同 learning.md | 1.46 → 日 ≥3.80 / 夜 ≥6.88（静态） | 已修：#461 `mac/b11-dock-followup-edge` |
+| `laolao-theme.css`：`button.laolao-followup-mode-btn` 边框 | chat-live / chat-thought，日/夜，1440/820 | 进行中输入框追问方式按钮边框淡 | 1.42 / 1.73 → 日 ≥3.80 / 夜 ≥6.88（静态） | 已修：#461 `mac/b11-dock-followup-edge` |
 | `laolao-run-status.css` / `laolao-metre-chat.css`：`button.chat-new-messages`（「有新消息」）边框 | chat-done / deepthink / picker，日/夜 | 「有新消息」胶囊边框贴底 | 1.27~1.29 | 无 |
 | `laolao-motion-system.css`：`.topbar-search` | 日/夜，820 | 同 learning.md | 1.24~1.26 | 无 |
 | `laolao-settings-user.js`：`.qs-segmented__btn`（「高级」） | settings，日 | 同 learning.md | 4.13 | 别人占着：#328 |
 | `laolao-settings-user.css`：`.pinkie-user-settings__choice` | settings，日/夜 | 同 learning.md | 1.26~1.52 | 别人占着：#179、#294 |
 | `laolao-model-picker.css`：`.pinkie-external-tier`（「关闭」）、`button.pinkie-effort-trigger` 边框 | 输入框 / picker-effort，日/夜，1440/820 | 思考强度牌按像素量后字 4.04~4.39（learning.md 里按 color 量的 1.04 属 background-clip:text 误报，以本表为准）；触发按钮边框 1.21~1.31 | 字 4.04~4.39、边框 1.21~1.31 | 别人占着：#355 |
 
-后续按「一个问题一个小 PR」修深度思考模式专属的 T1–T7（T1 优先：夜间菜单基本不可读）；每个修复 PR 都要附改前 / 改后数值。本 PR 只含走查脚本和这张表，不改界面。
+后续按「一个问题一个小 PR」修深度思考模式专属的 T1–T7（T1 优先：夜间菜单基本不可读），运行状态条的 R1、R2 另开单修（`laolao-run-status.css` 现在没人占）；每个修复 PR 都要附改前 / 改后数值。本 PR 只含走查脚本和这张表，不改界面。

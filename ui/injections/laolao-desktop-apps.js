@@ -49,7 +49,7 @@
 
   // 256×256 圆角方块 + 名字第一个字。颜色按名字挑，同一件作品每次一样。
   const COLORS = ['#F26BA8', '#8E7CF0', '#4FB3E8', '#F2A65A', '#5BC79A', '#E8697A'];
-  function drawIcon(name) {
+  async function drawIcon(name) {
     try {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
@@ -66,7 +66,12 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText([...name][0]?.toUpperCase() || '★', 128, 138);
-      return canvas.toDataURL('image/png');
+      const url = canvas.toDataURL('image/png');
+      if (/^data:image\/png;base64,./.test(url)) return url;
+      // 本机 WebKit 编码不出时回 data:, 不抛错：借图表那份 pngOf（toBlob → toDataURL → 像素自拼 PNG）
+      const {pngOf} = await import(new URL((window.__pinkieAsset || (p => p))('./laolao-rich-chart.js'), document.baseURI).href);
+      const blob = await pngOf(canvas);
+      return await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(r.error); r.readAsDataURL(blob); });
     } catch { return ''; }
   }
 
@@ -141,7 +146,7 @@
     const {name, network, files} = choice;
     trigger.disabled = true;
     try {
-      const {app} = await rpcOk('pinkie.apps.install', {id: item.id, name, icon: drawIcon(name), network, files}, 60_000);
+      const {app} = await rpcOk('pinkie.apps.install', {id: item.id, name, icon: await drawIcon(name), network, files}, 60_000);
       try { await nativeOk({type: 'installApp', appId: app.id}); }
       catch (error) {
         // 入口没建成就别留半个应用：副本也删掉，用户看到的是「没装上」。

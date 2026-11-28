@@ -230,18 +230,33 @@ function audit({cap}) {
       }
     }
     if ((isSvg || isMask || isFont) && !disabled && r.width >= 6 && r.height >= 6 && r.width <= 64 && r.height <= 64) {
-      let color = s.color, who = e, extra = 1;
-      if (isSvg) {
-        const shape = e.querySelector('path, circle, rect, line, polyline, polygon, ellipse, use');
-        const ss = shape ? getComputedStyle(shape) : s;
-        const useStroke = ss.stroke && ss.stroke !== 'none' && !ss.stroke.startsWith('url');
-        color = useStroke ? ss.stroke : ss.fill;
-        extra = parseFloat(useStroke ? ss.strokeOpacity : ss.fillOpacity);
-        if (Number.isNaN(extra)) extra = 1;
-        if (shape) who = shape;
-      } else if (isMask) color = s.backgroundColor;
+      let color = s.color, fg = null;
       const bg = isMask ? bgOf(parentOf(e)) : bgOf(e);
-      const fg = fgOn(color, who, bg, extra);
+      if (isSvg) {
+        // 第一个子图形不代表图标色（进度环先画一圈浅色轨道）：逐个子图形，stroke / fill 各按自身 opacity
+        // 与到底色之间各层 opacity 叠出墨色，跳过 none、url() 渐变和全透明，取对比度最高的一笔。
+        let best = -1;
+        for (const g of e.querySelectorAll('path, circle, rect, line, polyline, polygon, ellipse, use, text')) {
+          const gs = getComputedStyle(g);
+          if (gs.display === 'none' || gs.visibility === 'hidden') continue;
+          for (const [paint, alpha, on] of [[gs.stroke, gs.strokeOpacity, parseFloat(gs.strokeWidth) > 0], [gs.fill, gs.fillOpacity, g.localName !== 'line']]) {
+            const c = on ? rgba(paint) : null, a = Number.isNaN(parseFloat(alpha)) ? 1 : parseFloat(alpha);
+            if (!c || c.a * a * fade(g, bg.from) <= 0) continue;
+            const f = fgOn(paint, g, bg, a), k = ratio(f, bg.c);
+            if (k > best) { best = k; fg = f; color = paint; }
+          }
+        }
+      } else if (isMask) {
+        // 遮罩里画出来的是 background-image 渐变，background-color 被盖住：逐个色标量，取最低。
+        const stops = s.backgroundImage && s.backgroundImage !== 'none' ? s.backgroundImage.match(/(?:rgba?|color)\([^()]*\)/g) || [] : [];
+        let worst = Infinity;
+        for (const paint of stops.length ? stops : [s.backgroundColor]) {
+          const f = fgOn(paint, e, bg);
+          if (f && ratio(f, bg.c) < worst) { worst = ratio(f, bg.c); fg = f; color = paint; }
+        }
+      } else {
+        fg = fgOn(color, e, bg);
+      }
       if (fg) {
         const k = ratio(fg, bg.c);
         const host = parentOf(e);

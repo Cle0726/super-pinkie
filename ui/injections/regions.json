@@ -77,6 +77,9 @@
         "laolao-session-cards.js",
         "laolao-session-tools.css",
         "laolao-session-tools.js",
+        "laolao-session-board.css",
+        "laolao-session-board.js",
+        "laolao-session-board-data.js",
         "laolao-crew.css",
         "laolao-crew.js"
       ]
@@ -156,6 +159,8 @@
         "laolao-stream-fx.js",
         "laolao-message-actions.css",
         "laolao-message-actions.js",
+        "laolao-checkpoint.css",
+        "laolao-checkpoint.js",
         "laolao-artifacts.css",
         "laolao-artifacts.js",
         "laolao-desktop-apps.css",
@@ -235,6 +240,7 @@
         "laolao-metre-board.css",
         "laolao-metre-board.js",
         "laolao-metre-board-data.js",
+        "laolao-metre-session-board.css",
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
         "laolao-metre-engine-upstream.js",
@@ -258,11 +264,13 @@
         "laolao-metre-workspace.js",
         "laolao-metre-usage.css",
         "laolao-metre-usage.js",
+        "laolao-metre-keymap.js",
         "laolao-metre-lock.css",
         "laolao-metre-lock.js",
         "laolao-metre-prompts.js",
         "laolao-metre-transition.js",
         "laolao-metre-prefs.js",
+        "laolao-metre-pins.js",
         "laolao-metre-stagefx.js",
         "laolao-metre-fav.css",
         "laolao-metre-fav.js",
@@ -272,6 +280,8 @@
         "laolao-metre-list.js",
         "laolao-metre-worktree.css",
         "laolao-metre-worktree.js",
+        "laolao-metre-peek.css",
+        "laolao-metre-peek.js",
         "laolao-metre-display.css",
         "laolao-metre-contrast.css",
         "laolao-metre-chat.css",
@@ -283,7 +293,11 @@
         "laolao-metre-suggest.css",
         "laolao-metre-suggest.js",
         "laolao-metre-pr.css",
-        "laolao-metre-pr.js"
+        "laolao-metre-pr.js",
+        "laolao-metre-tasks.css",
+        "laolao-metre-tasks.js",
+        "laolao-metre-outputs.css",
+        "laolao-metre-outputs.js"
       ]
     },
     {

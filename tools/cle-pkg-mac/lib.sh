@@ -12,7 +12,9 @@
 #                      本机自建、仓库不装的 plist（自建网关、edge-tts、mm-retry-proxy* 等）不在默认里，
 #                      要管就把默认值和它们一起写进 CLE_LABELS。
 #   CLE_PKG            C.le. 包（.app），默认 tools/cle-pkg-mac/out/超級碧琪.app
-#   CLE_EXPECT_CHANNEL 包的 build-info channel 必须是它才装，默认 cle
+#   CLE_EXPECT_CHANNEL 包怎么认（见 cle_pkg_refusal）：build-info 有 core 字段（build.sh 写的）就要 core=cle，
+#                      设了 CLE_EXPECT_CHANNEL 才再要 channel 等于它（channel 只有 dev / release，是给 guard 用的）；
+#                      没有 core 字段的老包照旧要 channel=${CLE_EXPECT_CHANNEL:-cle}
 #   CLE_LAUNCHCTL / CLE_PGREP / CLE_CODESIGN / CLE_DITTO  替换系统命令（自测用假的）
 #   CLE_ISO_ROOT       隔离模式：所有路径必须在它下面，launchctl/pgrep/codesign 不许用真的
 
@@ -79,6 +81,34 @@ cle_info_field() { # build-info.json 键：只认一行里的 "键": "值"
   printf '%s\n' "${v%%$'\n'*}"
 }
 
+# 包能不能装（install-cle 用）：能装什么都不输出，不能装输出原因。
+#  - build-info 有 core 字段：要 core=cle；CLE_EXPECT_CHANNEL 显式设了才再核 channel；
+#  - 没有 core 字段的老包：照旧要 channel=${CLE_EXPECT_CHANNEL:-cle}。
+cle_pkg_refusal() { # build-info.json
+  local core ch want
+  core="$(cle_info_field "$1" core)"
+  ch="$(cle_info_field "$1" channel)"
+  if [ -n "$core" ]; then
+    if [ "$core" != cle ]; then
+      printf "core 是 '%s'，不是 'cle'\n" "$core"
+      return 0
+    fi
+    want="$EXPECT_CHANNEL"
+  else
+    want="${EXPECT_CHANNEL:-cle}"
+  fi
+  if [ -n "$want" ] && [ "$ch" != "$want" ]; then printf "channel 是 '%s'，不是 '%s'\n" "$ch" "$want"; fi
+  return 0
+}
+
+cle_pkg_rule() { # 给 [计划] / 开头摘要看的一句话
+  if [ -n "$EXPECT_CHANNEL" ]; then
+    printf '有 core 字段要 core=cle 且 channel=%s；老包要 channel=%s\n' "$EXPECT_CHANNEL" "$EXPECT_CHANNEL"
+  else
+    printf '有 core 字段要 core=cle；老包要 channel=cle\n'
+  fi
+}
+
 # App 的指纹：build-info.json 的 cksum；没有 build-info 就是 -（认不出，不拿来比）。
 cle_app_sig() {
   local f="$1/$CLE_BUILD_INFO_REL"
@@ -126,7 +156,7 @@ cle_settings() {
   PGREP="${CLE_PGREP:-pgrep}"
   CODESIGN="${CLE_CODESIGN:-codesign}"
   DITTO="${CLE_DITTO:-ditto}"
-  EXPECT_CHANNEL="${CLE_EXPECT_CHANNEL:-cle}"
+  EXPECT_CHANNEL="${CLE_EXPECT_CHANNEL:-}"
   ISO_ROOT=""
   if [ -n "${CLE_ISO_ROOT:-}" ]; then ISO_ROOT="$(cle_abspath "$CLE_ISO_ROOT")"; fi
   DOMAIN="gui/$(id -u)"
@@ -245,7 +275,7 @@ cle_main() { # 命令 参数...
   cle_say "  App            $APP"
   cle_say "  备份目录       $BACKUP_DIR"
   cle_say "  LaunchAgents   $AGENTS（$LABELS）"
-  if [ "$CLE_CMD" = install-cle ]; then cle_say "  C.le. 包       $PKG（要求 channel=$EXPECT_CHANNEL）"; fi
+  if [ "$CLE_CMD" = install-cle ]; then cle_say "  C.le. 包       $PKG（$(cle_pkg_rule)）"; fi
   cle_say "  系统命令       launchctl=$LAUNCHCTL pgrep=$PGREP codesign=$CODESIGN ditto=$DITTO"
   if [ -n "$ISO_ROOT" ]; then cle_say "  隔离根         $ISO_ROOT"; fi
   "cle_cmd_${CLE_CMD//-/_}"

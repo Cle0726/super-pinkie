@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -184,6 +185,58 @@ test('release mode queues sanitized usage + deduplicated correction records with
   assert.equal(corrections[0].prevWorkKind, 'debugging');
   assert.deepEqual(corrections[0].prevTools, ['read', 'edit']);
   assert.match(corrections[0].summary, /项目模式/);
+});
+
+test('correction merge survives record ids whose last UUID segment looks like a phone number', async t => {
+  // 回归 tests/feedback.test.mjs:181 偶发：UUID 末段偶尔是「1[3-9] 开头的 11 位数字」（约 0.03%），
+  // 以前 id 会被当文本脱敏改写成 <PHONE>，落盘 id 与内存 correctionId 对不上，合并成 both 静默失败。
+  // 这里让每个 id 都必然命中 PHONE_RE（且互不相同），把概率事件变成每次必现。
+  let seq = 0;
+  t.mock.method(crypto, 'randomUUID', () => {
+    seq += 1;
+    return `2e76882d-576e-4794-bc52-13${String(seq).padStart(9, '0')}a`;
+  });
+  const root = makeTempDir();
+  const pair = generateFeedbackKeypair();
+  let now = 1_700_000_000_000;
+  const manager = new FeedbackManager({
+    root,
+    now: () => now,
+    batchSize: 50,
+    buildConfig: {
+      channel: 'release',
+      version: '2.5.49',
+      repo: 'Cle0726/pinkie-feedback',
+      token: 'ghp_FAKE12345678901234567890123456',
+      publicKey: pair.publicKeyDerBase64,
+    },
+    fetchFn: async () => ({ok: true, status: 201}),
+  });
+  manager.setPrefs({consent: true});
+
+  const key = 'agent:project:main';
+  manager.onUserPrompt({sessionKey: key, mode: 'project', prompt: '帮我修一下这个脚本的报错', runId: 'run-1'});
+  manager.onToolAfter({toolName: 'read'}, {sessionKey: key});
+  manager.onToolAfter({toolName: 'edit'}, {sessionKey: key});
+  now += 3500;
+  manager.onAgentEnd({runId: 'run-1', success: true}, {sessionKey: key});
+
+  now += 5000;
+  manager.onUserPrompt({sessionKey: key, mode: 'project', prompt: '不对，你没跑测试验证就说好了，以后改完必须先跑测试！', runId: 'run-2'});
+  manager.onToolAfter({
+    toolName: 'clekk_memory',
+    params: {action: 'remember', kind: 'feedback', text: '以后改完代码不要不跑测试就声称完成'},
+  }, {sessionKey: key});
+  now += 2100;
+  manager.onAgentEnd({runId: 'run-2', success: true}, {sessionKey: key});
+
+  assert.ok(seq > 0, 'randomUUID mock 应该被用到');
+  const parsed = JSON.parse(fs.readFileSync(path.join(root, 'queue.json'), 'utf8'));
+  const corrections = parsed.items.filter(x => x.type === 'correction');
+  assert.equal(corrections.length, 1);
+  assert.equal(corrections[0].source, 'both');
+  assert.match(corrections[0].id, /^2e76882d-576e-4794-bc52-13\d{9}a$/, '记录主键不应被当成手机号脱敏');
+  fs.rmSync(root, {recursive: true, force: true});
 });
 
 test('batch flush uploads encrypted unique files to GitHub and removes sent items from queue', async () => {

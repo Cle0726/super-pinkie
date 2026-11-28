@@ -9,6 +9,7 @@ import {test, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import util from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
 
@@ -100,24 +101,30 @@ const group = index => `<div class="chat-group assistant" id="g${index}"><div cl
 <div class="chat-group-footer"></div></div></div>`;
 const page = mode => `<!doctype html><html data-laolao-mode="${mode}"><head><link rel="stylesheet" href="/laolao-workbench.css"><style>${css}</style></head><body>
 <main class="content content--chat" style="position:fixed;inset:0;overflow:auto"><openclaw-chat-pane active><div class="chat-thread" style="width:640px"><div class="chat-thread-inner">${group(11)}${group(13)}</div></div></openclaw-chat-pane></main></body></html>`;
-async function open(browser, mode, {width = 1280, git = true} = {}) {
+async function open(browser, mode, {width = 1280, git = true, statusDelay = 0} = {}) {
   const tab = await browser.newPage({viewport: {width, height: 800}});
-  await tab.route(`http://127.0.0.1:${PORT}/**`, route => {
+  const answer = route => {
     const url = new URL(route.request().url());
     if (url.pathname === '/chat') return route.fulfill({contentType: 'text/html; charset=utf-8', body: page(mode)});
     // 工作台从页面目录取 Monaco 和自己的样式（BASE = 页面目录）；照真包一样从 ui/injections 给。以前一律 404，文本标签变成「编辑器加载失败」，CI 上这几条一直是红的。
     const file = fileURLToPath(new URL('../ui/injections' + url.pathname, import.meta.url));
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return route.fulfill({status: 404, body: ''});
     return route.fulfill({contentType: TYPES[file.split('.').pop()] || 'application/octet-stream', body: fs.readFileSync(file)});
+  };
+  // L84b：页面来要文件、文件交出去，都记一笔进展（settledTab 按「多久没有进展」算期限）
+  await tab.route(`http://127.0.0.1:${PORT}/**`, async route => {
+    lastServed.set(tab, Date.now());
+    try { await answer(route); } finally { lastServed.set(tab, Date.now()); }
   });
   await tab.goto(`http://127.0.0.1:${PORT}/chat?session=agent%3A${mode === 'metre' ? 'metre' : 'project'}%3Atest`);
-  await tab.evaluate(([items, git]) => {
+  await tab.evaluate(([items, git, statusDelay]) => {
     document.querySelector('openclaw-chat-pane').state = {chatMessages: items};
     window.__pinkieMessageActions = {historyItem: (id, list) => list.find(item => id === `msg:${item.role}:${item.timestamp}:${list.indexOf(item)}`) || null};
     window.calls = [];
     window.__laolaoSidebar = {gwRequest: async (method, params = {}) => {
       window.calls.push([method, params.path || '']);
-      if (method === 'pinkie.fs.status') return {root: '/proj', agentId: 'metre', name: 'proj', bound: true, unrestricted: false};
+      // B66：statusDelay 让工作台的 pinkie.fs.status 人为晚到，复现 CI 上「show() 还在等 info」那段窗口
+      if (method === 'pinkie.fs.status') { if (statusDelay) await new Promise(r => setTimeout(r, statusDelay)); return {root: '/proj', agentId: 'metre', name: 'proj', bound: true, unrestricted: false}; }
       if (method === 'pinkie.fs.list') return {entries: []};
       // 后端说了算：项目外只读（这里按非 Metre 的规则答，看前端是不是照抄 readOnly，不自己判）
       if (method === 'pinkie.fs.read') return {kind: 'text', content: 'text of ' + params.path, path: params.path, readOnly: String(params.path).startsWith('/'), size: 10, mtimeMs: 1};
@@ -126,7 +133,7 @@ async function open(browser, mode, {width = 1280, git = true} = {}) {
       if (method === 'pinkie.fs.gitShow') return {content: 'old', exists: true};
       return {};
     }};
-  }, [history, git]);
+  }, [history, git, statusDelay]);
   await tab.addScriptTag({content: domWatch});
   await tab.addScriptTag({content: bench});
   await tab.addScriptTag({content: js});
@@ -134,6 +141,72 @@ async function open(browser, mode, {width = 1280, git = true} = {}) {
 }
 const chips = (tab, id) => tab.locator(`#${id} .pk-mfile-chip`).evaluateAll(list => list.map(b => [b.querySelector('.pk-mfile-chip__text').textContent, b.dataset.action, b.title]));
 const tabs = tab => tab.evaluate(() => window.__pinkieWorkbench.state.tabs.map(t => [t.path, t.kind === 'diff' ? 'diff' : 'file', Boolean(t.readOnly)]));
+// B84：等标签加载完（不再是 pending / loading）再看它成了什么。以前直接等 kind === 'text'：标签落到 error（编辑器没加载出来）
+// 和 runner 整体慢都只报一个裸的 5 s 超时，分不出来。超时时把各标签现状、Monaco 在不在、最后几次网关调用一起报出来。
+// L84b：第一次开文本标签要冷加载 Monaco（ui/injections/laolao-vendor-monaco，约 15 MB，经 tab.route 一个个交出去），
+// 标签在 Monaco 加载完之前一直是 loading。原来的 5 s 是从点击开始的墙钟：Windows runner 整体慢几倍时 Monaco 还在一个个
+// 文件地来，标签就被判超时（#435 头 316bf335 的 windows-checks 首跑和重跑 job 140631900699 都红，整条 11.5 s；别的头上 Windows 同一条约 2 s 过）。真实条件是「标签落定，
+// 或者页面卡住了」：期限还是 5 s，但从最后一次进展（页面来要文件 / 文件交出去）算起；一直没进展就照旧红，并带诊断。
+// 总时长仍受这条测试自己的 60 s 上限。
+const lastServed = new WeakMap();
+async function settledTab(tab, path, quiet = 5000, progress = () => lastServed.get(tab) || 0) {
+  const started = Date.now();
+  const idle = () => Date.now() - Math.max(started, progress());
+  for (;;) {
+    try {
+      await tab.waitForFunction(p => { const t = window.__pinkieWorkbench.state.tabs.find(x => x.path === p); return Boolean(t) && !['pending', 'loading'].includes(t.kind); }, path, {timeout: Math.max(1, quiet - idle())});
+      break;
+    } catch (error) {
+      if (error?.name !== 'TimeoutError') throw error;
+      if (idle() < quiet) continue;   // 这段时间里页面还在取文件：没卡住，接着等
+      const seen = await tab.evaluate(() => ({tabs: window.__pinkieWorkbench.state.tabs.map(t => [t.path, t.kind, t.error || '']), monaco: Boolean(window.monaco), calls: window.calls.slice(-12)})).catch(e => ({evaluateFailed: String(e)}));
+      const note = `\n  waiting for ${path} to load; nothing served for ${idle()} ms; workbench: ${JSON.stringify(seen)}`;
+      // node:test 报告打的是 stack（抛出时就定型了），只改 message 诊断不会出现在 CI 日志里（B84 那段一直没显示过）
+      error.message += note;
+      if (typeof error.stack === 'string' && !error.stack.includes(note)) error.stack += note;
+      throw error;
+    }
+  }
+  return tab.evaluate(p => { const t = window.__pinkieWorkbench.state.tabs.find(x => x.path === p); return {kind: t.kind, error: t.error || ''}; }, path);
+}
+
+// ---------- settledTab 本身：假标签，不起浏览器 ----------
+// 假页面：标签在 settleAt ms 落定；progressUntil 之前每 step ms 有一次进展。waitForFunction 照 Playwright 的样子超时抛 TimeoutError。
+function fakeTab({settleAt, progressUntil, step = 50}) {
+  const t0 = Date.now(), timeouts = [];
+  let last = t0;
+  const timer = setInterval(() => { if (Date.now() - t0 <= progressUntil) last = Date.now(); }, step);
+  return {
+    timeouts, stop: () => clearInterval(timer), progress: () => last,
+    waitForFunction: (_fn, _arg, {timeout}) => new Promise((ok, no) => {
+      timeouts.push(timeout);
+      const left = settleAt - (Date.now() - t0);
+      if (left <= timeout) setTimeout(ok, Math.max(0, left));
+      // 先读一次 stack：Playwright 的错误抛到测试里时 stack 已经定型，之后改 message 不会再进 stack
+      else setTimeout(() => { const e = Object.assign(new Error(`page.waitForFunction: Timeout ${timeout}ms exceeded.`), {name: 'TimeoutError'}); void e.stack; no(e); }, timeout);
+    }),
+    evaluate: async (_fn, arg) => arg === undefined ? {tabs: [['x', 'loading', '']], monaco: false, calls: []} : {kind: 'text', error: ''},
+  };
+}
+
+test('settledTab: a load that keeps fetching settles even past the quiet window; no single wait is longer than it', async () => {
+  const tab = fakeTab({settleAt: 700, progressUntil: 650});
+  try {
+    assert.deepEqual(await settledTab(tab, 'x', 200, tab.progress), {kind: 'text', error: ''});
+    assert.ok(tab.timeouts.length > 1 && tab.timeouts.every(ms => ms <= 200), `each wait stays within the 200 ms window: ${tab.timeouts}`);
+  } finally { tab.stop(); }
+});
+
+test('settledTab counterexample: once nothing is served the old deadline still holds, and the diagnosis reaches the report', async () => {
+  const tab = fakeTab({settleAt: Infinity, progressUntil: 100});
+  const begun = Date.now();
+  try {
+    const error = await settledTab(tab, 'x', 200, tab.progress).then(() => null, e => e);
+    assert.equal(error?.name, 'TimeoutError', 'a stuck load is still red');
+    assert.ok(Date.now() - begun < 1000, 'and red soon after progress stops, not at the test timeout');
+    assert.match(util.inspect(error), /waiting for x to load; nothing served for \d+ ms; workbench: .*"loading"/, 'node:test prints the stack, so the note must be on it');
+  } finally { tab.stop(); }
+});
 
 test('in Metre: one 文件 row per turn; 打开 opens a workbench tab with the backend readOnly, 改动 opens the diff', {timeout: 60_000}, async t => {
   const browser = await launch(t); if (!browser) return;
@@ -153,7 +226,8 @@ test('in Metre: one 文件 row per turn; 打开 opens a workbench tab with the b
     assert.equal(await tab.locator('#g11 .pk-mfile-row').count(), 1, 'repainting does not duplicate the row');
     // 打开：项目外 → 后端说只读 → 标签只读
     await tab.locator('#g11 .pk-mfile-chip[data-action="open"]').click();
-    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.path === '/etc/hosts' && t.kind === 'text'), null, {timeout: 5000});
+    const hosts = await settledTab(tab, '/etc/hosts');
+    assert.equal(hosts.kind, 'text', `the /etc/hosts tab ended as ${hosts.kind} ${hosts.error}`);
     assert.equal(await tab.evaluate(() => window.__pinkieWorkbench.state.visible), true, 'the click brings the workbench out');
     // 改动：项目里的文件 → 相对路径 → 差异视图
     await tab.locator('#g11 .pk-mfile-chip[data-action="diff"]').last().click();
@@ -180,12 +254,16 @@ test('改动 clicked first, before git status has loaded, still opens the diff (
 
 test('at 820 a chip clicked from the 对话 page brings the workbench back to 代码, so the opened tab is on screen (pr-shots 45793117245)', {timeout: 60_000}, async t => {
   const browser = await launch(t); if (!browser) return;
-  const tab = await open(browser, 'metre', {width: 820});
+  // B66：pinkie.fs.status 人为晚到 400 ms，用户在工作台还在等的时候就点了「对话」（CI 上 #409 run 45939911423 就是这个时序）。
+  // 等 hosts 标签真的开出来（openChip 走完），用户选的「对话」不能被 show() 改回「代码」，否则对话页整页 visibility: hidden、签条点不着。
+  const tab = await open(browser, 'metre', {width: 820, statusDelay: 400});
   try {
     await tab.locator('#g11 .pk-mfile-chip[data-path="/etc/hosts"]').click({timeout: 5000});
     await tab.waitForFunction(() => document.documentElement.dataset.pkWbNarrow === '1' && document.documentElement.dataset.pkWbView === 'code', null, {timeout: 10_000});
     await tab.getByRole('tab', {name: '对话', exact: true}).first().click({timeout: 5000});
     await tab.waitForFunction(() => document.documentElement.dataset.pkWbView === 'chat', null, {timeout: 3000});
+    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.path === '/etc/hosts'), null, {timeout: 10_000});
+    assert.equal(await tab.evaluate(() => document.documentElement.dataset.pkWbView), 'chat', 'the late status must not pull the user back from 对话');
     await tab.locator('#g11 .pk-mfile-chip[data-path="/proj/README.md"]').click({timeout: 5000});
     await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.kind === 'diff'), null, {timeout: 10_000});
     assert.equal(await tab.evaluate(() => document.documentElement.dataset.pkWbView), 'code', 'the diff opens on the 代码 page, not behind the chat');
@@ -197,7 +275,8 @@ test('without git the 改动 chip opens the file; under 600px the workbench stay
   let tab = await open(browser, 'metre', {git: false});
   try {
     await tab.locator('#g11 .pk-mfile-chip[data-action="diff"]').last().click({timeout: 5000});
-    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.path === 'README.md' && t.kind === 'text'), null, {timeout: 5000});
+    const readme = await settledTab(tab, 'README.md');
+    assert.equal(readme.kind, 'text', `the README.md tab ended as ${readme.kind} ${readme.error}`);
     assert.equal(await tab.evaluate(() => window.__pinkieWorkbench.state.tabs.some(t => t.kind === 'diff')), false);
   } finally { await tab.close(); }
   tab = await open(browser, 'metre', {width: 560});

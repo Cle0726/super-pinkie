@@ -222,7 +222,7 @@
     const answered = {...(data.answered || {})};
     let i = items.findIndex(it => !answered[it.itemId]); if (i < 0) i = items.length;
     let right = Object.values(answered).filter(r => r.correct).length, combo = 0, maxCombo = 0, busy = false, alive = true, finished = Boolean(data.finished), asking = false, stars = 0;
-    let picked = null, waveNow = -1; const t0 = Date.now();
+    let picked = null, waveNow = -1, child = null; const t0 = Date.now(); // child：「再来一组」在同一 host 上挂的下一组 runtime，按键和卸载都顺着往下传
     const waves = S.waves(items); stage.setWaveMarks(waves);
     // 战斗状态（心 / 技能 / 护盾 / 加倍）全以后端为准
     let battle = data.battle || null;
@@ -541,13 +541,13 @@
       if (r.awards?.length) setTimeout(() => G().play(r.awards, {from: badge}), 500); else G().pending?.();
     }
     // 「再来一组」：同一页重新挂（返回目标不变）
-    function mountAgain() { alive = false; try { audio?.pause(); } catch { /* 无 */ } stage.destroy(); host.replaceChildren(); host.classList.remove('pkq', 'pkp-set'); const rt = mountSet(host, ctx); host.__pkpRuntime = rt; }
+    function mountAgain() { alive = false; try { audio?.pause(); } catch { /* 无 */ } stage.destroy(); host.replaceChildren(); host.classList.remove('pkq', 'pkp-set'); child = mountSet(host, ctx); }
 
     show();
     return {
-      unmount() { alive = false; stage.destroy(); try { audio?.pause(); } catch { /* 无 */ } },
+      unmount() { alive = false; stage.destroy(); try { audio?.pause(); } catch { /* 无 */ } child?.unmount?.(); },
       keydown(event) {
-        if (host.__pkpRuntime) return host.__pkpRuntime.keydown(event);
+        if (child) return child.keydown?.(event);
         if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
         if (host.querySelector('dialog[open]')) return;

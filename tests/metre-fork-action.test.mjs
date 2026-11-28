@@ -27,7 +27,10 @@ test('Metre：分叉键挪到页脚行的规则只在 Metre 下生效，不用 !
   assert.doesNotMatch(rule[0], /!important/, '这组规则不需要 !important');
   assert.doesNotMatch(rule[0], /:has\([^)]*:has\(/, ':has() 不能嵌套，浏览器会把整条规则丢掉');
   assert.doesNotMatch(css, /pinkie-fork-action\) > \.chat-text::before/, '正文开头的浮动占位会改静止排版，不能再用');
-  assert.doesNotMatch(inj('laolao-session-cards.css'), /chat-group-footer/, '共用的 session-cards.css 不动，其他模式不变');
+  // 非 Metre 的键改挂回答下方操作栏（fork-btn-no-overlap）；Metre 下 session-cards.js 仍把键留在气泡里，session-cards.css 的页脚规则只认页脚里的键，碰不到 Metre。
+  assert.match(inj('laolao-session-cards.js'), /getAttribute\('data-laolao-mode'\) === 'metre'/, 'Metre 下键必须留在气泡里');
+  for (const line of inj('laolao-session-cards.css').split('\n').filter((l) => /chat-group-footer/.test(l))) for (const sel of line.split('{')[0].split(',').filter((s) => /chat-group-footer/.test(s))) assert.match(sel, /\.chat-group-footer \.pinkie-fork-action/, '共用 session-cards.css 只许给页脚里的键写样式');
+  assert.doesNotMatch(inj('laolao-session-cards.css'), /\.chat-group-footer\s*\{|\.chat-group-footer-actions/, '共用 session-cards.css 不改页脚行本身，Metre 的 padding-right 排法不受影响');
 });
 
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';

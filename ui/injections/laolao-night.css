@@ -479,7 +479,7 @@ html[data-pinkie-night]:not(#_n) .laolao-learning-notes .laolao-learning-button 
 html[data-pinkie-night]:not(#_n) .laolao-learning-notes .laolao-learning-button:hover { background: var(--notes-tint) !important; border-color: rgba(169, 195, 155, .35) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-learning-notes .laolao-learning-button--primary { color: #1b2016 !important; background: var(--notes-accent) !important; border-color: var(--notes-accent) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-learning-notes__search { background: rgba(255, 255, 255, .05) !important; color: var(--notes-ink) !important; border-color: var(--notes-line) !important; }
-html[data-pinkie-night]:not(#_n) .laolao-learning-notes__search::placeholder { color: #7f7a70 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__search::placeholder { color: #a39d91 !important; }
 html[data-pinkie-night]:not(#_n) .laolao-learning-notes__view-toggle { background: rgba(255, 255, 255, .06) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-learning-notes__view.is-selected { background: rgba(255, 255, 255, .1) !important; color: var(--notes-ink) !important; box-shadow: none !important; }
 html[data-pinkie-night]:not(#_n) .laolao-learning-notes :is(.laolao-learning-note p, .laolao-learning-note__term-row, .laolao-learning-note__compare-item) { color: #c9c3b7 !important; }

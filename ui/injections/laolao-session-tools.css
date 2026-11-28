@@ -93,7 +93,7 @@ html[data-pinkie-night] .pinkie-paste-editor { background:#1f181d }
 .pinkie-chip--mode { gap:5px;padding:0 8px 0 7px }
 .pinkie-chip--mode svg { width:16px;height:16px;flex:none }
 .pinkie-chip--mode .pinkie-chip__caret { width:9px;height:9px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:.7 } :where(html[data-laolao-mode="project"]) .pinkie-chip--mode .pinkie-chip__caret { opacity:1 }
-.pinkie-chip--mode:not([data-value="default"]) { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 10%,transparent);font-weight:600 }
+.pinkie-chip--mode:not([data-value="default"]) { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 10%,transparent);font-weight:600 } html:not([data-pinkie-night]):not([data-theme="dark"]):not([data-laolao-mode="metre"]) .pinkie-chip--mode[data-value="default"]:not(.pinkie-baton):not(:hover):not(:focus-visible) { color:var(--pt-quiet) } html[data-laolao-mode="project"]:not([data-pinkie-night]):not([data-theme="dark"]) .pinkie-chip--mode[data-value="default"]:not(.pinkie-baton):not(:hover):not(:focus-visible) { color:var(--chat-text,var(--pt-quiet)) }
 .pinkie-chip--mode:not([data-value="default"]):hover { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 16%,transparent) }
 .pinkie-style-menu__note { padding:6px 10px 4px;font-size:11px;opacity:.5;max-width:220px }
 /* Metre 的 Baton｜Virtuoso 两段开关：一颗按钮里两段，选中的那段实底；右边一个小 i 给没有悬停的屏幕看说明。 */

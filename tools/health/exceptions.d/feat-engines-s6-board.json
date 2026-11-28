@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 4, "reason": "engines S6 第 2、3 步（11-26，feat/engines-s6-board）：laolao-session-board.css / .js、laolao-metre-session-board.css，加 linux2 数据层 laolao-session-board-data.js（#231，排在界面前面），只能在这里登记加载（?v=@hash），功能全在新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 4, "reason": "engines S6（feat/engines-s6-board）：碧琪皮两个新文件和 #231 的数据层 laolao-session-board-data.js 登记在 sidebar 区域、Metre 皮样式登记在 metre 区域，各一行；没有新区域、新根选择器或跨区域放行。"}
+]
