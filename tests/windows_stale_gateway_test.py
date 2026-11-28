@@ -60,6 +60,28 @@ class ListenerTest(unittest.TestCase):
         self.assertEqual(4242, gateway_listener_pid(18789, runner=runner))
         self.assertIsNone(gateway_listener_pid(18790, runner=runner))
 
+    def test_an_ipv6_only_loopback_listener_is_still_found(self):
+        """双栈竞争：127.0.0.1 被别的程序占住，网关退而绑定 [::1]（Windows 允许两个地址族各自
+        独立监听同一端口号）。旧代码只认 ``TCP`` 这一行前缀，``TCP6`` 整行被跳过——找不到占着
+        端口的网关，retire_stale() 就不退它，更新后新版又接上旧网关，还是「更新了没变化」。
+        """
+        output = (
+            "  TCP6   [::1]:18789            [::]:0                 LISTENING       4343\n"
+            "  TCP6   [::1]:18790            [::]:0                 ESTABLISHED     4343\n"
+        )
+        runner = mock.Mock(return_value=subprocess.CompletedProcess([], 0, output, ""))
+        self.assertEqual(4343, gateway_listener_pid(18789, runner=runner))
+        self.assertIsNone(gateway_listener_pid(18790, runner=runner))
+
+    def test_an_ipv4_listener_is_found_even_next_to_an_unrelated_ipv6_row(self):
+        """双栈但两边各管各的端口：TCP6 那行不该挡住同端口号 TCP 行的匹配。"""
+        output = (
+            "  TCP6   [::1]:28789            [::]:0                 LISTENING       9001\n"
+            "  TCP    127.0.0.1:18789        0.0.0.0:0              LISTENING       4242\n"
+        )
+        runner = mock.Mock(return_value=subprocess.CompletedProcess([], 0, output, ""))
+        self.assertEqual(4242, gateway_listener_pid(18789, runner=runner))
+
     def test_netstat_in_a_non_utf8_console_code_page_does_not_crash_startup(self):
         """法语 / 德语 Windows 的 netstat 按控制台 OEM 代码页输出（État → 0x90）。
 
