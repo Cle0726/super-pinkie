@@ -37,40 +37,41 @@ test(`B61: gallery viewer header fits the panel at narrow widths and is unchange
   assert.doesNotMatch(rule.slice(0, rule.indexOf('} }') + 3), /!\s*important/, '不加强制覆盖');
   const browser = await launch();
   try {
-    const at = async (mode, width, {install = false, css = artifacts} = {}) => {
-      const p = await browser.newPage({viewport: {width, height: 900}});
-      try {
-        await p.setContent(page(mode, install));
-        await p.addStyleTag({content: css});
-        await p.addStyleTag({content: skin});
-        return await measure(p);
-      } finally { await p.close(); }
-    };
-    for (const mode of ['default', 'metre']) {
-      for (const width of [420, 560, 600, 779]) {
-        for (const install of [false, true]) {
-          const m = await at(mode, width, {install});
-          const where = `${mode} ${width}${install ? ' 带「装到桌面」' : ''}`;
-          assert.ok(m.scroll <= m.client, `${where}：头部不该比纸面宽（${m.scroll} > ${m.client}）`);
-          assert.ok(m.closeInside, `${where}：× 要在纸面里`);
-          assert.ok(m.titleWidth >= 40, `${where}：文件名不该被挤成 ${m.titleWidth}px`);
+    const tab = await browser.newPage({viewport: {width: 420, height: 900}});
+    try {
+      const at = async (mode, width, {install = false, css = artifacts} = {}) => {
+        await tab.setViewportSize({width, height: 900});
+        await tab.setContent(page(mode, install));
+        await tab.addStyleTag({content: css});
+        await tab.addStyleTag({content: skin});
+        return await measure(tab);
+      };
+      for (const mode of ['default', 'metre']) {
+        for (const width of [420, 560, 600, 779]) {
+          for (const install of [false, true]) {
+            const m = await at(mode, width, {install});
+            const where = `${mode} ${width}${install ? ' 带「装到桌面」' : ''}`;
+            assert.ok(m.scroll <= m.client, `${where}：头部不该比纸面宽（${m.scroll} > ${m.client}）`);
+            assert.ok(m.closeInside, `${where}：× 要在纸面里`);
+            assert.ok(m.titleWidth >= 40, `${where}：文件名不该被挤成 ${m.titleWidth}px`);
+          }
         }
-      }
-      // 780 起不换行：一行放得下、× 在纸面里（780 带「装到桌面」时文件名按设计省略成 30 多 px，只在 820 / 1440 量文件名宽）
-      for (const width of [780, 820, 1440]) {
-        for (const install of [false, true]) {
-          const m = await at(mode, width, {install});
-          const where = `${mode} ${width}${install ? ' 带「装到桌面」' : ''}`;
-          assert.ok(m.scroll <= m.client && m.closeInside, `${where}：一行要放得下（${JSON.stringify(m)}）`);
-          if (width >= 820) assert.ok(m.titleWidth >= 40, `${where}：文件名不该被挤成 ${m.titleWidth}px`);
-          assert.ok(m.height < 60, `${where}：宽窗不换行，头部还是一行（高 ${m.height}）`);
+        // 780 起不换行：一行放得下、× 在纸面里（780 带「装到桌面」时文件名按设计省略成 30 多 px，只在 820 / 1440 量文件名宽）
+        for (const width of [780, 820, 1440]) {
+          for (const install of [false, true]) {
+            const m = await at(mode, width, {install});
+            const where = `${mode} ${width}${install ? ' 带「装到桌面」' : ''}`;
+            assert.ok(m.scroll <= m.client && m.closeInside, `${where}：一行要放得下（${JSON.stringify(m)}）`);
+            if (width >= 820) assert.ok(m.titleWidth >= 40, `${where}：文件名不该被挤成 ${m.titleWidth}px`);
+            assert.ok(m.height < 60, `${where}：宽窗不换行，头部还是一行（高 ${m.height}）`);
+          }
         }
+        // 反例：只删掉 B61 那段 @media，560 又溢出、× 出纸面
+        const end = artifacts.indexOf('} }', artifacts.indexOf(RULE)) + 3;
+        const without = await at(mode, 560, {css: artifacts.slice(0, artifacts.indexOf(RULE)) + artifacts.slice(end)});
+        assert.ok(without.scroll > without.client && !without.closeInside, `${mode}：删掉规则后 560 应该又溢出（${JSON.stringify(without)}）`);
       }
-      // 反例：只删掉 B61 那段 @media，560 又溢出、× 出纸面
-      const end = artifacts.indexOf('} }', artifacts.indexOf(RULE)) + 3;
-      const without = await at(mode, 560, {css: artifacts.slice(0, artifacts.indexOf(RULE)) + artifacts.slice(end)});
-      assert.ok(without.scroll > without.client && !without.closeInside, `${mode}：删掉规则后 560 应该又溢出（${JSON.stringify(without)}）`);
-    }
+    } finally { await tab.close(); }
   } finally {
     await browser.close();
   }
