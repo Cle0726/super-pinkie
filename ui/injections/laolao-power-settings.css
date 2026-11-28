@@ -294,7 +294,7 @@
   font-weight: 700;
   cursor: pointer;
 }
-#pinkie-power .pinkie-power__reset { border: 1.5px solid var(--pp-line); background: #fff; color: #a92f68; }
+#pinkie-power .pinkie-power__reset { border: 1.5px solid #b0648c; background: #fff; color: #a92f68; }
 #pinkie-power .pinkie-power__reset:hover { border-color: var(--pp-accent); }
 #pinkie-power .pinkie-power__done {
   border: 0;

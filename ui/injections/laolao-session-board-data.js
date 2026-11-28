@@ -354,7 +354,7 @@
       watchTimer = setTimer(() => {
         watchTimer = 0;
         if (!opened || liveBag.stale || !hasRunning()) return;
-        if (now() - lastEventAt >= WATCH_MS) void readList();
+        if (now() - lastEventAt >= WATCH_MS) void readList().catch(() => {});   // 网关一时读不到：留着旧列表，下一个事件再读
         else armWatch();
       }, WATCH_MS);
     }
@@ -395,14 +395,14 @@
       if (!opened) return;
       const wait = Math.max(0, LIST_THROTTLE_MS - (now() - lastListAt));
       if (wait === 0 && !listTimer) {
-        void readList();
+        void readList().catch(() => {});
         return;
       }
       listQueued = true;
       if (listTimer) return;
       listTimer = setTimer(() => {
         listTimer = 0;
-        if (listQueued && opened) void readList();
+        if (listQueued && opened) void readList().catch(() => {});
       }, wait || LIST_THROTTLE_MS);
     }
 
@@ -532,7 +532,7 @@
       liveBag.started.clear();
       liveBag.tools.clear();
       lastEventAt = now();
-      await readList();
+      try { await readList(); } catch { /* 重连后第一次没读到：看门狗照样挂上，过会儿再读 */ }
       armWatch();
       notify();
     }
