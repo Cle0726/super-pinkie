@@ -125,6 +125,7 @@
       "files": [
         "laolao-composer-tray.css",
         "laolao-composer-tray.js",
+        "laolao-composer-shot.js",
         "laolao-composer-history.js",
         "laolao-composer-bang.css",
         "laolao-composer-bang.js",
