@@ -1,6 +1,4 @@
-/* 侧栏：一层很薄的雾面，和聊天区的雾板融在一起；不画硬边框、不叠多层玻璃。
-   悬停有一块会滑动的柔光（laolao-sidebar-autohide.js 移动它），当前会话是一枚白色小卡片。
-   收起后完全隐藏，左边缘留一条细把手，鼠标靠近会亮起，碰到就滑出。 */
+/* 侧栏：一层很薄的雾面，和聊天区的雾板融在一起；不画硬边框、不叠多层玻璃。悬停有一块会滑动的柔光（laolao-sidebar-autohide.js 移动它），当前会话是一枚白色小卡片。收起后完全隐藏，左边缘留一条细把手，鼠标靠近会亮起，碰到就滑出。 */
 html:not([data-laolao-plain-composer]):not([data-r2-off]) { --sb-ink: color-mix(in srgb, var(--accent) 22%, #4a3d44); --sb-muted: color-mix(in srgb, var(--accent) 18%, #9a8b92); --sb-hover: color-mix(in srgb, var(--accent) 9%, rgba(255, 255, 255, .78)); }
 /* B11 学习表：日间分组标题 / 计数 / 分组按钮 / 会话日期时间太淡（#9a8b92 再叠 .45–.7 透明度只剩约 2:1）→ #6e6067（五个模式 ≥ 5.0:1）、文字不透明、按钮 .8（≥ 3.4:1，悬停仍是 1）、带字的「打开」1（≥ 4.5:1）；项目标题的 add-project 由 236–237 行管（两级 id），这里碰不到。夜间（laolao-night.css）和 Metre（laolao-metre-contrast.css）不变；id 级压过 laolao-sidebar.css:466–467，不用强制覆盖。 */
 html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-pinkie-night]):not([data-laolao-mode="metre"]) { --sb-muted: color-mix(in srgb, var(--accent) 18%, #6e6067); }
@@ -13,7 +11,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar {
   position: relative;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .4) 78%, rgba(255, 255, 255, .22)),
-    linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--accent) 8%, transparent)) !important;
+    linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--accent) 8%, transparent)) var(--sb-base, transparent) !important;
   border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -176,11 +174,9 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-
     grid-template-columns: 0 minmax(0, 1fr) !important;
     grid-template-areas: "nav topbar" "nav content" !important; column-gap: 0 !important;
   }
-  /* 收起：侧栏按「固定时的样子」原地滑出去（不先变成卡片再滑，那样会像两层叠在一起、卡住了一样）。
-     原生的网格列宽动画关掉：它会让整页聊天每一帧都重新排版；正文改由脚本用位移平滑挪到新位置。 */
+  /* 收起：侧栏按「固定时的样子」原地滑出去（不先变成卡片再滑，那样会像两层叠在一起、卡住了一样）。原生的网格列宽动画关掉：它会让整页聊天每一帧都重新排版；正文改由脚本用位移平滑挪到新位置。 */
   html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]) .shell.shell--chat { transition: none !important; }
-  /* 聊天滚动框常驻一张合成层：收起/固定侧栏时正文跟着滑，第一次滑不用临时建层（实测首帧 225–366ms → 约 100ms）。
-     滚动框里没有 position: fixed 的元素（弹层都挂在 body 上），不受影响。 */
+  /* 聊天滚动框常驻一张合成层：收起/固定侧栏时正文跟着滑，第一次滑不用临时建层（实测首帧 225–366ms → 约 100ms）。滚动框里没有 position: fixed 的元素（弹层都挂在 body 上），不受影响。 */
   html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]) .shell--chat .chat-thread { will-change: transform; }
   html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav {
     position: fixed !important; inset: 0 auto 0 0 !important;
@@ -231,6 +227,8 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-
 
 /* S4/S5/K7: the selected row and the four session states share theme tokens. */
 html .sidebar { --sb-x:12px; --sb-active:rgba(217,80,141,.10); --sb-status-waiting:#e0a030; --sb-status-error:#d9534f; --sb-status-running:#d9508d; --sb-status-contrast:#fff; }
+/* B11·S5：≤850 抽屉压在 rgba(0,0,0,.52) 遮罩上，半透明白底只剩约 rgb(174,158,165)，高亮行时间 2.97:1；抽屉打开时末层垫 --pk-solid 实底（夜间 laolao-night.css 自己的底不读这个变量）。 */
+@media (max-width: 850px) { html:not([data-laolao-plain-composer]):not([data-r2-off]) .shell--nav-drawer-open > .shell-nav .sidebar { --sb-base:var(--pk-solid); } }
 html[data-pinkie-night] .sidebar { --sb-active:rgba(255,140,190,.14); --sb-status-waiting:#f2b84b; --sb-status-error:#ff6b6b; --sb-status-running:#ff8cbe; --sb-status-contrast:#241b23; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .laolao-group__head { padding-inline:var(--sb-x) !important; }
 html .sidebar #laolao-session-manager .pinkie-project-heading .laolao-group__add-project:not(#_sb) { opacity:0 }
@@ -238,6 +236,8 @@ html .sidebar #laolao-session-manager .pinkie-project-heading:is(:hover,:focus-w
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session__name { margin-left:0 !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session--active { background:var(--sb-active) !important;box-shadow:none !important;font-weight:600; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session--active::before { left:0;width:2px;height:18px; }
+/* B11·S5：高亮行时间压在 --sb-active 粉底上，日间 --sb-muted 的 11px 像素只剩 4.3:1，夜间叠 laolao-sidebar.css:467 的 .56 只剩 2.6:1；改用本主题 --sb-ink、不透明，Metre 由 laolao-metre-skin.css 管。 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-mode="metre"]) .sidebar #laolao-session-manager .sidebar-recent-session--active .pinkie-session-time { color:var(--sb-ink);opacity:1; }
 html .sidebar .pinkie-session-status--running { color:var(--sb-status-running) }
 html .sidebar .pinkie-session-status--waiting { color:var(--sb-status-waiting) }
 html .sidebar .pinkie-session-status--error { color:var(--sb-status-error) }
