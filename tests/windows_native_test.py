@@ -1,7 +1,11 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
+import threading
+import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -277,6 +281,72 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertIn("pinkie-native", script)
         self.assertIn('"type": "quickAsk"', script)
         self.assertIn('"text": "你好"', script)
+
+    # B133：热键按两下几乎同时落进两条线程，不能都通过 self._quick is None 的检查各开一个
+    # 窗口 —— 第二个会把 self._quick 覆盖掉，第一个窗口的引用就丢了（泄漏，关不掉）。
+    def test_concurrent_quick_open_creates_only_one_window(self):
+        created = []
+        release = threading.Event()
+        lock_order = []
+
+        class SlowWindow:
+            def __init__(self, index):
+                self.index = index
+                self.destroyed = False
+                self.shown = 0
+
+            def show(self):
+                self.shown += 1
+
+            def destroy(self):
+                self.destroyed = True
+
+        def fake_create_window(*_args, **_kwargs):
+            # 第一个拿到锁的线程在这里卡住，让第二个线程有机会也想进来 -- 但它被同一把
+            # 锁挡在外面，所以 create_window 永远只会被调用一次。
+            index = len(created)
+            release.wait(2)
+            window = SlowWindow(index)
+            created.append(window)
+            return window
+
+        fake_webview = types.ModuleType("webview")
+        fake_webview.create_window = fake_create_window
+        with mock.patch.dict(sys.modules, {"webview": fake_webview}):
+            threads = [threading.Thread(target=self.native.quick_open) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            time.sleep(0.05)   # 让第一条线程先进临界区并卡在 create_window 里
+            release.set()
+            for thread in threads:
+                thread.join(2)
+        self.assertEqual(len(created), 1)
+        self.assertIs(self.native._quick, created[0])
+
+    def test_quick_open_reshows_existing_window_without_creating_a_second_one(self):
+        existing = mock.Mock()
+        self.native._quick = existing
+        fake_webview = types.ModuleType("webview")
+        fake_webview.create_window = mock.Mock(side_effect=AssertionError("must not create a second window"))
+        with mock.patch.dict(sys.modules, {"webview": fake_webview}):
+            self.native.quick_open()
+        existing.show.assert_called_once()
+        self.assertIs(self.native._quick, existing)
+
+    def test_quick_open_after_a_raised_create_window_leaves_no_orphaned_handle(self):
+        # create_window 本身炸了，self._quick 不能被设成半成品的句柄 -- 下一次 quick_open 要能正常重建。
+        fake_webview = types.ModuleType("webview")
+        fake_webview.create_window = mock.Mock(side_effect=RuntimeError("no webview"))
+        with mock.patch.dict(sys.modules, {"webview": fake_webview}):
+            with self.assertRaises(RuntimeError):
+                self.native.quick_open()
+        self.assertIsNone(self.native._quick)
+
+    def test_show_main_tolerates_a_missing_window_b133(self):
+        # show_main 已经靠 getattr(None, name) 抛的 AttributeError 被 except Exception 吞掉了；
+        # 这里只是把这条行为钉成回归测试，防止以后谁把 except 收窄了。
+        self.native._bridge._window = None
+        self.native.show_main()  # 不该抛
 
     def test_context_fields_capped_b43(self):
         # B43: mode / modeLabel / running titles used to be stored at any length (1 MB each made it in)

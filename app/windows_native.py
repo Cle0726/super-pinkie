@@ -243,6 +243,10 @@ class WindowsNative:
         self._awake_capped = False
         self._awake_timer = None
         self._awake_lock = threading.Lock()
+        # B133: the global hotkey spawns a new thread per press with no lock --
+        # two rapid presses could both see self._quick is None and each create a
+        # webview.create_window(...), leaking the first window's handle.
+        self._quick_lock = threading.Lock()
         self._load_settings()
 
     # ---------- settings ----------
@@ -480,19 +484,25 @@ class WindowsNative:
         return {"ok": False, "conflict": True, "error": "这个快捷键被别的程序占用了"}
 
     def quick_open(self):
-        if self._quick is not None:
-            try:
-                self._quick.show()
-                return
-            except Exception:
-                self._quick = None
-        import webview
+        """B133: serialized so two hotkey presses racing in from separate threads
+        can't both pass the `self._quick is None` check and each create a window --
+        the second create_window() would silently leak the first's handle."""
+        with self._quick_lock:
+            if self._quick is not None:
+                try:
+                    self._quick.show()
+                    return
+                except Exception:
+                    self._quick = None
+            import webview
 
-        self._quick = webview.create_window("快速提问", html=QUICK_HTML, js_api=QuickAskApi(self), width=560, height=64,
-                                            frameless=True, on_top=True, easy_drag=True, resizable=False)
+            quick = webview.create_window("快速提问", html=QUICK_HTML, js_api=QuickAskApi(self), width=560, height=64,
+                                          frameless=True, on_top=True, easy_drag=True, resizable=False)
+            self._quick = quick  # set only after a successful create -- a raised create_window leaves no orphaned handle
 
     def quick_close(self):
-        quick, self._quick = self._quick, None
+        with self._quick_lock:
+            quick, self._quick = self._quick, None
         if quick is not None:
             try:
                 quick.destroy()
