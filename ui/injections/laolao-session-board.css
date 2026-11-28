@@ -1,0 +1,76 @@
+/* laolao-session-board.css —— S6 碧琪皮：侧栏顶部「在跑 N」胶囊 + 从侧栏右边滑出的面板（设计-S6 第五节）。
+ * Metre 皮的样式在 laolao-metre-session-board.css；这里的规则都只在非 Metre 模式生效。 */
+.pk-sb-pill {
+  display: inline-flex; align-items: center; gap: 6px; margin: 4px 12px 6px; padding: 3px 12px;
+  border: 1px solid var(--pt-line, #f3c6d8); border-radius: 999px; background: var(--pt-card, #fff);
+  color: var(--pt-accent, #d63f7f); font: 600 12.5px/1.4 inherit; cursor: pointer;
+}
+.pk-sb-pill[hidden] { display: none; }
+.pk-sb-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pk-sb-pill[data-ask="1"] { border-color: var(--pt-accent, #d63f7f); background: var(--pt-accent, #d63f7f); color: #fff; }
+.pk-sb-pill:focus-visible { outline: 2px solid var(--pt-accent, #d63f7f); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-sb-pill { border-radius: 0; border-color: var(--metre-line-strong, #D3D0C8); background: transparent; color: var(--metre-text, #1B1A18); font-weight: 500; }
+html[data-laolao-mode="metre"] .pk-sb-pill::before { border-radius: 0; background: var(--metre-accent, #96681C); }
+html[data-laolao-mode="metre"] .pk-sb-pill[data-ask="1"] { background: transparent; color: var(--metre-accent, #96681C); border-color: var(--metre-accent, #96681C); }
+
+.pk-sb-panel {
+  position: fixed; z-index: 60; top: var(--pk-sb-top, 12px); bottom: 12px; left: calc(var(--pk-sb-left, 0px) + 8px);
+  width: min(460px, calc(100vw - var(--pk-sb-left, 0px) - 24px)); display: flex; flex-direction: column;
+  border: 1px solid var(--pt-line, #f3c6d8); border-radius: 18px; background: #fffafc;
+  color: var(--pt-text, #3b2a33); box-shadow: 0 12px 32px rgba(120, 40, 80, 0.16); overflow: hidden;
+}
+.pk-sb-panel[hidden] { display: none; }
+.pk-sb-head { display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 10px; border-bottom: 1px solid var(--pt-line, #f3c6d8); }
+.pk-sb-head h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.pk-sb-sum { margin: 0; font-size: 12.5px; color: var(--pt-accent, #d63f7f); }
+.pk-sb-close { margin-left: auto; border: 0; background: none; color: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 8px; }
+.pk-sb-close:hover { background: rgba(214, 63, 127, 0.08); }
+.pk-sb-body { flex: 1; overflow: auto; padding: 8px; }
+
+/* 行：两种皮共用的骨架，皮各自上色 */
+.pk-sb-list { list-style: none; margin: 0; padding: 0; }
+.pk-sb-row {
+  display: grid; grid-template-columns: 28px auto minmax(0, 1fr) auto 24px; grid-template-areas: "lead mode title time more" "lead doing doing use more";
+  align-items: center; column-gap: 8px; row-gap: 2px; padding: 8px 8px; border-radius: 12px; cursor: pointer; outline: none;
+}
+.pk-sb-row:hover, .pk-sb-row:focus-visible { background: rgba(214, 63, 127, 0.07); }
+.pk-sb-row:focus-visible { box-shadow: inset 0 0 0 2px var(--pt-accent, #d63f7f); }
+.pk-sb-row[data-state="ask"] { background: rgba(214, 63, 127, 0.1); }
+.pk-sb-row[data-offline="1"] { opacity: 0.55; }
+.pk-sb-row.is-child { margin-left: 24px; }
+.pk-sb-sticker { grid-area: lead; width: 28px; height: 28px; object-fit: contain; }
+.pk-sb-lamp { grid-area: lead; justify-self: center; width: 8px; height: 8px; background: var(--metre-line-strong, #D3D0C8); }
+.pk-sb-lamp[data-lit="1"] { background: var(--metre-accent, #96681C); }
+.pk-sb-mode { grid-area: mode; padding: 0 6px; border-radius: 6px; background: rgba(214, 63, 127, 0.1); color: var(--pt-accent, #d63f7f); font-size: 11px; line-height: 18px; white-space: nowrap; }
+.pk-sb-title { grid-area: title; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
+.pk-sb-time { grid-area: time; font-size: 11.5px; color: var(--card-muted, #8a7680); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pk-sb-doing { grid-area: doing; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--card-muted, #8a7680); }
+.pk-sb-row[data-state="ask"] .pk-sb-doing { color: var(--pt-accent, #d63f7f); font-weight: 600; }
+.pk-sb-use { grid-area: use; justify-self: end; width: 56px; height: 4px; border-radius: 999px; background: rgba(214, 63, 127, 0.12); overflow: hidden; }
+.pk-sb-use i { display: block; height: 100%; border-radius: inherit; background: var(--pt-accent, #d63f7f); }
+.pk-sb-use.is-over i { background: var(--danger, #c2410c); }
+.pk-sb-more { grid-area: more; border: 0; background: none; color: inherit; font-size: 16px; cursor: pointer; border-radius: 6px; padding: 0 4px; }
+.pk-sb-more[aria-expanded="true"] { transform: rotate(90deg); }
+.pk-sb-kids { grid-column: 2 / -1; justify-self: start; border: 0; background: none; padding: 0; color: var(--pt-accent, #d63f7f); font-size: 12px; cursor: pointer; }
+.pk-sb-kid-more, .pk-sb-fold { margin-left: 24px; padding: 4px 8px; font-size: 12px; color: var(--card-muted, #8a7680); }
+.pk-sb-fold button { border: 0; background: none; padding: 0; color: var(--pt-accent, #d63f7f); font: inherit; cursor: pointer; }
+.pk-sb-detail-row { list-style: none; margin: 0 8px 6px 44px; }
+.pk-sb-detail { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin: 0; font-size: 12px; }
+.pk-sb-detail dt { color: var(--card-muted, #8a7680); }
+.pk-sb-detail dd { margin: 0; overflow-wrap: anywhere; }
+.pk-sb-sub { margin: 12px 8px 4px; font-size: 12px; font-weight: 600; color: var(--card-muted, #8a7680); }
+.pk-sb-offline { margin: 4px 8px 8px; font-size: 12px; color: var(--danger, #c2410c); }
+.pk-sb-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; color: var(--card-muted, #8a7680); font-size: 13px; }
+.pk-sb-empty p { margin: 0; }
+.pk-sb-empty-art { width: 88px; height: 88px; object-fit: contain; }
+
+html[data-pinkie-night] .pk-sb-pill { background: var(--pt-card, #2a2228); }
+html[data-pinkie-night] .pk-sb-panel { background: var(--pt-card, #2a2228); color: var(--pt-text, #f4e6ee); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
+html[data-pinkie-night] .pk-sb-time, html[data-pinkie-night] .pk-sb-doing, html[data-pinkie-night] .pk-sb-detail dt,
+html[data-pinkie-night] .pk-sb-sub, html[data-pinkie-night] .pk-sb-empty { color: var(--card-muted, #b9a5b0); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pk-sb-panel:not([hidden]) { animation: pk-sb-in 180ms ease-out; }
+  @keyframes pk-sb-in { from { opacity: 0; transform: translateX(-8px); } }
+}
+html[data-pinkie-reduce-motion] .pk-sb-panel { animation: none; }

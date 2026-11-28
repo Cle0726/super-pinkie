@@ -958,7 +958,7 @@ html[data-pinkie-night] .laolao-learning-packs__tag.is-new { background: rgba(23
 }
 .laolao-learning-notes__search-row { padding: 0 18px 10px; }
 .laolao-learning-notes__search { height: 38px; border-color: var(--notes-line); border-radius: 8px; color: var(--notes-ink); background: #fffefa; }
-.laolao-learning-notes__search::placeholder { color: #979d91; }
+.laolao-learning-notes__search::placeholder { color: #6b7068; }
 .laolao-learning-notes__search:focus { border-color: #9aaa8d; box-shadow: none; }
 .laolao-learning-notes__merged { color: var(--notes-muted); }
 .laolao-learning-notes__merged[aria-pressed="true"] { color: var(--notes-accent); background: var(--notes-tint); }

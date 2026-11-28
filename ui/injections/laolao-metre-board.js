@@ -95,6 +95,7 @@
       ['14:32:07', 'dispatch', 'part=资料摘要 mode=learning'], ['14:30:41', 'reject', 'part=命名方案 missing=3'],
       ['14:27:19', 'report', 'part=页面骨架 files=2'], ['14:21:02', 'dispatch', 'parts=3'], ['14:20:15', 'read', 'goals=1 asks=4'],
     ].map(([t, k, v]) => `<span><time>${t}</time> <b>${k}</b> ${esc(v)}</span>`).join('\n')}</pre>`,
+    all: () => `<ol class="pk-mb-events">${[['等你', 'Metre', '整理发布说明', '等你确认：git push'], ['在跑', '项目', '页面骨架', '正在修改'], ['在跑', '学习', '资料摘要', '正在读取']].map(([s, m, t, d]) => `<li data-state="${s === '等你' ? 'wait' : 'run'}"><time>${s}</time><b>${m}</b><span>${t} · ${d}</span></li>`).join('')}</ol>`,
   };
   // 首页三张卡片上的小图：抽象的图形，没有字和数字。
   const MINI = {
@@ -124,6 +125,7 @@
     raw: 'M7 6.5L3.5 10 7 13.5M13 6.5l3.5 3.5-3.5 3.5M11 5l-2 10',
     memory: 'M10 3.5l6 6.5-6 6.5L4 10z',
     board: 'M3.5 4.5h13v11h-13zM3.5 8.5h13M8.5 8.5v7',
+    all: 'M3.5 5h13M3.5 10h13M3.5 15h13M6 3.5v3M11 8.5v3M8 13.5v3',
   };
   const icon = (name) => `<svg class="pk-mb-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICON[name]}"/></svg>`;
   const SLOTS = [
@@ -135,6 +137,7 @@
     {id: 'runtime', en: 'Tuning', title: '调音', note: '网关连接、在用模型的健康状态、角色卡检查、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
     {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索；下面列出项目自己的规矩文件，点开在工作台里改。', source: 'pinkie.metre.memory + pinkie.fs.stat'},
     {id: 'raw', en: 'Log', title: '排练记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
+    {id: 'all', en: 'Ensemble', title: '全部会话', wide: true, note: '所有模式里在跑的会话（S6）：等你的在上，一行一个，点一行跳过去。由 laolao-session-board.js 填。', source: 'window.Pinkie.sessionBoard（sessions.list + 事件）'},
   ];
   const STATS = [
     {id: 'state', label: '此刻', hint: '在奏 · 等你 · 已收'},
