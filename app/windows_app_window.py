@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
 import posixpath
 import stat
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -30,6 +32,9 @@ APP_KINDS = {"installApp", "uninstallApp", "openApp"}
 APP_ID = re.compile(r"^w[0-9a-f]{15}$")
 START_MENU_FOLDER = "碧琪应用"
 WINDOW_SIZE = (1100, 760)
+# B133: how long the single-instance liveness probe may take before we give up
+# waiting and launch anyway -- a stuck probe must never hang 打开 or crash it.
+INSTANCE_PROBE_TIMEOUT_S = 0.8
 
 
 def state_root():
@@ -234,6 +239,70 @@ def _wscript_shell():
     return _UnicodeShell()
 
 
+# B133: process liveness + window activation, Win32-only and always optional --
+# a probe or activation exception must fall back to a plain launch, never raise.
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+SW_RESTORE = 9
+
+
+def _process_alive(pid):
+    if not pid:
+        return False
+    import ctypes
+
+    handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+    if not handle:
+        return False
+    ctypes.windll.kernel32.CloseHandle(handle)
+    return True
+
+
+def _activate_pid(pid):
+    """Bring any visible top-level window owned by pid to the foreground. Best
+    effort: no visible window (minimized to tray, still starting up) is not an
+    error, just nothing to activate."""
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    found = []
+
+    def callback(hwnd, _lparam):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid and user32.IsWindowVisible(hwnd):
+            found.append(hwnd)
+            return False
+        return True
+
+    enum_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(callback)
+    user32.EnumWindows(enum_proc, 0)
+    if not found:
+        return False
+    user32.ShowWindow(found[0], SW_RESTORE)
+    user32.SetForegroundWindow(found[0])
+    return True
+
+
+def _bounded_probe(probe, pid, timeout):
+    """Run probe(pid) off-thread so a slow/hung prober (tasklist-style checks
+    can stall) can never block opening the app; None means "don't know"."""
+    result = queue.Queue(maxsize=1)
+
+    def run():
+        try:
+            result.put(probe(pid))
+        except Exception:
+            result.put(False)
+
+    thread = threading.Thread(target=run, name="pinkie-instance-probe", daemon=True)
+    thread.start()
+    try:
+        return result.get(timeout=timeout)
+    except queue.Empty:
+        return None
+
+
 class AppShortcuts:
     """Start Menu + desktop .lnk files for installed apps. `shell` is the
     WScript.Shell COM object (a fake in tests)."""
@@ -317,13 +386,52 @@ class AppShortcuts:
             pass
         return {"ok": True}
 
-    def open(self, app_id, popen=subprocess.Popen):
+    def _lock_path(self, app_id):
+        return self.root / app_id / "instance.lock"
+
+    def _locked_pid(self, app_id):
+        pid = _read_json(self._lock_path(app_id)).get("pid")
+        return pid if isinstance(pid, int) and not isinstance(pid, bool) else None
+
+    def _write_lock(self, app_id, pid):
+        if not isinstance(pid, int) or isinstance(pid, bool):
+            return  # a mocked Popen in tests returns a Mock, not a real pid -- nothing to persist
+        try:
+            _write_json(self._lock_path(app_id), {"pid": pid})
+        except OSError:
+            pass
+
+    def _clear_lock(self, app_id):
+        try:
+            self._lock_path(app_id).unlink()
+        except OSError:
+            pass
+
+    def open(self, app_id, popen=subprocess.Popen, probe=_process_alive, activate=_activate_pid):
+        """B133: double-launching (desktop shortcut double-clicked, or clicked again
+        while the work is already open) must activate the running window instead of
+        starting a second process. A lock file under apps/<id>/ holds the last known
+        pid; liveness is checked off-thread with a bounded timeout so a stuck probe
+        can never block 打开 -- on timeout (probe returns None) we fall through to a
+        normal launch rather than guess."""
         app = read_app(app_id, self.root)
         if not app:
             return {"ok": False, "error": "这个应用不在了"}
+        pid = self._locked_pid(app["id"])
+        if pid is not None:
+            alive = _bounded_probe(probe, pid, INSTANCE_PROBE_TIMEOUT_S)
+            if alive:
+                try:
+                    activate(pid)
+                except Exception:
+                    pass
+                return {"ok": True, "activated": True}
+            if alive is False:  # confirmed dead, not just an unknown/timed-out probe
+                self._clear_lock(app["id"])
         target, arguments = self._launch(app["id"])
         args = [target] + _split_args(arguments)
-        popen(args, cwd=str(app["dir"]), close_fds=True)
+        process = popen(args, cwd=str(app["dir"]), close_fds=True)
+        self._write_lock(app["id"], getattr(process, "pid", None))
         return {"ok": True}
 
 

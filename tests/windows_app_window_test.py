@@ -187,6 +187,93 @@ class AppWindowTest(unittest.TestCase):
         args = popen.call_args.args[0]
         self.assertEqual(args, [r"C:\SuperPinkie\超級碧琪.exe", "--app-window", APP])
 
+    # B133：双开防护 —— 已经在跑的实例被激活而不是再起一个进程；判活的 probe 卡住（返回
+    # None）要落回正常启动，不能等死；确认已死的锁要清掉，不留垫脚石。
+    def test_open_writes_a_lock_with_the_new_pid(self):
+        self.install_files()
+        process = mock.Mock(pid=4242)
+        popen = mock.Mock(return_value=process)
+        self.assertEqual(self.store.open(APP, popen=popen, probe=mock.Mock(return_value=False)), {"ok": True})
+        self.assertEqual(json.loads(self.store._lock_path(APP).read_text(encoding="utf-8")), {"pid": 4242})
+
+    def test_open_activates_a_live_instance_instead_of_launching_again(self):
+        self.install_files()
+        appwin._write_json(self.store._lock_path(APP), {"pid": 4242})
+        popen = mock.Mock()
+        probe = mock.Mock(return_value=True)
+        activate = mock.Mock()
+        self.assertEqual(self.store.open(APP, popen=popen, probe=probe, activate=activate), {"ok": True, "activated": True})
+        probe.assert_called_once_with(4242)
+        activate.assert_called_once_with(4242)
+        popen.assert_not_called()
+        # 锁没被动过，还是原来那个活实例的 pid。
+        self.assertEqual(json.loads(self.store._lock_path(APP).read_text(encoding="utf-8")), {"pid": 4242})
+
+    def test_open_cleans_a_stale_lock_from_a_dead_pid_and_launches(self):
+        self.install_files()
+        appwin._write_json(self.store._lock_path(APP), {"pid": 4242})
+        process = mock.Mock(pid=9999)
+        popen = mock.Mock(return_value=process)
+        probe = mock.Mock(return_value=False)  # confirmed dead, not just unknown
+        self.assertEqual(self.store.open(APP, popen=popen, probe=probe, activate=mock.Mock()), {"ok": True})
+        popen.assert_called_once()
+        self.assertEqual(json.loads(self.store._lock_path(APP).read_text(encoding="utf-8")), {"pid": 9999})
+
+    def test_open_falls_through_to_a_normal_launch_when_the_probe_times_out(self):
+        # 探活本身卡死（返回 None）不能让「打开」一起卡死；也不能瞎猜着清掉锁 —— 既不清锁，也正常起一份。
+        self.install_files()
+        appwin._write_json(self.store._lock_path(APP), {"pid": 4242})
+        process = mock.Mock(pid=5555)
+        popen = mock.Mock(return_value=process)
+        activate = mock.Mock()
+
+        def hung_probe(pid):
+            import time
+
+            time.sleep(5)  # longer than INSTANCE_PROBE_TIMEOUT_S
+            return True
+
+        self.assertEqual(self.store.open(APP, popen=popen, probe=hung_probe, activate=activate), {"ok": True})
+        popen.assert_called_once()
+        activate.assert_not_called()
+        # 锁没清掉（不确定它死没死），但新开的这份进程把锁改成了自己的 pid。
+        self.assertEqual(json.loads(self.store._lock_path(APP).read_text(encoding="utf-8")), {"pid": 5555})
+
+    def test_open_with_a_broken_probe_or_activate_still_succeeds(self):
+        # 探活/激活任何一步炸了都不能把「打开」炸掉 —— 用户点的是开应用，不是看异常。
+        self.install_files()
+        appwin._write_json(self.store._lock_path(APP), {"pid": 4242})
+        popen = mock.Mock()
+
+        def broken_probe(pid):
+            raise OSError("no such api")
+
+        result = self.store.open(APP, popen=popen, probe=broken_probe, activate=mock.Mock())
+        self.assertTrue(result["ok"], result)
+        popen.assert_called_once()  # probe raising counts as "not alive", not "unknown"
+
+        appwin._write_json(self.store._lock_path(APP), {"pid": 4242})
+        popen2 = mock.Mock()
+
+        def broken_activate(pid):
+            raise OSError("no such window")
+
+        result2 = self.store.open(APP, popen=popen2, probe=mock.Mock(return_value=True), activate=broken_activate)
+        self.assertTrue(result2["ok"], result2)
+        popen2.assert_not_called()  # it was alive -- a broken activate must not fall back to a second launch
+
+    def test_bounded_probe_helper_directly(self):
+        self.assertTrue(appwin._bounded_probe(lambda pid: True, 1, 1))
+        self.assertFalse(appwin._bounded_probe(lambda pid: False, 1, 1))
+        self.assertFalse(appwin._bounded_probe(mock.Mock(side_effect=OSError("x")), 1, 1))
+
+        def hangs(pid):
+            import time
+
+            time.sleep(5)
+
+        self.assertIsNone(appwin._bounded_probe(hangs, 1, 0.1))
+
     def test_argv_and_launch_command(self):
         self.assertEqual(appwin.app_id_from_argv(["--app-window", APP]), APP)
         self.assertEqual(appwin.app_id_from_argv(["--app-window", "../x"]), "")
