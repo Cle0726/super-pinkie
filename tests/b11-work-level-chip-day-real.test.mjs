@@ -19,6 +19,42 @@ import {OLD_CHIP_CSS, measureChip, shot} from './visual/lib/work-level-chip-cont
 const SCENES = ['home-project', 'sidebar-collapsed', 'model-picker', 'long-conversation'];
 const WIDTHS = [1440, 820];
 
+// 换宽的媒体查询重排和注回旧色都是同步 CSS、没有 transitionend 可等，用同一个判据代替固定 waitForTimeout(ms)：
+// 反复在页面里跑 read()，连续两帧结果不再变就认为已经稳定。read 必须是一个无参纯函数（会被 toString() 搬进
+// page.evaluate），返回值要能被 JSON.stringify 序列化。
+async function waitForStableEval(page, read) {
+  const result = await page.evaluate(async (readSrc) => {
+    const fn = new Function(`return (${readSrc})();`);
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    let last = JSON.stringify(fn());
+    let same = 0;
+    for (let i = 0; i < 600 && same < 2; i++) {
+      await frame();
+      const now = JSON.stringify(fn());
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
+    return {settled: same >= 2, value: last};
+  }, read.toString());
+  if (!result.settled) throw new Error(`value never held still for two frames: ${result.value.slice(0, 200)}`);
+  return JSON.parse(result.value);
+}
+
+// chip 的位置（换宽重排）和颜色（注回旧色）是否已经稳定；选择器字面量写死，因为这个函数要被 toString() 搬进页面跑。
+function readChipState() {
+  const chip = document.querySelector('.agent-chat__input .pinkie-chip--mode:not(.pinkie-baton)');
+  if (!chip) return {missing: true, w: window.innerWidth};
+  const el = chip.querySelector(':scope > span');
+  const caret = chip.querySelector('.pinkie-chip__caret');
+  const r = chip.getBoundingClientRect();
+  return {
+    w: window.innerWidth,
+    box: [r.left, r.top, r.width, r.height].map((v) => Math.round(v * 100) / 100),
+    color: el ? getComputedStyle(el).color : null,
+    caretOpacity: caret ? getComputedStyle(caret).opacity : null,
+  };
+}
+
 describe('真浏览器（server / browser 全文件复用一次）', () => {
   const engine = resolveRealEngine();
   let installed = null;
@@ -55,7 +91,7 @@ describe('真浏览器（server / browser 全文件复用一次）', () => {
           for (const width of WIDTHS) {
             await page.setViewportSize({width, height: 900});
             await page.mouse.move(0, 0);
-            await page.waitForTimeout(400);
+            await waitForStableEval(page, readChipState);   // 换宽重排，等 chip 的位置 / 颜色连续两帧不再变
             const now = await measureChip(page, await shot(page));
             st.diagnostic(`${width} 现在 ${JSON.stringify(now)}`);
             assert.ok(!now.missing, `${scene}/${width} 有「工作程度」chip（mode=${now.mode}）`);
@@ -65,7 +101,7 @@ describe('真浏览器（server / browser 全文件复用一次）', () => {
             assert.ok(now.textPx.ratio >= 4.5, `${scene}/${width} 字 ${now.textPx.ratio} ≥ 4.5（${JSON.stringify(now.textPx)}）`);
             assert.ok(now.caretPx?.ratio >= 3, `${scene}/${width} 箭头 ${now.caretPx?.ratio} ≥ 3（${JSON.stringify(now.caretPx)}）`);
             const tag = await page.addStyleTag({content: OLD_CHIP_CSS});
-            await page.waitForTimeout(120);
+            await waitForStableEval(page, readChipState);   // 注回旧色，等 chip 颜色连续两帧不再变
             const old = await measureChip(page, await shot(page));
             st.diagnostic(`${width} 旧色 ${JSON.stringify(old)}`);
             oldWorst.push({scene, width, ratio: old.textPx.ratio});
