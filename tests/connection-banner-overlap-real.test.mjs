@@ -55,14 +55,17 @@ test('B9 real page: on chat, the disconnected banner pill no longer covers the t
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
+  // B101（提速）：日夜在开页面时就定了，宽度是开页后才设的。所以一个主题只开一页：先在 820 / 1440 量正例，
+  // 再删一次那两条规则、在 820 / 1440 量反例（删了就不用放回）。页面加载 4 → 2，断言一条没改。
   const bad = [];
-  for (const width of [820, 1440]) {
-    for (const theme of ['day', 'night']) {
-      const tag = `${width}-${theme}`;
-      const {context, page} = await openRealScenePage(browser, server.origin, 'long-conversation', theme);
-      try {
+  for (const theme of ['day', 'night']) {
+    const {context, page} = await openRealScenePage(browser, server.origin, 'long-conversation', theme);
+    try {
+      for (const width of [820, 1440]) {
+        const tag = `${width}-${theme}`;
         await page.setViewportSize({width, height: 900});
         assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-laolao-watchdog-state')), null, `${tag}: watchdog 提示在，原生横幅会被藏掉，量不到`);
+        await page.evaluate(() => document.querySelectorAll('#b9-callout').forEach((n) => n.remove()));   // 同一页换宽度：先拿掉上一次插的 callout，和新开页面一样只有一条
         const missing = await showBanner(page);
         assert.equal(missing, null, `${tag}: 页面上没有 ${missing}`);
         await page.waitForTimeout(400);
@@ -70,23 +73,30 @@ test('B9 real page: on chat, the disconnected banner pill no longer covers the t
         console.log(`ℹ ${tag}: ${JSON.stringify(got)}`);
         assert.equal(got.overlap, 0, `${tag}: 横幅胶囊盖住了 callout — ${JSON.stringify(got)}`);
         assert.ok(got.alpha >= 0.99, `${tag}: 胶囊底半透明 ${got.bg}`);
+      }
 
-        const removed = await page.evaluate((frags) => {
-          let n = 0;
-          for (const sh of document.styleSheets) {
-            let rules; try { rules = sh.cssRules; } catch { continue; }
-            for (let i = rules.length - 1; i >= 0; i--) if (frags.includes(rules[i].selectorText)) { sh.deleteRule(i); n++; }
-          }
-          return n;
-        }, RULES);
-        assert.equal(removed, 2, `${tag} 反例：页面上没找到那两条新规则（找到 ${removed} 条）`);
+      const removed = await page.evaluate((frags) => {
+        let n = 0;
+        for (const sh of document.styleSheets) {
+          let rules; try { rules = sh.cssRules; } catch { continue; }
+          for (let i = rules.length - 1; i >= 0; i--) if (frags.includes(rules[i].selectorText)) { sh.deleteRule(i); n++; }
+        }
+        return n;
+      }, RULES);
+      assert.equal(removed, 2, `${theme} 反例：页面上没找到那两条新规则（找到 ${removed} 条）`);
+      for (const width of [820, 1440]) {
+        const tag = `${width}-${theme}`;
+        await page.setViewportSize({width, height: 900});
+        await page.evaluate(() => document.querySelectorAll('#b9-callout').forEach((n) => n.remove()));   // 同一页换宽度：先拿掉上一次插的 callout，和新开页面一样只有一条
+        const missing = await showBanner(page);
+        assert.equal(missing, null, `${tag}: 页面上没有 ${missing}`);
         await page.waitForTimeout(300);
         const after = await page.evaluate(measure);
         console.log(`ℹ ${tag} without the rules: ${JSON.stringify(after)}`);
         bad.push({tag, ...after});
-      } finally {
-        await context.close();
       }
+    } finally {
+      await context.close();
     }
   }
   assert.ok(bad.some((b) => b.overlap > 0), `反例没生效：删掉规则后胶囊都不盖 callout — ${JSON.stringify(bad)}`);

@@ -14,4 +14,5 @@ tests/metre-sidebar-probe-selector.test.mjs
 tests/metre-switch-e2e.test.mjs
 tests/metre-backstage-sync.test.mjs
 tests/metre-engine-ui.test.mjs
+tests/metre-library.test.mjs
 tests/webkit-screenshot.test.mjs

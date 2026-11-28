@@ -5,12 +5,10 @@ import {playwright, launchWithHarness} from '../tools/study-desk/harness.mjs';
 
 // 舞台昼夜跟北京时间（.pkg-stage[data-time]），学习台主题跟按钮（#pinkie-study-desk[data-theme]），两者独立：
 // 夜间主题 + 白天舞台时，夜间 stars 规则（1,3,0）压过形态牌的金色规则（1,2,0），亮黄 #F2C14E 落到浅色毛玻璃牌上，只有 ~1.0:1。
-const CASES = [
-  {hour: 10, theme: 'day'},
-  {hour: 10, theme: 'night'},
-  {hour: 21, theme: 'day'},
-  {hour: 21, theme: 'night'},
-];
+// 提速（L112）：北京时间只能在开页前注入，所以每个舞台时刻开一页（开页 + deskReady 8 → 2 次），
+// 同一页上依次量 日间 1440 → 日间 820 → 切夜间 820 → 夜间 1440；反例要注入旧规则，放在这一页最后量（1440、820 各一次）。
+// 断言与原来逐格一致：4 种主题 × 舞台组合 × 2 个宽度都量，反例两个宽度都量。
+const HOURS = [10, 21];
 
 // main@b3e231ad 的两条旧规则：注回后夜间主题 + 白天舞台必须变红。
 // 加 html:not(#_r1) 抬一级特异性：同特异性时按文档顺序，学习台样式表排在注入的 <style> 后面，改后的同名规则会赢，旧色注不上（WebKit 实测仍是 #7A5518，6.32）。
@@ -32,38 +30,67 @@ function measure() {
     const fg = P(getComputedStyle(g).color); const cb = bgOf(g);
     return {kind: g.dataset.kind, color: getComputedStyle(g).color, chain: ratio(over(fg, cb), cb), sky: ratio(over(fg, tagBg), tagBg)};
   });
-  return {time: stage.dataset.time, theme: document.querySelector('#pinkie-study-desk').dataset.theme, glyphs};
+  return {time: stage.dataset.time, theme: document.querySelector('#pinkie-study-desk').dataset.theme, width: window.innerWidth, glyphs};
+}
+
+// 改视口后等布局真的换到这个宽度（innerWidth 到位、形态牌里的图标还在），再量。
+async function resize(page, width) {
+  await page.setViewportSize({width, height: 900});
+  await page.waitForFunction((w) => window.innerWidth === w && !!document.querySelector('.pkg-stage .pkg-stage__tag .pkg-glyph'), width, {timeout: 5_000});
 }
 
 test('B11 舞台形态牌里的星星 / 封印 / 碎片图标：按舞台昼夜取色，四种主题 × 舞台组合都 ≥ 3:1；注回旧规则夜间主题 + 白天舞台变红（WebKit）', async () => {
   const {harness, close} = await harnessWithGame();
   const browser = await launchWithHarness(harness, () => playwright().webkit.launch({headless: true}));
   try {
-    for (const width of [1440, 820]) for (const {hour, theme} of CASES) {
-      const page = await browser.newPage({viewport: {width, height: 900}, reducedMotion: 'reduce'});
-      const errors = []; page.on('pageerror', e => errors.push(e.message));
-      await page.addInitScript(h => { window.__pkBeijingHour = h; }, hour);
-      await page.goto(harness.url);
-      await deskReady(page, 'today');
-      if (theme === 'night') { await page.getByRole('button', {name: '切换日间和夜间'}).click(); await page.locator('#pinkie-study-desk[data-theme="night"]').waitFor(); }
-      const at = `${width} 桌面${theme} 舞台${hour >= 18 ? 'night' : 'day'}`;
-      const r = await page.evaluate(measure);
-      assert.equal(r.time, hour >= 18 ? 'night' : 'day', at);
-      assert.equal(r.theme, theme, at);
-      assert.ok(r.glyphs.length > 0, `${at}：形态牌里没找到 .pkg-glyph`);
-      for (const g of r.glyphs) {
-        assert.ok(g.chain >= 3, `${at}：${g.kind} ${g.color} 逐层合成 ${g.chain.toFixed(2)} < 3`);
-        assert.ok(g.sky >= 3, `${at}：${g.kind} ${g.color} 最不利天空 ${g.sky.toFixed(2)} < 3`);
+    for (const hour of HOURS) {
+      const stageTime = hour >= 18 ? 'night' : 'day';
+      const page = await browser.newPage({viewport: {width: 1440, height: 900}, reducedMotion: 'reduce'});
+      try {
+        const errors = []; page.on('pageerror', e => errors.push(e.message));
+        await page.addInitScript(h => { window.__pkBeijingHour = h; }, hour);
+        await page.goto(harness.url);
+        await deskReady(page, 'today');
+
+        const check = async (width, theme) => {
+          const at = `${width} 桌面${theme} 舞台${stageTime}`;
+          const r = await page.evaluate(measure);
+          assert.equal(r.width, width, at);
+          assert.equal(r.time, stageTime, at);
+          assert.equal(r.theme, theme, at);
+          assert.ok(r.glyphs.length > 0, `${at}：形态牌里没找到 .pkg-glyph`);
+          for (const g of r.glyphs) {
+            assert.ok(g.chain >= 3, `${at}：${g.kind} ${g.color} 逐层合成 ${g.chain.toFixed(2)} < 3`);
+            assert.ok(g.sky >= 3, `${at}：${g.kind} ${g.color} 最不利天空 ${g.sky.toFixed(2)} < 3`);
+          }
+          assert.deepEqual(errors, [], at);
+        };
+
+        await check(1440, 'day');
+        await resize(page, 820);
+        await check(820, 'day');
+        await page.getByRole('button', {name: '切换日间和夜间'}).click();
+        await page.locator('#pinkie-study-desk[data-theme="night"]').waitFor();
+        await check(820, 'night');
+        await resize(page, 1440);
+        await check(1440, 'night');
+
+        if (hour < 18) {
+          await page.addStyleTag({content: OLD_RULES});
+          await page.waitForFunction((old) => [...document.querySelectorAll('.pkg-stage__tag .pkg-glyph')]
+            .filter((g) => old[g.dataset.kind]).every((g) => getComputedStyle(g).color === old[g.dataset.kind]), OLD_COLORS, {timeout: 5_000});
+          for (const width of [1440, 820]) {
+            if (width !== 1440) await resize(page, width);
+            const at = `${width} 桌面night 舞台${stageTime}`;
+            const bad = await page.evaluate(measure);
+            assert.equal(bad.width, width, at);
+            assert.ok(bad.glyphs.some(g => g.sky < 3), `${at}：注回旧规则后应 < 3，实测 ${bad.glyphs.map(g => `${g.kind}:${g.sky.toFixed(2)}`).join(' ')}`);
+            assert.deepEqual(errors, [], at);
+          }
+        }
+      } finally {
+        await page.close();
       }
-      if (theme === 'night' && hour < 18) {
-        await page.addStyleTag({content: OLD_RULES});
-        await page.waitForFunction((old) => [...document.querySelectorAll('.pkg-stage__tag .pkg-glyph')]
-          .filter((g) => old[g.dataset.kind]).every((g) => getComputedStyle(g).color === old[g.dataset.kind]), OLD_COLORS, {timeout: 5_000});
-        const bad = await page.evaluate(measure);
-        assert.ok(bad.glyphs.some(g => g.sky < 3), `${at}：注回旧规则后应 < 3，实测 ${bad.glyphs.map(g => `${g.kind}:${g.sky.toFixed(2)}`).join(' ')}`);
-      }
-      assert.deepEqual(errors, [], at);
-      await page.close();
     }
   } finally { try { await browser.close(); } finally { await close(); } }
 });

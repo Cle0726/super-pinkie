@@ -125,6 +125,7 @@
       "files": [
         "laolao-composer-tray.css",
         "laolao-composer-tray.js",
+        "laolao-composer-shot.js",
         "laolao-composer-history.js",
         "laolao-composer-bang.css",
         "laolao-composer-bang.js",
@@ -295,6 +296,8 @@
         "laolao-metre-thumbs.js",
         "laolao-metre-pr.css",
         "laolao-metre-pr.js",
+        "laolao-metre-ship.css",
+        "laolao-metre-ship.js",
         "laolao-metre-tasks.css",
         "laolao-metre-tasks.js",
         "laolao-metre-outputs.css",

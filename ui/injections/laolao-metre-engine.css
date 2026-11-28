@@ -229,7 +229,7 @@ html[data-laolao-mode="metre"][data-pinkie-night] .pk-eng-diff__l--del { color: 
 
 @media (max-width: 860px) {
   .pk-eng-stage--drawer { grid-template-columns: minmax(0, 1fr) 0; }
-  .pk-eng-stage--drawer .pk-eng-drawer { position: absolute; inset: 0; z-index: 2; }
+  .pk-eng-stage--drawer .pk-eng-drawer { position: absolute; inset: 0; z-index: 2; grid-column: 1 / -1; grid-row: 1 / -1; } /* 窄宽第 2 列是 0 宽，不改占位抽屉会被压在右边一条窄带里（main 上已有，win-coord 7230136101） */
 }
 @media (prefers-reduced-motion: reduce) {
   .pk-eng-caret, .pk-eng-dot--run, .pk-eng-state--running i { animation: none; }
