@@ -1049,7 +1049,7 @@
     const text=document.createElement('span');text.textContent='已归档';
     const undo=document.createElement('button');undo.type='button';undo.textContent='撤销';undo.setAttribute('aria-label','撤销归档');
     undo.onclick=async()=>{undo.disabled=true;try{await patchSession(key,{archived:false});bar.remove();toast('已撤销归档');}catch(error){undo.disabled=false;toast(error.message);}};
-    bar.append(text,undo);document.body.append(bar);setTimeout(()=>bar.remove(),5000);
+    bar.append(text,undo);document.body.append(bar);setTimeout(()=>bar.remove(),5000);const shell=document.documentElement.dataset.laolaoMode!=='metre'&&document.querySelector('.agent-chat__composer-shell')?.getBoundingClientRect();if(shell?.height)bar.style.bottom=Math.max(32,Math.round(innerHeight-shell.top+8))+'px';
   }
   async function archiveWithUndo(key){try{await archiveSession(key,{undo:true});}catch(error){toast(error.message);}}
 
