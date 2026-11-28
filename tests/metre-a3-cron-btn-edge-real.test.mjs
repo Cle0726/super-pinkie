@@ -12,8 +12,29 @@ import {
   launchRealBrowser,
   openRealScenePage,
   startRealUiServer,
-  waitForStableEval,
 } from './visual/lib/real-harness.mjs';
+
+// Metre 皮肤的 hover/active 颜色过渡是纯 CSS transition（最长约 220ms，期间没有 DOM mutation），
+// 没有可观察的 transitionend 落点可等，所以用同一个判据代替固定 waitForTimeout(ms)：反复在页面里
+// 跑 read()，连续两帧结果不再变就认为已经稳定。read 必须是一个无参纯函数（会被 toString() 搬进
+// page.evaluate），返回值要能被 JSON.stringify 序列化。
+async function waitForStableEval(page, read) {
+  const result = await page.evaluate(async (readSrc) => {
+    const fn = new Function(`return (${readSrc})();`);
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    let last = JSON.stringify(fn());
+    let same = 0;
+    for (let i = 0; i < 600 && same < 2; i++) {
+      await frame();
+      const now = JSON.stringify(fn());
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
+    return {settled: same >= 2, value: last};
+  }, read.toString());
+  if (!result.settled) throw new Error(`value never held still for two frames: ${result.value.slice(0, 200)}`);
+  return JSON.parse(result.value);
+}
 
 // 页面里：假网关赋 window.WebSocket 时接住它，把 cron.* 请求答成三条示例任务（和 tools/pr-shots/98-a3-cron.mjs 同一套形状）。
 const initScript = () => {
