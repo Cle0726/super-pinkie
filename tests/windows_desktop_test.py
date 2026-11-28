@@ -391,6 +391,73 @@ class WindowsSmokeDebugPortTests(unittest.TestCase):
         self.assertIsNone(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:63938/x"}))
 
 
+class AppendLogRotationTests(unittest.TestCase):
+    """B129: launcher/computer/updater/guard/setup/native/relay all funnel through
+    append_log(); none of those services ever stop, so an unbounded file would
+    grow for as long as the install runs. One rotated backup per name caps it.
+    """
+
+    def run_append(self, name, message):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            with mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(state)}):
+                windows_desktop.append_log(name, message)
+                return state / "logs"
+
+    def test_a_log_under_the_cap_is_never_rotated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            with mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(state)}):
+                windows_desktop.append_log("launcher", "first")
+                windows_desktop.append_log("launcher", "second")
+            logs = state / "logs"
+            self.assertTrue((logs / "launcher.log").is_file())
+            self.assertFalse((logs / "launcher.log.1").exists())
+            text = (logs / "launcher.log").read_text(encoding="utf-8")
+            self.assertIn("first", text)
+            self.assertIn("second", text)
+
+    def test_a_log_at_the_cap_rotates_to_one_backup_and_keeps_appending(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            logs = state / "logs"
+            logs.mkdir(parents=True)
+            (logs / "gateway.log").write_bytes(b"x" * windows_desktop._LOG_MAX_BYTES)
+            with mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(state)}):
+                windows_desktop.append_log("gateway", "after rotation")
+
+            self.assertTrue((logs / "gateway.log.1").is_file(), "the oversized file must survive as a backup")
+            self.assertEqual((logs / "gateway.log.1").stat().st_size, windows_desktop._LOG_MAX_BYTES)
+            current = (logs / "gateway.log").read_text(encoding="utf-8")
+            self.assertIn("after rotation", current)
+            self.assertLess(len(current), windows_desktop._LOG_MAX_BYTES)
+
+    def test_rotation_replaces_rather_than_stacks_backups(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            logs = state / "logs"
+            logs.mkdir(parents=True)
+            (logs / "updater.log").write_bytes(b"y" * windows_desktop._LOG_MAX_BYTES)
+            (logs / "updater.log.1").write_bytes(b"stale backup from a previous rotation")
+            with mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(state)}):
+                windows_desktop.append_log("updater", "newest rotation")
+
+            backup = (logs / "updater.log.1").read_bytes()
+            self.assertEqual(backup, b"y" * windows_desktop._LOG_MAX_BYTES, "the old backup must not pile up alongside the new one")
+
+    def test_other_log_names_are_unaffected_by_one_names_rotation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            logs = state / "logs"
+            logs.mkdir(parents=True)
+            (logs / "gateway.log").write_bytes(b"z" * windows_desktop._LOG_MAX_BYTES)
+            with mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(state)}):
+                windows_desktop.append_log("gateway", "rotated")
+                windows_desktop.append_log("computer", "untouched")
+
+            self.assertFalse((logs / "computer.log.1").exists())
+            self.assertIn("untouched", (logs / "computer.log").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
