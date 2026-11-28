@@ -50,7 +50,11 @@ function Resolve-PythonWindowless {
 # ── 卸载模式 ──────────────────────────────────────────────────────────────
 if ($Remove) {
   Write-Host "==> stripping transport patches"
+  # A failed native command does not stop the script under "Stop"; check the
+  # exit code, still remove the proxy and tasks, and report the failure at the end.
   node $PatchScript --remove
+  $patchRemoveCode = $LASTEXITCODE
+  if ($patchRemoveCode -ne 0) { Write-Warning "transport patch removal failed (exit $patchRemoveCode); continuing with the rest of -Remove" }
   Write-Host "==> stopping proxy + removing scheduled task"
   Stop-ScheduledTask    -TaskName $TaskName -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
@@ -64,6 +68,10 @@ if ($Remove) {
   Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" |
     Where-Object { $_.CommandLine -and $_.CommandLine -like "*mm-retry-proxy*" } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  if ($patchRemoveCode -ne 0) {
+    Write-Host "error: proxy and scheduled tasks removed, but the transport patch is still in place (node exit $patchRemoveCode, see the message above). Strip it manually."
+    exit 1
+  }
   Write-Host "done. Config baseUrl changes (if any) must be reverted manually."
   exit 0
 }
@@ -204,22 +212,27 @@ if ($LASTEXITCODE -ne 0) { throw "Metre role assets setup failed" }
 # 注册 project agent（如果 openclaw 可用）
 $ocBin = Get-Command "openclaw" -ErrorAction SilentlyContinue
 if ($null -ne $ocBin) {
+  # Registration stays best-effort (install carries on), but a failure used to
+  # vanish: the exit code was never read and stderr went to $null. Run each
+  # call with Continue so its stderr cannot turn into a terminating error, and
+  # warn with the exit code and the last lines it printed.
+  function Invoke-OpenClawAgentStep([string]$What, [string[]]$Arguments) {
+    $ErrorActionPreference = "Continue"
+    $output = & openclaw @Arguments 2>&1 | ForEach-Object { "$_" }
+    if ($LASTEXITCODE -ne 0) {
+      $tail = (@($output) | Select-Object -Last 3) -join " | "
+      Write-Warning "$What failed (openclaw exit $LASTEXITCODE): $tail"
+    }
+  }
   $agentList = & openclaw agents list --json 2>$null | Out-String
-  if ($agentList -notmatch '"id"\s*:\s*"project"') {
-    Write-Host "    registering project agent"
-    & openclaw agents add project --non-interactive --workspace "$UserHome\.openclaw\workspace-project" 2>$null
+  foreach ($agent in @("project", "learning", "metre")) {
+    $workspace = "$UserHome\.openclaw\workspace-$agent"
+    if ($agentList -notmatch ('"id"\s*:\s*"' + $agent + '"')) {
+      Write-Host "    registering $agent agent"
+      Invoke-OpenClawAgentStep "registering $agent agent" @("agents", "add", $agent, "--non-interactive", "--workspace", $workspace)
+    }
+    Invoke-OpenClawAgentStep "setting $agent agent identity" @("agents", "set-identity", "--agent", $agent, "--identity-file", "$workspace\IDENTITY.md")
   }
-  & openclaw agents set-identity --agent project --identity-file "$UserHome\.openclaw\workspace-project\IDENTITY.md" 2>$null
-  if ($agentList -notmatch '"id"\s*:\s*"learning"') {
-    Write-Host "    registering learning agent"
-    & openclaw agents add learning --non-interactive --workspace "$UserHome\.openclaw\workspace-learning" 2>$null
-  }
-  & openclaw agents set-identity --agent learning --identity-file "$UserHome\.openclaw\workspace-learning\IDENTITY.md" 2>$null
-  if ($agentList -notmatch '"id"\s*:\s*"metre"') {
-    Write-Host "    registering metre agent"
-    & openclaw agents add metre --non-interactive --workspace "$UserHome\.openclaw\workspace-metre" 2>$null
-  }
-  & openclaw agents set-identity --agent metre --identity-file "$UserHome\.openclaw\workspace-metre\IDENTITY.md" 2>$null
 }
 
 # ── 4/6  UI 皮肤注入 ──────────────────────────────────────────────────────
