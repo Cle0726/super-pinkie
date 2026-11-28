@@ -82,12 +82,14 @@ test('Metre 输入框下面一排按钮的字（含模型名的 g 下钩）不�
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
-  for (const width of [1440, 1024, 820]) {
-    for (const theme of ['day', 'night']) {
-      await t.test(`${width} ${theme}`, async () => {
-        const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'metre-board', theme);
-        try {
-          await page.evaluate(() => window.__pinkieMetreBoard?.close?.());
+  // B101（提速）：日夜在开页面时就定了（colorScheme），宽度本来就是开页后才设的，所以一个主题只开一页、页里换三个宽度，
+  // 每个宽度量完反例后把「行高压回 1」那条样式拿掉，等行高真回来再换下一个宽度。页面加载 6 → 2，断言一条没改。
+  for (const theme of ['day', 'night']) {
+    await t.test(`${theme} 一页`, async (tp) => {
+      const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'metre-board', theme);
+      try {
+        await page.evaluate(() => window.__pinkieMetreBoard?.close?.());
+        for (const width of [1440, 1024, 820]) await tp.test(`${width} ${theme}`, async () => {
           await page.setViewportSize({width, height: 800});
           await page.waitForSelector(BOX, {timeout: 5_000});
           assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-laolao-mode')), 'metre');
@@ -100,21 +102,29 @@ test('Metre 输入框下面一排按钮的字（含模型名的 g 下钩）不�
           assert.ok(now.checked >= 2, `至少量到两段按钮文字（实际 ${now.checked}）`);
           assert.deepEqual(now.clipped, [], '没有一段字被父级在上下方向裁掉');
 
-          await page.addStyleTag({content: REVERT});
-          // 不靠固定毫秒：等每个按钮的计算行高真变成 1（= 字号），再等字体就绪和两帧，才量。
-          await page.waitForFunction((sels) => {
+          const revert = await page.addStyleTag({content: REVERT});
+          const lineIsOne = (sels) => {
             const els = [...document.querySelectorAll(sels.map((s) => `.agent-chat__input ${s}`).join(', '))];
             return els.length > 0 && els.every((el) => { const cs = getComputedStyle(el); return cs.lineHeight === '1' || Math.abs(parseFloat(cs.lineHeight) - parseFloat(cs.fontSize)) < 0.01; });
-          }, BUTTONS, {timeout: 5_000});
+          };
+          // 不靠固定毫秒：等每个按钮的计算行高真变成 1（= 字号），再等字体就绪和两帧，才量。
+          await page.waitForFunction(lineIsOne, BUTTONS, {timeout: 5_000});
           await page.evaluate(settle);
           const reverted = await page.evaluate(measure, BUTTONS);
           t.diagnostic(`${width} ${theme} 行高压回 1 ${JSON.stringify(reverted.model)}`);
           assert.ok(reverted.model?.clip, `反例：行高压回 1 时必须量出模型名被裁（${JSON.stringify(reverted.model)}）`);
           assert.deepEqual(pageErrors, [], '页面没有报错');
-        } finally {
-          await context.close();
-        }
-      });
-    }
+          // 拿掉反例样式，等行高回到不是 1，下一个宽度量的是正常样式。
+          await revert.evaluate((n) => n.remove());
+          await page.waitForFunction((sels) => {
+            const els = [...document.querySelectorAll(sels.map((s) => `.agent-chat__input ${s}`).join(', '))];
+            return els.length > 0 && !els.every((el) => { const cs = getComputedStyle(el); return cs.lineHeight === '1' || Math.abs(parseFloat(cs.lineHeight) - parseFloat(cs.fontSize)) < 0.01; });
+          }, BUTTONS, {timeout: 5_000});
+          await page.evaluate(settle);
+        });
+      } finally {
+        await context.close();
+      }
+    });
   }
 });
