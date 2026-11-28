@@ -18,6 +18,8 @@
   const canShoot = (input) => Boolean(navigator.mediaDevices?.getDisplayMedia) && photoInput(input)?.disabled === false;
   // 全部注入功能共用的通知出口（laolao-sidebar.js），不另造提示框。
   const notice = (message) => window.dispatchEvent(new CustomEvent('laolao:toast', {detail: {message}}));
+  // 「系统设置 → 隐私与安全性 → 屏幕录制」只有 Mac 才有（uireview 11-28 00:29Z）：Windows / Linux 上不写这条路径，免得照着找不到。
+  const onMac = () => /^Mac/i.test(navigator.platform || '');
   // 截图：四个取景角，中间一个小框（和工具箱自己的图标同一套线宽）。
   function icon() {
     const NS = 'http://www.w3.org/2000/svg';
@@ -78,7 +80,9 @@
       target.files = files.files;
       target.dispatchEvent(new Event('change', {bubbles: true}));
     } catch (error) {
-      if (error?.name === 'NotAllowedError') notice('没截到图：如果没弹出选择框，请到「系统设置 → 隐私与安全性 → 屏幕录制」里允许，然后再试；也可以用系统截图后粘贴进来');
+      if (error?.name === 'NotAllowedError') notice(onMac()
+        ? '没截到图：如果没弹出选择框，请到「系统设置 → 隐私与安全性 → 屏幕录制」里允许，然后再试；也可以用系统截图后粘贴进来'
+        : '没截到图：浏览器没允许共享屏幕，可以再试一次，或者用系统截图后粘贴进来');
       else if (error?.name !== 'AbortError') notice('没截到图：没抓到画面，可以再试一次，或者用系统截图后粘贴进来');
     } finally {
       for (const track of stream?.getTracks?.() || []) track.stop();

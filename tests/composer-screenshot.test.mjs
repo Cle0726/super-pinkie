@@ -26,6 +26,11 @@ test('I5 截图不自己造附件：只往原生 .agent-chat__photo-input 塞文
   assert.equal((code.match(/setTimeout\s*\(/g) || []).length, 1, '只有一个一次性定时器');
   assert.match(code, /finally \{ clearTimeout\(timer\); \}/);
   assert.match(code, /const FRAME_WAIT_MS = 3000;/);
+  // uireview 11-28 00:29Z：「系统设置 → 隐私与安全性 → 屏幕录制」只有 Mac 有。这条路径只许出现一次，而且只在 onMac() 为真的那一支；
+  // 非 Mac（Windows / Linux）那一支照样提示「没截到图」，但不写系统设置。
+  assert.match(code, /const onMac = \(\) => \/\^Mac\/i\.test\(navigator\.platform/);
+  assert.equal((code.match(/系统设置/g) || []).length, 1, 'Mac 设置路径只写一处');
+  assert.match(code, /notice\(onMac\(\)\s*\?\s*'没截到图：[^']*系统设置[^']*'\s*:\s*'没截到图：(?![^']*系统设置)[^']*'\)/, 'NotAllowedError：Mac 指到屏幕录制，非 Mac 不写 Mac 的设置路径');
   assert.match(SHOT, /window\.Pinkie\?\.domWatch\?\.watch\(/);
   // 监工 07:13：已有的工具箱脚本不变长；截图整块在新文件里，工具箱里没有截图代码。
   assert.doesNotMatch(TRAY, /getDisplayMedia|attach-shot/);
@@ -60,10 +65,12 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
 
   // 假的屏幕选择：ok 给一条 320×200 的画布流；cancel 抛 AbortError（选择框被关掉）；denied 抛 NotAllowedError（Mac 没给屏幕录制权限 /
   // 系统拒绝也是它，mac1 任务 64）；broken 抛别的错；none 表示环境不支持。
-  const open = async ({mode = 'ok', photoDisabled = false} = {}) => {
+  // platform：造假的 navigator.platform（MacIntel / Win32 / Linux x86_64），只在给了时才改。
+  const open = async ({mode = 'ok', photoDisabled = false, platform = ''} = {}) => {
     const tab = await browser.newPage();
     await tab.setContent(page(photoDisabled));
-    await tab.evaluate((mode) => {
+    await tab.evaluate(([mode, platform]) => {
+      if (platform) Object.defineProperty(Navigator.prototype, 'platform', {get: () => platform, configurable: true});
       if (!navigator.mediaDevices) Object.defineProperty(navigator, 'mediaDevices', {value: {}, configurable: true});
       const fake = mode === 'none' ? undefined : async () => {
         if (mode === 'cancel') throw new DOMException('The user aborted a request', 'AbortError');
@@ -83,7 +90,7 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
         return stream;
       };
       Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {value: fake, configurable: true});
-    }, mode);
+    }, [mode, platform]);
     await tab.addScriptTag({content: DOMWATCH});
     await tab.addScriptTag({content: TRAY});
     await tab.addScriptTag({content: SHOT});
@@ -121,16 +128,19 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
     assert.deepEqual(await tab.evaluate(() => [window.__files.length, window.__toasts]), [0, []], '取消（AbortError）：不附图、不提示');
     await tab.close();
   }
-  {
-    // mac1 任务 64：NotAllowedError（没给屏幕录制权限 / 系统拒绝）不能静默，要有一句指到「屏幕录制」的提示，且不附图。
-    const tab = await open({mode: 'denied'});
+  for (const platform of ['MacIntel', 'Win32', 'Linux x86_64']) {
+    // mac1 任务 64：NotAllowedError（没给屏幕录制权限 / 系统拒绝）不能静默，要说一句，且不附图。
+    // uireview 11-28 00:29Z：「系统设置 → 隐私与安全性 → 屏幕录制」只有 Mac 有，Windows / Linux 上不能写这条路径。
+    const tab = await open({mode: 'denied', platform});
     await shot(tab);
     await tab.waitForFunction(() => window.__toasts.length > 0, null, {timeout: 5_000});
     const got = await tab.evaluate(() => ({toasts: window.__toasts, files: window.__files.length}));
-    t.diagnostic('denied：' + JSON.stringify(got));
-    assert.equal(got.toasts.length, 1, '只说一句');
-    assert.match(got.toasts[0], /^没截到图：.*屏幕录制/, 'NotAllowedError：提示指到屏幕录制权限');
-    assert.equal(got.files, 0, 'NotAllowedError：不附图');
+    t.diagnostic(`denied ${platform}：` + JSON.stringify(got));
+    assert.equal(got.toasts.length, 1, `${platform}：只说一句`);
+    assert.match(got.toasts[0], /^没截到图：/, `${platform}：NotAllowedError 要提示`);
+    if (platform === 'MacIntel') assert.match(got.toasts[0], /屏幕录制/, 'Mac：提示指到屏幕录制权限');
+    else assert.doesNotMatch(got.toasts[0], /系统设置|隐私与安全性|屏幕录制/, `${platform}：不写 Mac 才有的设置路径`);
+    assert.equal(got.files, 0, `${platform}：NotAllowedError 不附图`);
     await tab.close();
   }
   {
