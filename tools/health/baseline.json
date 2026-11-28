@@ -2590,7 +2590,7 @@
     "ui/injections/laolao-sidebar-surface.css": {
       "important": 186,
       "importantIndirect": 0,
-      "lines": 311,
+      "lines": 315,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
