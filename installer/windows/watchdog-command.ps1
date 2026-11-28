@@ -42,8 +42,17 @@ function New-BundledWatchdogScript([string]$InstallRoot, $Paths) {
         '$root = ' + (ConvertTo-PsLiteral $root)
         'if (Test-Path -LiteralPath $root) { exit }'
         'if (Get-ChildItem -LiteralPath (Split-Path -Parent $root) -Directory -Filter ((Split-Path -Leaf $root) + ''.previous-*'') -ErrorAction SilentlyContinue) { exit }'
-        'Unregister-ScheduledTask -TaskName ' + (ConvertTo-PsLiteral $BundledWatchdogTaskName) + ' -Confirm:$false -ErrorAction SilentlyContinue'
-        'Remove-ItemProperty -Path ' + (ConvertTo-PsLiteral $BundledWatchdogRunKey) + ' -Name ' + (ConvertTo-PsLiteral $BundledWatchdogTaskName) + ' -ErrorAction SilentlyContinue'
+        '$t = ' + (ConvertTo-PsLiteral $BundledWatchdogTaskName)
+        '$k = ' + (ConvertTo-PsLiteral $BundledWatchdogRunKey)
+        'try { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction Stop } catch { }'
+        'try { Remove-ItemProperty -Path $k -Name $t -ErrorAction Stop } catch { }'
+        '# Delete this wrapper only once the task and the Run value are confirmed gone (an explicit'
+        '# not-found). If removal was refused or the check itself failed, keep it: the task (every'
+        '# minute) or the Run value (next sign-in) runs it again and retries, instead of pointing at a'
+        '# script that no longer exists.'
+        'function Test-Gone([scriptblock]$Probe) { try { $null = & $Probe; $false } catch { $_.Exception -is [Management.Automation.PSArgumentException] -or $_.CategoryInfo.Category -eq ''ObjectNotFound'' } }'
+        'if (-not (Test-Gone { Get-ScheduledTask -TaskName $t -ErrorAction Stop })) { exit 1 }'
+        'if (-not (Test-Gone { Get-ItemProperty -Path $k -Name $t -ErrorAction Stop })) { exit 1 }'
         'Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue'
     ) -join "`n"
 }
