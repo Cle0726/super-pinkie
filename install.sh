@@ -29,7 +29,23 @@ PROXY_SCRIPT="$REPO_DIR/proxy/mm-retry-proxy.py"
 PATCH_SCRIPT="$REPO_DIR/patch/reapply-unrestricted-patch.mjs"
 CORE_MANIFEST_TOOL="$REPO_DIR/tools/core/manifest.mjs"
 LAUNCHD_LABEL="com.openclaw.urproxy"
+PROXY_LOG="${UR_PROXY_LOG:-/tmp/openclaw-mm-retry-proxy.log}"
 MODE="${1:-install}"
+
+# Only this checkout's proxy on $PROXY_PORT: instances on other ports and the
+# ~/bin/mm-retry-proxy.py daemons (com.openclaw.mm-retry-proxy*) share the script name.
+stop_own_proxy() {
+  local pid cmd head tail=" $PROXY_SCRIPT $PROXY_PORT" pids=""
+  while read -r pid cmd; do
+    head="${cmd%"$tail"}"
+    [[ "$head" != "$cmd" ]] || continue
+    head="${head##*/}"
+    [[ "$head" == [Pp]ython* && "$head" != *" "* ]] || continue
+    pids="$pids $pid"
+  done < <(ps -axww -o pid=,command=)
+  [[ -n "$pids" ]] || return 0
+  kill $pids 2>/dev/null || true
+}
 
 # Core selection always comes from core-manifest.json (PINKIE_CORE=openclaw|cle overrides default).
 if [[ "$MODE" != "--remove" && -f "$CORE_MANIFEST_TOOL" ]]; then
@@ -47,12 +63,13 @@ if [[ "$MODE" == "--remove" ]]; then
   echo "==> stripping transport patches"
   node "$PATCH_SCRIPT" --remove || true
   echo "==> stopping proxy"
-  pkill -f "mm-retry-proxy.py" 2>/dev/null || true
+  # Unload first so KeepAlive does not respawn the instance we are about to stop.
   if [[ -f "$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist" ]]; then
     launchctl unload "$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist" 2>/dev/null || true
     rm -f "$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist"
     echo "==> LaunchAgent removed"
   fi
+  stop_own_proxy
   echo "done. Config baseUrl changes (if any) must be reverted manually."
   exit 0
 fi
@@ -78,11 +95,11 @@ python3 "$REPO_DIR/services/mode-architecture/setup.py"
 python3 "$REPO_DIR/services/first-person-renderer/setup.py"
 
 echo "==> 3/4 starting rewrite proxy on :$PROXY_PORT -> :$UPSTREAM_PORT"
-pkill -f "mm-retry-proxy.py" 2>/dev/null || true
+stop_own_proxy
 sleep 1
-nohup python3 "$PROXY_SCRIPT" "$PROXY_PORT" >/tmp/openclaw-mm-retry-proxy.log 2>&1 &
+nohup python3 "$PROXY_SCRIPT" "$PROXY_PORT" >"$PROXY_LOG" 2>&1 &
 sleep 2
-curl -sf "http://127.0.0.1:$PROXY_PORT/health" >/dev/null && echo "    proxy healthy" || { echo "    WARNING: proxy health check failed (see /tmp/openclaw-mm-retry-proxy.log)"; }
+curl -sf "http://127.0.0.1:$PROXY_PORT/health" >/dev/null && echo "    proxy healthy" || { echo "    WARNING: proxy health check failed (see $PROXY_LOG)"; }
 
 if [[ "$*" == *"--launchd"* ]]; then
   echo "==> 3b installing LaunchAgent (auto-restart)"
