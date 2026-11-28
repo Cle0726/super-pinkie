@@ -201,3 +201,10 @@ test('registered once in the head fragment (?v=@hash) and in the metre region; t
   const src = read(JS);
   assert.doesNotMatch(src, /MutationObserver|setInterval|window\.__[a-zA-Z]+\s*=/);
 });
+
+// 复发防护（#460 CI 真红）：notify 两行曾插在 metre-list.js 与 S7 worktree 两行中间，
+// 把 tests/metre-worktree.test.mjs 要求「list → worktree.css → worktree.js」紧挨着的那段拆开了。
+test('head fragment: notify lines sit after the S7 list → worktree block, never inside it', () => {
+  const head = read('ui/injections/laolao-head.fragment.html');
+  assert.match(head, /<script defer src="\/laolao-metre-list\.js\?v=@hash"><\/script>\r?\n<link rel="stylesheet" href="\/laolao-metre-worktree\.css\?v=@hash">\r?\n<script defer src="\/laolao-metre-worktree\.js\?v=@hash"><\/script>\r?\n<link rel="stylesheet" href="\/laolao-metre-notify\.css\?v=@hash">\r?\n<script defer src="\/laolao-metre-notify\.js\?v=@hash"><\/script>/);
+});
