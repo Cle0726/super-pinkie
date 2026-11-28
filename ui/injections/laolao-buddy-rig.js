@@ -308,8 +308,8 @@ void main() {
     }
     async setImage(src) {
       const ticket = (this.ticket = (this.ticket || 0) + 1);
-      const data = await prepare(src);
-      if (ticket !== this.ticket || this.dead) return false;
+      const data = await prepare(src).catch(() => null);   // 图没加载出来：留着当前这张，不在控制台冒未处理的 reject
+      if (!data || ticket !== this.ticket || this.dead) return false;
       let item = this.items.get(src);
       if (!item) {
         const gl = this.gl;
