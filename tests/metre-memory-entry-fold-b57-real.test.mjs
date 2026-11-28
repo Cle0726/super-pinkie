@@ -72,7 +72,15 @@ test('B57 real page: in Metre /cron 1440 the memory entry is hidden in the very 
     const {context, page, meta} = await openRealScenePage(browser, server.origin, 'metre-board', theme);
     try {
       await page.setViewportSize({width: 1440, height: 900});
-      await page.goto(`${server.origin}/cron?harnessSession=active&session=${encodeURIComponent(meta.sessionKey)}`, {waitUntil: 'load', timeout: 60_000});
+      // 页内切到 /cron，省掉第二次整页冷加载（同 tests/metre-a3-cron-night-card-real.test.mjs / metre-usage-missing-sessions-real）。
+      // 没有 app-shell navigate 时退回 pushState + popstate，带上原来的 harnessSession / session 参数。
+      await page.evaluate((sessionKey) => {
+        const shell = document.querySelector('openclaw-app-shell');
+        const nav = [shell, shell?.context].find((o) => typeof o?.navigate === 'function');
+        if (nav) nav.navigate('cron');
+        else { history.pushState({}, '', `/cron?harnessSession=active&session=${encodeURIComponent(sessionKey)}`); dispatchEvent(new PopStateEvent('popstate')); }
+      }, meta.sessionKey);
+      await page.waitForFunction(() => location.pathname === '/cron' && Boolean(document.querySelector('openclaw-cron-page')), null, {timeout: 30_000});
       await page.waitForFunction(() => document.documentElement.getAttribute('data-laolao-mode') === 'metre', null, {timeout: 30_000});
       await page.waitForSelector('aside.sidebar .sidebar-shell__footer .pinkie-connection-status', {timeout: 30_000});
       // 等 laolao-memory.js 挂上入口、classic-shell 把它收起一次，说明两边都跑起来了。
