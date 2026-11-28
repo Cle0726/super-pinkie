@@ -563,9 +563,12 @@ _load_desktop_part("windows_bridge")
 
 
 def show_startup_error(window):
-    window.evaluate_js("""
+    try:
+        window.evaluate_js("""
       (()=>{const box=document.createElement('div');box.style.cssText='position:fixed;left:50%;bottom:9%;transform:translateX(-50%);padding:10px 16px;border:1px solid #fff8;border-radius:18px;background:#f8dcebdd;color:#72455d;font:12px system-ui;box-shadow:0 12px 34px #7b3f5d22';box.textContent='本机服务还没有准备好，现有资料没有改动。重新打开 App 会继续恢复。';(document.body||document.documentElement).append(box)})();
-    """)
+        """)
+    except Exception as error:  # noqa: BLE001 - a dead window must not crash startup
+        append_log("launcher", f"startup error banner skipped: {error!r}")
 
 
 def update_health_token_from_argv(arguments=None, root=None):
