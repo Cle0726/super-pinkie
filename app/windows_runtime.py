@@ -261,11 +261,18 @@ class DesktopControlNode:
             try:
                 process.terminate()
                 process.wait(timeout=5)
-            except Exception:
+            except Exception as error:
                 try:
                     process.kill()
-                except Exception:
-                    pass
+                except Exception as kill_error:
+                    # Still no raise (close() runs on the exit path), but a
+                    # node that survives both is an orphan holding the
+                    # desktop-control connection: say so in the log.
+                    try:
+                        append_log("computer", f"desktop control node {process.pid} did not stop: "
+                                               f"terminate: {error!r}; kill: {kill_error!r}")
+                    except Exception:
+                        pass
 
     def status(self):
         process = self.process
