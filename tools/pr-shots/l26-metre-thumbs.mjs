@@ -28,12 +28,16 @@ function ringDiff(stripBuf, focusBuf, rect, dpr) {
   const x1 = Math.min(a.width, Math.ceil((rect[0] + rect[2] + pad) * s)), y1 = Math.min(a.height, Math.ceil((rect[1] + rect[3] + pad) * s));
   let changed = 0, total = 0;
   const colors = new Map();
+  // 格子本身的框（不含外扩）：框外变了的像素按上 / 下 / 左 / 右四条边分开数，看环是不是整圈都画出来了（下边曾被输入框盖住）。
+  const L = Math.round(rect[0] * s), T = Math.round(rect[1] * s), R = Math.round((rect[0] + rect[2]) * s), B = Math.round((rect[1] + rect[3]) * s);
+  const edges = {top: 0, bottom: 0, left: 0, right: 0};
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
       const i = (y * a.width + x) * 4; total++;
       const d = Math.max(Math.abs(a.data[i] - b.data[i]), Math.abs(a.data[i + 1] - b.data[i + 1]), Math.abs(a.data[i + 2] - b.data[i + 2]));
       if (d <= 10) continue;
       changed++;
+      if (y < T) edges.top++; else if (y >= B) edges.bottom++; else if (x < L) edges.left++; else if (x >= R) edges.right++;
       const fg = [b.data[i], b.data[i + 1], b.data[i + 2]];
       const k = fg.join(',');
       const c = colors.get(k) || {fg, bg: [a.data[i], a.data[i + 1], a.data[i + 2]], n: 0};
@@ -41,7 +45,7 @@ function ringDiff(stripBuf, focusBuf, rect, dpr) {
     }
   }
   const top = [...colors.values()].sort((p, q) => q.n - p.n)[0];
-  return {box: [x0, y0, x1 - x0, y1 - y0], changed, total, ring: top ? {fg: top.fg, bg: top.bg, ratio: ratio(top.fg, top.bg)} : null};
+  return {box: [x0, y0, x1 - x0, y1 - y0], changed, total, edges, ring: top ? {fg: top.fg, bg: top.bg, ratio: ratio(top.fg, top.bg)} : null};
 }
 
 const args = process.argv.slice(2);

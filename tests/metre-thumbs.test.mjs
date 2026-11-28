@@ -224,6 +224,9 @@ test('焦点环画在格子上：img 聚焦时格子画钴蓝环（外扩、不�
   const offset = /^(-?\d+(?:\.\d+)?)px$/.exec(decl['outline-offset'] || '');
   assert.ok(offset && Number(offset[1]) >= 0, `环画在格子外面（格子自己的 overflow 不裁 outline）：outline-offset ${decl['outline-offset']}`);
   assert.doesNotMatch(ring.body, /!\s*important/);
+  // run 46101879996：环的下边外扩进输入框（实色底、定位元素、DOM 里靠后）被盖住。聚焦的格子要抬一层画在输入框上面。
+  assert.equal(decl.position, 'relative', `聚焦格子要是定位元素，z-index 才生效：position ${decl.position}`);
+  assert.ok(Number(decl['z-index']) >= 1, `聚焦格子要抬到输入框上面，环的下边才不被盖住：z-index ${decl['z-index']}`);
   // 环挂的格子就是 thumbs.js 让 img 可 Tab 的那种格子：img 是格子的直接子元素（原生模板 <div class="chat-attachment-thumb"><img …>）
   const e = env();
   e.fire('focusin', e.textarea);
