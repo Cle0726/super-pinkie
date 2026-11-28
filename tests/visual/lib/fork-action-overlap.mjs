@@ -75,7 +75,10 @@ function pickHoverPoint({index, sel}) {
   const top = Math.max(g.top, v.top) + 2, bottom = Math.min(g.bottom, v.bottom) - 2;
   const left = Math.max(g.left, v.left) + 2, right = Math.min(g.right, v.right) - 2;
   const st = thread ? Math.round(thread.scrollTop) : null;
-  if (bottom > top && right > left) {
+  // 组露出不等于键可点：820 宽长对话 #1 贴底后键落在 y≈839，被输入区盖住。键整块在 .chat-thread 可见区内、中心命中本组才挑悬停点。
+  const kc = document.elementFromPoint(k.left + k.width / 2, k.top + k.height / 2);
+  const keyReachable = k.top >= v.top && k.bottom <= v.bottom && Boolean(kc) && group.contains(kc);
+  if (keyReachable && bottom > top && right > left) {
     for (let y = (top + bottom) / 2, step = 0; step < 200; step += 1) {
       // 从可见部分中线向上下交替扫，每行试几个横向位置。
       const off = Math.ceil(step / 2) * 6 * (step % 2 ? -1 : 1);
@@ -89,9 +92,10 @@ function pickHoverPoint({index, sel}) {
       }
     }
   }
-  // 本组没露出可悬停的部分：把键滚到 .chat-thread 中间，交给下一轮（先等稳定）重挑。
+  // 键不可点或本组没露出可悬停的部分：把键滚到 .chat-thread 中间，交给下一轮（先等稳定）重挑。
   if (thread) thread.scrollTop += k.top + k.height / 2 - (v.top + v.bottom) / 2;
-  return {ok: false, scrolledFrom: st, scrolledTo: thread ? Math.round(thread.scrollTop) : null, groupBox: [g.left, g.top, g.width, g.height].map(Math.round)};
+  return {ok: false, scrolledFrom: st, scrolledTo: thread ? Math.round(thread.scrollTop) : null, groupBox: [g.left, g.top, g.width, g.height].map(Math.round),
+    keyBox: [k.left, k.top, k.width, k.height].map(Math.round), keyHit: d(kc)};
 }
 
 function hoverState({index, sel, x, y}) {
