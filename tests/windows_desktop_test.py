@@ -459,5 +459,45 @@ class AppendLogRotationTests(unittest.TestCase):
             self.assertIn("untouched", (logs / "computer.log").read_text(encoding="utf-8"))
 
 
+
+
+class ShowStartupErrorTests(unittest.TestCase):
+    """show_startup_error() injects a banner into a window that may already be gone.
+
+    By the time a stale-service report decides to warn the user, the window
+    behind it can have been closed, destroyed, or simply not be ready for
+    script injection yet. evaluate_js() on such a window raises -- the raise
+    must not propagate past show_startup_error and crash the launcher over
+    what is, after all, just a courtesy notice.
+    """
+
+    class RaisingWindow:
+        def evaluate_js(self, script):
+            raise RuntimeError("window is gone")
+
+    class RecordingWindow:
+        def __init__(self):
+            self.injected = []
+
+        def evaluate_js(self, script):
+            self.injected.append(script)
+
+    def test_a_dead_window_does_not_raise(self):
+        windows_desktop.show_startup_error(self.RaisingWindow())  # must not raise
+
+    def test_a_dead_window_is_logged(self):
+        with mock.patch.object(windows_desktop, "append_log") as logged:
+            windows_desktop.show_startup_error(self.RaisingWindow())
+        self.assertTrue(logged.called)
+        name, message = logged.call_args[0]
+        self.assertEqual(name, "launcher")
+        self.assertIn("window is gone", message)
+
+    def test_a_live_window_still_gets_the_banner(self):
+        window = self.RecordingWindow()
+        windows_desktop.show_startup_error(window)
+        self.assertEqual(len(window.injected), 1)
+        self.assertIn("本机服务还没有准备好", window.injected[0])
+
 if __name__ == "__main__":
     unittest.main()
