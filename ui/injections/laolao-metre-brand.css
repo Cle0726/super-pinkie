@@ -142,11 +142,6 @@ html[data-laolao-splash-metre]:is([data-theme="dark"], [data-pinkie-night]) #lao
   --sp-track: #2A2A2F;
   --sp-accent: #C8A15E;
 }
-@media (prefers-color-scheme: dark) {
-  html[data-laolao-splash-metre]:not([data-theme="light"]) #laolao-splash {
-    --sp-bg: #131315; --sp-off: #1E1E22; --sp-plate: #131315; --sp-text: #EDEDEF; --sp-muted: #8B8B93; --sp-track: #2A2A2F; --sp-accent: #C8A15E;
-  }
-}
 html[data-laolao-splash-metre] #laolao-splash.is-leaving { opacity: 0; visibility: hidden; }
 html[data-laolao-splash-metre] #laolao-splash::before,
 html[data-laolao-splash-metre] #laolao-splash::after { content: none !important; display: none !important; }

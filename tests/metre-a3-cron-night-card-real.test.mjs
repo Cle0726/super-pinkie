@@ -95,14 +95,24 @@ const fmt = (rows) => rows.map((r) => `「${r.text}」${r.row} in ${r.outer} ${r
 
 async function openCron(browser, origin, theme) {
   const opened = await openRealScenePage(browser, origin, 'metre-board', theme, {initScript, timezoneId: 'Asia/Shanghai'});
-  const {page} = opened;
-  await page.setViewportSize({width: 1440, height: 900});
-  const u = new URL(page.url()); u.pathname = '/cron';
-  await page.goto(u.href);
-  await page.waitForFunction(() => document.querySelectorAll('openclaw-cron-page .cron-job-actions .btn').length >= 3, null, {timeout: 20_000});
-  await page.mouse.move(1, 899);
-  await page.waitForTimeout(600);   // Metre 皮肤的颜色过渡
-  return opened;
+  const {context, page} = opened;
+  try {
+    await page.setViewportSize({width: 1440, height: 900});
+    // 页内切路由，省掉第二次整页冷加载（同 tests/metre-usage-missing-sessions-real.test.mjs）
+    await page.evaluate(() => {
+      const shell = document.querySelector('openclaw-app-shell');
+      const nav = [shell, shell?.context].find((o) => typeof o?.navigate === 'function');
+      if (nav) nav.navigate('cron');
+      else { history.pushState({}, '', '/cron' + location.search); dispatchEvent(new PopStateEvent('popstate')); }
+    });
+    await page.waitForFunction(() => document.querySelectorAll('openclaw-cron-page .cron-job-actions .btn').length >= 3, null, {timeout: 20_000});
+    await page.mouse.move(1, 899);
+    await page.waitForTimeout(600);   // Metre 皮肤的颜色过渡
+    return opened;
+  } catch (e) {
+    await context.close();
+    throw e;
+  }
 }
 
 test('real page: night /cron task rows sit one layer below the outer card (--metre-bg, not the same #232321), at least as far apart as day; day rows unchanged; removing the rule puts night rows back on the card colour', async (t) => {

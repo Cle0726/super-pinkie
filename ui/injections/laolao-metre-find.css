@@ -1,0 +1,41 @@
+/* laolao-metre-find.css —— 会话内查找条（laolao-metre-find.js，界面计划 T3 #3，L19）的样式，只在 Metre。
+ * 查找条：对话区右上角一条实底小弹层（同 Metre 弹层：实底、一道细边、圆角 10、--metre-pop-shadow），
+ *   输入框 + 计数（n/m，没命中写「无匹配」用 --metre-danger）+ 上一条 / 下一条 / 关闭三个图标键。
+ *   计数字色日夜都 ≥ 4.5:1（--metre-muted 对 --metre-surface 日 4.7、夜 4.8；--metre-danger 日 6.0、夜 4.6）。
+ * 命中高亮用 CSS Custom Highlight API（::highlight），不改消息 DOM：
+ *   其余命中是一层钴蓝淡底（字色不变，对字的对比度照旧）；当前那条是实心钴蓝底 + 反色字（日 7.6:1、夜 7.7:1）。
+ *   ::highlight 里不用 var()（高亮伪元素取自定义属性的规则各内核不一样），日夜各写一套字面颜色。
+ * 选择器只带 html[data-laolao-mode="metre"] 和本文件自己的类名，不碰原生节点，不用强制覆盖。 */
+html[data-laolao-mode="metre"] .pk-metre-find {
+  position: fixed; z-index: 60; top: 64px; right: 24px;
+  display: flex; align-items: center; gap: 2px; box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px)); height: 38px; padding: 0 4px 0 10px;
+  border: 1px solid var(--metre-line-strong); border-radius: 10px;
+  background: var(--metre-surface); color: var(--metre-text); box-shadow: var(--metre-pop-shadow);
+  font: 400 13px/20px var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .pk-metre-find[hidden] { display: none; }
+html[data-laolao-mode="metre"] .pk-metre-find:focus-within { border-color: var(--metre-accent); }
+html[data-laolao-mode="metre"] .pk-metre-find__input {
+  flex: 1 1 auto; min-width: 0; height: 28px; margin: 0; padding: 0; border: 0; outline: none;
+  background: transparent; color: var(--metre-text); font: inherit;
+}
+html[data-laolao-mode="metre"] .pk-metre-find__input::placeholder { color: var(--metre-muted); opacity: 1; }
+html[data-laolao-mode="metre"] .pk-metre-find__count {
+  flex: none; padding: 0 6px; color: var(--metre-muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+html[data-laolao-mode="metre"] .pk-metre-find[data-state="none"] .pk-metre-find__count { color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-metre-find__btn {
+  appearance: none; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; margin: 0; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--metre-muted); cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-metre-find__btn:hover:not(:disabled) { background: var(--metre-hover); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-metre-find__btn:focus-visible { outline: 2px solid var(--metre-accent); outline-offset: 1px; }
+html[data-laolao-mode="metre"] .pk-metre-find__btn:disabled { opacity: 0.4; cursor: default; }
+html[data-laolao-mode="metre"] ::highlight(pk-metre-find) { background-color: rgba(47, 75, 176, 0.24); }
+html[data-laolao-mode="metre"] ::highlight(pk-metre-find-current) { background-color: #2F4BB0; color: #FFFFFF; }
+html[data-laolao-mode="metre"][data-pinkie-night] ::highlight(pk-metre-find),
+html[data-laolao-mode="metre"][data-theme="dark"] ::highlight(pk-metre-find) { background-color: rgba(147, 165, 238, 0.32); }
+html[data-laolao-mode="metre"][data-pinkie-night] ::highlight(pk-metre-find-current),
+html[data-laolao-mode="metre"][data-theme="dark"] ::highlight(pk-metre-find-current) { background-color: #93A5EE; color: #151514; }

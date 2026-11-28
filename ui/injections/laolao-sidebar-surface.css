@@ -255,7 +255,6 @@ html .sidebar #laolao-session-manager .pinkie-session-fold__count { display:inli
 html .sidebar #laolao-session-manager .pinkie-session-origin { flex:0 0 auto;margin-right:6px;padding:0 5px;border-radius:5px;background:color-mix(in srgb,currentColor 8%,transparent);font-size:11px;line-height:16px;opacity:.75 }
 html .sidebar #laolao-session-manager .pinkie-session-away { min-width:0;height:20px;margin-left:6px;padding:0 6px;border:0;border-radius:5px;background:color-mix(in srgb,currentColor 8%,transparent);font-size:11px;line-height:20px;white-space:nowrap }
 html .sidebar #laolao-session-manager .pinkie-session-workers>button { min-height:28px;font-size:12px;opacity:.65 }
-html[data-reduce-motion] .sidebar .pinkie-session-status--running svg,
 html[data-pinkie-reduce-motion] .sidebar .pinkie-session-status--running svg { animation:none }
 
 /* S1/S12: three quiet, equal-height shortcuts. */

@@ -15,7 +15,7 @@ html[data-pinkie-night] { --pa-bg:#1d161b; --pa-card:#2a2027; --pa-text:#f3e9ef;
 .pinkie-art-kinds { display:flex;flex-wrap:wrap;gap:6px }
 .pinkie-art-chip { height:28px;padding:0 12px;border:1px solid var(--pa-edge);border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:12.5px;cursor:pointer }
 .pinkie-art-chip:hover { background:color-mix(in srgb,currentColor 5%,transparent) }
-.pinkie-art-chip[aria-pressed="true"] { border-color:transparent;background:color-mix(in srgb,var(--pa-accent) 14%,transparent);color:color-mix(in srgb,var(--pa-accent) 82%,var(--pa-text));font-weight:600 }
+.pinkie-art-chip[aria-pressed="true"] { border-color:transparent;background:color-mix(in srgb,var(--pa-accent) 14%,transparent);color:color-mix(in srgb,var(--pa-accent) 60%,var(--pa-text));font-weight:600 }
 .pinkie-art-chip--scope { margin-left:auto }
 .pinkie-art-page__body { flex:1;overflow:auto;padding:16px 32px 40px }
 .pinkie-art-note { margin:0 0 14px;color:var(--pa-muted);font-size:12.5px }
@@ -34,7 +34,7 @@ html[data-pinkie-reduce-motion] .pinkie-art-card { transition:none;transform:non
 .pinkie-art-card__gone { color:#b8572a;font-size:11.5px }
 html[data-pinkie-night] .pinkie-art-card__gone { color:#f0a27a }
 .pinkie-art-more[hidden] { display:none }
-.pinkie-art-more { display:block;margin:18px auto 0;height:32px;padding:0 16px;border:1px solid var(--pa-line);border-radius:10px;background:var(--pa-card);color:inherit;font:inherit;cursor:pointer }
+.pinkie-art-more { display:block;margin:18px auto 0;height:32px;padding:0 16px;border:1px solid var(--pa-edge);border-radius:10px;background:var(--pa-card);color:inherit;font:inherit;cursor:pointer }
 
 /* viewer + version bar */
 .pinkie-art-viewer { position:fixed;inset:0;z-index:2147481000;display:flex;align-items:center;justify-content:center;background:rgba(40,18,30,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px) }

@@ -5,8 +5,6 @@
 // 白板四角外留白的中点、上边留白中点、顶栏中心点，elementFromPoint 都要命中白板或遮罩。
 // 反例写在同一个测试里：把遮罩藏掉、撤掉 inert（= 打回时的样子），四角外的点必须命中页面原有的东西。
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import test, {after} from 'node:test';
 import {
   REPO_ROOT,
@@ -16,16 +14,17 @@ import {
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
 
-// CI 提速：整个文件只起一个浏览器，两个测试共用；隔离仍按测试走（每次 openRealScenePage 自己开一个 context，结束就关）。
+// CI 提速：整个文件只起一个浏览器、一个假服务，两个测试共用。每个主题只开一次 home-thinking：测试 1 量完这个主题不关页面，
+// 交给测试 2 在同一页接着量（测试 2 放的桌面壳替身不撤，所以只能排在测试 1 之后）；测试 1 没跑完的主题自己关掉，测试 2 另开一页。
 // 起浏览器的 Promise 只建一次。起不来时记住这次失败，后面的测试抛同一个错误，不改成跳过。
 let sharedBrowser = null;
-function launchSharedBrowser() {
-  sharedBrowser ??= launchRealBrowser().then(
-    (browser) => ({browser}),
-    (error) => ({error}),
-  );
-  return sharedBrowser;
+async function browserForTest() {
+  sharedBrowser ??= launchRealBrowser().then((browser) => ({browser}), (error) => ({error}));
+  const got = await sharedBrowser;
+  if (got.error) throw got.error;
+  return got.browser;
 }
+const handoff = new Map();
 
 // 安装（拷上游包 + bundle install/stamp/check）也整个文件只做一次：CI 上一次约 25s，原来两个测试各做一遍。
 // 装不上时记住那次失败，两个测试都重抛（不改成跳过）。
@@ -38,29 +37,34 @@ function installForFile() {
   if (sharedInstall.error) throw sharedInstall.error;
   return sharedInstall.installed;
 }
-// 假服务仍每个测试各起一个，各用安装目录下一个新的 state 子目录（会话偏好落盘互不相见），子目录随安装目录一起删。
-async function serverForTest(t) {
-  const installed = installForFile();
-  const runDir = fs.mkdtempSync(path.join(installed.runDir, 'state-'));
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir});
-  t.after(() => server.close());
-  return server;
+// 假服务整个文件也只起一个（原来每个测试各起一个）：两组检查已并到同一页上量，不再需要各自的 state 子目录。
+// 起不来时记住那次失败，后面重抛同一个错误（不改成跳过）。
+let sharedServer = null;
+async function serverForFile() {
+  sharedServer ??= (async () => {
+    const installed = installForFile();
+    return {server: await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir})};
+  })().catch((error) => ({error}));
+  const got = await sharedServer;
+  if (got.error) throw got.error;
+  return got.server;
 }
 
+// 逆序收：没交接出去的页面 → 浏览器 → 假服务 → 安装目录。
 after(async () => {
   try {
+    for (const {context} of handoff.values()) await context.close().catch(() => {});
     const got = await sharedBrowser;
     if (got?.browser) await got.browser.close();
   } finally {
-    sharedInstall?.installed?.cleanup();
+    try {
+      const s = await sharedServer;
+      if (s?.server) await s.server.close();
+    } finally {
+      sharedInstall?.installed?.cleanup();
+    }
   }
 });
-
-async function browserForTest() {
-  const got = await launchSharedBrowser();
-  if (got.error) throw got.error;
-  return got.browser;
-}
 
 const SIZES = [[1440, 900], [1024, 768], [820, 900]];
 const CORNERS = ['tl', 'tr', 'bl', 'br'];
@@ -107,19 +111,38 @@ const boardShown = (page, on) => page.waitForFunction((want) => {
   return Boolean(root && scrim) && root.hidden === !want && scrim.hidden === !want;
 }, on, {timeout: 5_000}).catch(() => {});
 
+// 等 selector 的位置 / 大小连续两帧不变，用来确认改窗口大小触发的媒体查询 / 回流已经稳定（没有单一的「已就绪」标志位）。
+// 等不到（selector 还没出现）不在这里报错，交给后面原有断言给出真正的失败信息。
+const layoutStable = (page, selector) => page.evaluate((sel) => new Promise((resolve) => {
+  const el = document.querySelector(sel);
+  if (!el) { resolve(); return; }
+  let last = null;
+  let frames = 0;
+  const tick = () => {
+    const r = el.getBoundingClientRect();
+    const now = `${r.top}|${r.left}|${r.width}|${r.height}`;
+    frames += 1;
+    if (now === last || frames > 90) { resolve(); return; }
+    last = now;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}), selector);
+
 test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert page behind; old look (no scrim) fails', async (t) => {
-  const server = await serverForTest(t);
+  const server = await serverForFile();
   const browser = await browserForTest();
 
   for (const theme of ['day', 'night']) {
     const {context, page} = await openRealScenePage(browser, server.origin, 'home-thinking', theme);
+    let done = false;
     try {
       await page.waitForFunction(() => typeof window.Pinkie?.whiteboard?.open === 'function', null, {timeout: 10_000});
       for (const [W, H] of SIZES) {
         const tag = `${W}-${theme}`;
         await page.setViewportSize({width: W, height: H});
-        // 保留死等：改窗口大小后等布局 / 媒体查询（窄屏 inset: 8px）切换稳定，白板打开时按当时的顶栏位置让位，没有单一可等状态。
-        await page.waitForTimeout(150);
+        // 等布局 / 媒体查询（窄屏 inset: 8px）切换稳定：.topbar 连续两帧位置不变才算数。
+        await layoutStable(page, '.topbar');
         await openBoard(page);
         await boardShown(page, true);
 
@@ -158,8 +181,8 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         // 点遮罩：不穿透、白板关掉、inert 全撤
         const before = await page.evaluate(() => location.href);
         await page.mouse.click(...hit[clickKey].at);
-        // 保留死等：后面还要证明「点遮罩没穿透到页面」（地址没变，没发生的事），得留时间窗让错误的导航有机会发生。
-        await page.waitForTimeout(200);
+        // 等白板真正关掉（正确行为）；这也给了「点遮罩穿透导致导航」这个错误行为足够的时间窗去发生，交给下面的地址断言去抓。
+        await boardShown(page, false);
         const after = await backdrop(page);
         assert.equal(after.open, false, `${tag}: 点遮罩要关白板`);
         assert.equal(after.scrim, false, `${tag}: 关掉后遮罩要藏`);
@@ -192,8 +215,10 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         await page.evaluate(() => window.Pinkie.whiteboard.close());
         await boardShown(page, false);
       }
+      done = true;
     } finally {
-      await context.close();
+      if (done) handoff.set(theme, {context, page});
+      else await context.close();
     }
   }
 });
@@ -237,19 +262,22 @@ const toolbarHits = (page) => page.evaluate(() => {
 });
 
 test('#113 real page: whiteboard toolbar clears the desktop shell window controls / drag strip, which stay usable (not inert); old offset is covered', async (t) => {
-  const server = await serverForTest(t);
+  const server = await serverForFile();
   const browser = await browserForTest();
 
   for (const theme of ['day', 'night']) {
-    const {context, page} = await openRealScenePage(browser, server.origin, 'home-thinking', theme);
+    const reused = handoff.get(theme);
+    handoff.delete(theme);
+    t.diagnostic(`${theme}: ${reused ? 'reuse test 1 page' : 'open own page'}`);
+    const {context, page} = reused ?? await openRealScenePage(browser, server.origin, 'home-thinking', theme);
     try {
       await page.waitForFunction(() => typeof window.Pinkie?.whiteboard?.open === 'function', null, {timeout: 10_000});
       for (const [W, H] of [[1440, 900], [820, 900]]) {
         const tag = `${W}-${theme}`;
         await page.setViewportSize({width: W, height: H});
         await page.evaluate(NATIVE_STUB, W);
-        // 保留死等：改窗口大小、放好替身后等布局稳定，白板打开时按当时替身 / 顶栏的位置让位，没有单一可等状态。
-        await page.waitForTimeout(150);
+        // 等布局稳定：窗口键替身连续两帧位置不变才算数（白板打开时按当时替身 / 顶栏的位置让位，没有单一的就位标志位）。
+        await layoutStable(page, '#pinkie-native-window-controls');
         await openBoard(page);
         await boardShown(page, true);
 
@@ -265,8 +293,8 @@ test('#113 real page: whiteboard toolbar clears the desktop shell window control
         assert.deepEqual(shell, [false, false], `${tag}: 白板开着时桌面壳的窗口键 / 拖动条不能设 inert`);
         const btn = await page.locator('#pinkie-native-window-controls button').boundingBox();
         await page.mouse.click(btn.x + btn.width / 2, btn.y + btn.height / 2);
-        // 保留死等：下面还要证明「点窗口键不关白板」（没发生的事），得留时间窗让错误的关闭有机会发生。
-        await page.waitForTimeout(100);
+        // 等点击回调跑完（window.__stubClicks 变成 1）；这也给了「点窗口键关白板」这个错误行为足够的时间窗去发生，交给下面的 open 断言去抓。
+        await page.waitForFunction(() => window.__stubClicks === 1, null, {timeout: 5_000}).catch(() => {});
         const after = await page.evaluate(() => ({clicks: window.__stubClicks, open: window.Pinkie.whiteboard.isOpen()}));
         assert.deepEqual(after, {clicks: 1, open: true}, `${tag}: 白板开着时窗口键要点得动、点了不关白板 ${JSON.stringify(after)}`);
 

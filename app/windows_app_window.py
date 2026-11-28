@@ -20,6 +20,7 @@ import json
 import os
 import re
 import posixpath
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -100,6 +101,27 @@ def _file_path(url):
     return path.lower() if os.name == "nt" else path
 
 
+def _app_folders(directory):
+    """The work's folder in both spellings a file: URL may use.
+
+    run() opens (app["dir"] / "index.html").as_uri() without resolving it, and
+    WebView2 reports that URL as given. Comparing it only with the resolved
+    folder blocked the work's own page whenever %LOCALAPPDATA% or
+    PINKIE_STATE_ROOT runs through a junction or symlink (a profile moved to
+    D:\\ and linked back), and on a mapped drive resolve() turns Z:\\ into
+    \\\\server\\share, a file: URL with a host, so every page was refused.
+    """
+    folders = []
+    for spell in (Path.absolute, Path.resolve):
+        try:
+            folder = _file_path(spell(Path(directory)).as_uri())
+        except (OSError, ValueError):
+            continue
+        if folder and folder not in folders:
+            folders.append(folder)
+    return folders
+
+
 def navigation_allowed(url, app):
     url = str(url or "")
     scheme = urlsplit(url).scheme.lower() if ":" in url else ""
@@ -111,8 +133,8 @@ def navigation_allowed(url, app):
         return target is not None and target in ticked
     if scheme == "file":
         target = _file_path(url)
-        folder = _file_path(Path(app["dir"]).resolve().as_uri())
-        return bool(target and folder) and (target == folder or target.startswith(folder.rstrip("/") + "/"))
+        return bool(target) and any(target == folder or target.startswith(folder.rstrip("/") + "/")
+                                    for folder in _app_folders(app["dir"]))
     return False
 
 
@@ -237,6 +259,17 @@ class AppShortcuts:
                 path.unlink()
             except FileNotFoundError:
                 pass
+            except PermissionError:
+                # Windows refuses to delete a read-only file (users and sync tools mark desktop
+                # icons read-only). Clear the flag on our own .lnk and try once more; a link that
+                # is really in use stays in the ledger and goes next time.
+                try:
+                    os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    left.append(str(path))
             except OSError:
                 left.append(str(path))
         return left

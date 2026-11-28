@@ -173,3 +173,62 @@ html[data-laolao-mode="metre"] .chat-attachment-thumb .chat-attachment-remove {
   border-radius: 3px; background: transparent; color: var(--metre-text);
 }
 html[data-laolao-mode="metre"] .chat-attachment-thumb .chat-attachment-remove:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); }
+/* 图片缩略图的键盘焦点环（L26，uireview / mac1 11-27）：laolao-metre-thumbs.js 让格子里的 <img> 能 Tab 到，
+ * 但原生 .chat-attachment-thumb 是 overflow: hidden、6px 圆角，img 撑满格子，laolao-metre-skin.css 给 [tabindex] 的
+ * 外扩焦点环画在 img 外面，整圈被格子裁掉，聚焦和没聚焦的截图逐字节相同。环改画在格子上：格子自己的 outline
+ * 不受它自己的 overflow 裁剪；颜色、宽度、外扩和 Metre 通用焦点环一样，日夜跟着 --metre-cobalt 走。
+ * 附件条和输入框（.agent-chat__composer-combobox，有实色底、也是定位元素）是兄弟，输入框在 DOM 里靠后、画在上面，
+ * 环的下边外扩进输入框那几行被盖住（run 46101879996：上、左、右三边都在，下边 0 px）。输入框在 laolao-theme.css 里是
+ * position: relative; z-index: 1，输入盒外那圈流光（laolao-redesign.css 的 .agent-chat__input::after）是 z-index: 2，
+ * 同层时 DOM 里靠后的画在上面，所以格子只抬到 1 不够（run 46111752572：下边还是 0 px）。聚焦的格子抬到 3，
+ * 整圈环画在它们上面；不往里收（往里收会压在图上，蓝色截图上的钴蓝环看不见）。 */
+html[data-laolao-mode="metre"] .chat-attachment-thumb:has(> img:focus-visible) { position: relative; z-index: 3; outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
+
+/* M3 置顶消息（laolao-metre-pins.js）：页脚行里时间后面一个小字「置顶」键，平时淡，悬停这组消息或已置顶时才显出来；
+ * 对话顶上一条「已置顶 N 条」签条，点开是列表（谁说的 · 摘要 · 取消）。分叉键在页脚行右边，这个在左边的发送者 / 时间后面，不相交。 */
+html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin {
+  margin-left: 6px; padding: 0 5px; min-height: 22px; border: 0; border-radius: 3px; background: transparent;
+  color: var(--metre-chat-small); font: 11px/1.2 var(--metre-sans); cursor: pointer; opacity: 0;
+}
+html[data-laolao-mode="metre"] .chat-group:is(:hover, :focus-within) .chat-group-footer__meta > .pk-metre-pin,
+html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { opacity: 1; }
+html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { color: var(--metre-cobalt); }
+/* 协调者 11-25 03:27：不悬停时时间 opacity 0 但照占位，「已置顶」浮在正文左缘右边一百多 px。
+ * 已置顶的排到页脚行最前（order -1），左外边距抵掉自己的内边距：静止和悬停都贴页脚左缘，悬停时时间出现在它后面，不跳。 */
+html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { order: -1; margin-left: -5px; }
+/* mac2 任务 32：用户消息悬停时，皮肤把「复制 / 编辑」行绝对定位在气泡右下，正好盖住页脚行末尾；用户消息的「置顶」一律排到页脚行最前，离开那一块。 */
+html[data-laolao-mode="metre"] .chat-group.user .chat-group-footer__meta > .pk-metre-pin { order: -1; margin-left: -5px; }
+html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); opacity: 1; }
+html[data-laolao-mode="metre"] .pk-metre-pins {
+  box-sizing: border-box;
+  margin: 6px auto 24px; width: min(760px, calc(100% - 32px)); border: 1px solid var(--metre-line-strong); border-radius: 4px;
+  background: var(--metre-surface); color: var(--metre-text); font-family: var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .pk-metre-pins__toggle {
+  display: block; width: 100%; padding: 6px 10px; border: 0; background: transparent; color: var(--metre-chat-small);
+  font: 12px/1.4 var(--metre-sans); text-align: left; cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-metre-pins__toggle::before { content: "▸"; display: inline-block; margin-right: 6px; color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .pk-metre-pins__toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+html[data-laolao-mode="metre"] .pk-metre-pins__list { margin: 0; padding: 0 4px 4px; list-style: none; max-height: 200px; overflow-y: auto; border-top: 1px solid var(--metre-line); }
+html[data-laolao-mode="metre"] .pk-metre-pins__item { display: flex; align-items: center; gap: 4px; }
+html[data-laolao-mode="metre"] .pk-metre-pins__go {
+  display: flex; flex: 1; min-width: 0; gap: 8px; padding: 5px 6px; border: 0; border-radius: 3px; background: transparent;
+  color: var(--metre-text); font: 13px/1.4 var(--metre-sans); text-align: left; cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-metre-pins__role { flex: none; color: var(--metre-chat-small); font-size: 11px; line-height: 1.8; }
+html[data-laolao-mode="metre"] .pk-metre-pins__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 「取消置顶」只靠边框圈出来（底透明）：皮肤的 --metre-line-strong 对折叠条底只有 1.54:1（日）/ 1.34:1（夜），非文本要 ≥ 3:1。
+ * 和 #95 允许清单卡片同一做法，暖灰掺八成 muted：对折叠条底日 3.64 / 夜 3.78，对悬停底日 3.11 / 夜 3.96。点击区拉到 24px 高。 */
+html[data-laolao-mode="metre"] .pk-metre-pins__x {
+  flex: none; min-height: 24px; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--metre-muted) 80%, var(--metre-line-strong));
+  border-radius: 3px; background: transparent;
+  color: var(--metre-text); font: 11px/1.4 var(--metre-sans); cursor: pointer;
+}
+html[data-laolao-mode="metre"] :is(.pk-metre-pins__toggle, .pk-metre-pins__go, .pk-metre-pins__x):is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-metre-pins__status:empty { display: none; }
+html[data-laolao-mode="metre"] .pk-metre-pins__status { margin: 0; padding: 2px 10px 6px; color: var(--metre-chat-small); font-size: 12px; }
+/* 点列表里一条跳过去时，那组消息左边亮一下钴蓝细线。 */
+html[data-laolao-mode="metre"] .chat-group.pk-metre-pin-flash { animation: pk-metre-pin-flash 1.2s ease-out; }
+@keyframes pk-metre-pin-flash { from { box-shadow: inset 2px 0 0 var(--metre-cobalt); } to { box-shadow: inset 2px 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { html[data-laolao-mode="metre"] .chat-group.pk-metre-pin-flash { animation-duration: 1ms; } }

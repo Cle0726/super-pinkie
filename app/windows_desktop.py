@@ -31,7 +31,37 @@ except ImportError:  # imported as app.windows_desktop (tests, no app/ on sys.pa
     from app import release_notes
 
 
-GATEWAY_URL = "http://127.0.0.1:18789/"
+DEFAULT_GATEWAY_PORT = 18789
+# B95: isolated test runs of the packaged exe move the gateway off 18789 so
+# they never meet the user's real one. Normal starts set neither of these.
+GATEWAY_PORT_ENV = "PINKIE_GATEWAY_PORT"
+GATEWAY_PORT_FLAG = "--gateway-port"
+
+
+def gateway_port(arguments=None, environ=None):
+    """Loopback gateway port: 18789 unless an isolated test run overrides it.
+
+    ``--gateway-port=N`` or ``--gateway-port N`` on the command line wins over
+    PINKIE_GATEWAY_PORT. Anything that is not a plain number in 1024-65535
+    falls back to 18789, so a stray or malformed value never moves a normal
+    user's gateway somewhere else.
+    """
+    args = [str(a) for a in (getattr(sys, "argv", [])[1:] if arguments is None else arguments)]
+    value = None
+    for index, argument in enumerate(args):
+        if argument.startswith(GATEWAY_PORT_FLAG + "="):
+            value = argument[len(GATEWAY_PORT_FLAG) + 1:]
+        elif argument == GATEWAY_PORT_FLAG:
+            value = args[index + 1] if index + 1 < len(args) else ""
+    if value is None:
+        value = (os.environ if environ is None else environ).get(GATEWAY_PORT_ENV)
+    if value is None or not re.fullmatch(r"[0-9]{4,5}", value):
+        return DEFAULT_GATEWAY_PORT
+    port = int(value)
+    return port if 1024 <= port <= 65535 else DEFAULT_GATEWAY_PORT
+
+
+GATEWAY_URL = f"http://127.0.0.1:{gateway_port()}/"
 GATEWAY_CHAT_URL = urllib.parse.urljoin(GATEWAY_URL, "chat")
 PARTY_URL = "http://127.0.0.1:18889/"
 ROUNDTABLE_URL = "http://127.0.0.1:18891/"
@@ -201,11 +231,32 @@ def state_root():
     return root
 
 
+# Six+ services (launcher, computer, updater, guard, setup, native, relay) all
+# write through this one function and none of them ever stop running for the
+# life of the install, so with no cap a log quietly grows for weeks until it
+# fills the system drive. One rotated backup per name keeps recent history
+# available for debugging without letting any single file grow unbounded.
+_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
 def append_log(name, message):
     try:
         directory = state_root() / "logs"
         directory.mkdir(parents=True, exist_ok=True)
-        with (directory / f"{name}.log").open("a", encoding="utf-8") as handle:
+        current = directory / f"{name}.log"
+        try:
+            oversized = current.stat().st_size >= _LOG_MAX_BYTES
+        except OSError:
+            oversized = False
+        if oversized:
+            try:
+                current.replace(directory / f"{name}.log.1")
+            except OSError:
+                # Another process (the App and the update helper can both
+                # append here) may be mid-rotation; losing this one rotation
+                # just means the file grows a bit more, not that logging stops.
+                pass
+        with current.open("a", encoding="utf-8") as handle:
             handle.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
     except OSError:
         # The App and the update helper can append to this file at the same
@@ -265,7 +316,16 @@ def http_identity(url):
 
 
 def gateway_listener_pid(port=18789, runner=None):
-    """PID of the process listening on the loopback gateway port, if any."""
+    """PID of the process listening on the loopback gateway port, if any.
+
+    ``netstat -p TCP`` lists both the IPv4 rows (``TCP``) and the IPv6 rows
+    (``TCP6``) for a TCP listener. A gateway bound only on the IPv6 loopback
+    (``[::1]``) -- e.g. because something else is squatting on
+    127.0.0.1:<port> -- used to be invisible here: retire_stale() never saw
+    it, never killed it, and an update silently kept talking to the old
+    gateway (the B44/B95 "update did nothing" bug class, just on the other
+    address family).
+    """
     if os.name != "nt" and runner is None:
         return None
     try:
@@ -277,7 +337,7 @@ def gateway_listener_pid(port=18789, runner=None):
         return None
     for line in str(result.stdout or "").splitlines():
         parts = line.split()
-        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING":
+        if len(parts) >= 5 and parts[0].upper() in ("TCP", "TCP6") and parts[3].upper() == "LISTENING":
             if parts[1].rsplit(":", 1)[-1] == str(port) and parts[4].isdigit():
                 return int(parts[4])
     return None
@@ -451,6 +511,31 @@ def gateway_closed_marker():
     return state_root() / "gateway-closed-by-app"
 
 
+def recover_stale_fanvpn_proxy(recover=None, log=None):
+    """Startup: undo the system proxy a killed FanVPN left behind (B109).
+
+    The exit hook only restores it when the process exits normally. Never raises.
+    """
+    log = log or append_log
+    try:
+        if recover is None:
+            try:
+                import fanvpn_bridge
+            except ImportError:  # imported as app.windows_desktop (tests)
+                from app import fanvpn_bridge
+            recover = fanvpn_bridge.recover_stale_system_proxy
+        result = recover()
+        if result in ("restored", "not-ours", "unconfirmed", "error"):
+            log("launcher", f"stale FanVPN system proxy check: {result}")
+        return result
+    except Exception as error:  # noqa: BLE001 - startup must go on
+        try:
+            log("launcher", f"stale FanVPN system proxy check failed: {error!r}")
+        except Exception:  # noqa: BLE001
+            pass
+        return "error"
+
+
 def kill_process_tree(pid, timeout=8):
     subprocess.run(
         ["taskkill", "/PID", str(pid), "/T", "/F"],
@@ -469,6 +554,11 @@ except ImportError:  # imported as app.windows_desktop (tests, no app/ on sys.pa
 
 
 _load_desktop_part("windows_bridge_scripts")
+if (urllib.parse.urlparse(GATEWAY_URL).port or DEFAULT_GATEWAY_PORT) != DEFAULT_GATEWAY_PORT:
+    # B95: chat-UI links are recognised by port; follow an isolated run's port.
+    BRIDGE_SCRIPT = BRIDGE_SCRIPT.replace(
+        f"url.port === '{DEFAULT_GATEWAY_PORT}'", f"url.port === '{urllib.parse.urlparse(GATEWAY_URL).port}'"
+    )
 _load_desktop_part("windows_bridge")
 
 
@@ -731,7 +821,9 @@ def log_gateway_answer(timeout=300.0, interval=0.25):
 
 
 def startup_fallback_html():
-    return STARTUP_FALLBACK_HTML
+    # B95: the built-in page polls the gateway too, so it follows a moved port.
+    port = urllib.parse.urlparse(GATEWAY_URL).port or DEFAULT_GATEWAY_PORT
+    return STARTUP_FALLBACK_HTML.replace(f"127.0.0.1:{DEFAULT_GATEWAY_PORT}/", f"127.0.0.1:{port}/")
 
 
 def watch_failed_file_navigation(window, log=None, limit=3):
@@ -781,6 +873,13 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     debug_port = smoke_debug_port()
     if debug_port:
         webview.settings["REMOTE_DEBUGGING_PORT"] = debug_port
+        # pywebview's edgechromium backend wires OPEN_DEVTOOLS_IN_DEBUG to
+        # CoreWebView2's AreDevToolsEnabled, which also gates the remote
+        # debugging protocol server, not just the F12 panel. Its default is
+        # True; left alone, debug=True below would pop DevTools on every
+        # normal launch. Turn it off here so only the isolated smoke
+        # endpoint trades the F12 panel for a working CDP port.
+        webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
 
     runtime = BundledRuntime(resource_root)
     if not runtime.valid():
@@ -801,12 +900,19 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # built-in page instead and record where the file was expected.
     loading_html = None if loading_file.is_file() else startup_fallback_html()
     append_log("launcher", f"splash {loading}" + ("" if loading_html is None else " is MISSING; using the built-in page"))
+    splash_fragment = {}
     if update_health_token:
         # First start right after an update: the splash says so, instead of a
         # bare gateway counter that looks like nothing happened.
         version_file = Path(resource_root) / "VERSION"
         version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
-        loading += "#" + urllib.parse.urlencode({"updated": version or "1"})  # not "?": .NET's Uri makes it %3F
+        splash_fragment["updated"] = version or "1"
+    port = urllib.parse.urlparse(GATEWAY_URL).port or DEFAULT_GATEWAY_PORT
+    if port != DEFAULT_GATEWAY_PORT:
+        # B95: the splash polls the gateway itself, so it must know the port.
+        splash_fragment["gateway"] = str(port)
+    if splash_fragment:
+        loading += "#" + urllib.parse.urlencode(splash_fragment)  # not "?": .NET's Uri makes it %3F
     gateway = GatewaySupervisor(runtime)
     bridge._gateway = gateway
     # A gateway kept alive by an older version would otherwise be adopted
@@ -898,15 +1004,12 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def enforce_guard_exit():
         guard_force_exit["active"] = True
         guard_stop.set()
-        for fn in (services.close, computer.close, gateway.close):
-            try:
-                fn()
-            except Exception:
-                pass
-        try:
-            window.destroy()
-        except Exception:
-            pass
+        run_exit_steps("guard exit", [
+            ("services close", services.close),
+            ("computer close", computer.close),
+            ("gateway close", gateway.close),
+            ("window destroy", window.destroy),
+        ])
         run_finish_exit(force_close_gateway=True)
 
     def monitor_guard():
@@ -927,6 +1030,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # the gateway, adding ~5 s to every start on Windows. Run them beside
         # the gateway instead, like the Mac launcher does.
         threading.Thread(target=start_services, name="pinkie-services", daemon=True).start()
+        # B109: a FanVPN that was killed (taskkill /F, crash) left every browser on a dead local proxy.
+        threading.Thread(target=recover_stale_fanvpn_proxy, name="pinkie-fanvpn-recover", daemon=True).start()
         # Setup can fail or take a long time. The splash only leaves when the
         # gateway answers, so a setup error must not skip starting it.
         started = time.monotonic()
@@ -1040,6 +1145,20 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     window.events.maximized += maximized
     window.events.restored += restored
     window.events.closed += closed
+
+    def exit_fallback(reason):
+        # Tray 「退出碧琪」 when the window would not close: closed() never ran,
+        # so do its part here, then the same final exit as a normal close.
+        append_log("launcher", f"{reason}; exiting through finish_exit")
+        guard_stop.set()
+        for name, fn in (("services close", services.close), ("computer close", computer.close)):
+            try:
+                fn()
+            except Exception as error:  # noqa: BLE001 - the exit path must not raise
+                append_log("launcher", f"tray quit: {name} failed: {error!r}")
+        run_finish_exit(force_close_gateway=True)
+
+    bridge._exit_fallback = exit_fallback  # private: js_api must not expose it to the page
     # Start local services independently of WebView2. A broken/slow renderer
     # must never prevent the Gateway from being launched.
 
@@ -1048,22 +1167,56 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # 会让用户浏览器突然断掉；所以只在进程真正退出时还原。
     # 不注册这个的话，用户点了开关后直接关掉进程，注册表里会留着
     # 一个指向已死端口的 PAC，下次开机整个系统都没网。
-    def _restore_fanvpn_on_exit():
-        try:
-            import fanvpn_bridge
-
-            fanvpn_bridge.shutdown()
-        except Exception:  # noqa: BLE001 - 退出路径绝不能抛
-            pass
-
-    atexit.register(_restore_fanvpn_on_exit)
+    atexit.register(restore_fanvpn_on_exit)
 
     threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
     webview.start(
-        gui="edgechromium", debug=False, private_mode=False,
+        gui="edgechromium", debug=bool(debug_port), private_mode=False,
         storage_path=str(webview_storage),
     )
     run_finish_exit(force_close_gateway=guard_force_exit["active"])
+
+
+def run_exit_steps(context, steps, log=None):
+    """Run every (name, fn) exit step, even when an earlier one raised.
+
+    Exit paths must not raise, but a step that fails silently is how a gateway
+    ends up still holding its port, or the process never exits because a window
+    is left: each failure goes to the launcher log with its step name.
+    """
+    log = log or append_log
+    for name, fn in steps:
+        try:
+            fn()
+        except Exception as error:  # noqa: BLE001 - the exit path must not raise
+            try:
+                log("launcher", f"{context}: {name} failed: {error!r}")
+            except Exception:  # noqa: BLE001 - nor may its logging
+                pass
+
+
+def restore_fanvpn_on_exit(shutdown=None, log=None):
+    """Exit hook: put the system proxy back that FanVPN set.
+
+    It never raises (this runs on the exit path), but a failure is logged: if
+    the restore fails, the registry keeps a PAC that points at a dead port and
+    the whole machine has no network after the next boot, and the log is the
+    only place that says why.
+    """
+    log = log or append_log
+    try:
+        if shutdown is None:
+            try:
+                import fanvpn_bridge
+            except ImportError:  # imported as app.windows_desktop (tests)
+                from app import fanvpn_bridge
+            shutdown = fanvpn_bridge.shutdown
+        shutdown()
+    except Exception as error:  # noqa: BLE001 - the exit path must not raise
+        try:
+            log("launcher", f"FanVPN system proxy restore on exit failed: {error!r}")
+        except Exception:  # noqa: BLE001 - nor may its logging
+            pass
 
 
 def finish_exit(bridge, gateway, webview_storage, leave=os._exit, force_close_gateway=False):

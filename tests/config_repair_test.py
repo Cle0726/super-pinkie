@@ -171,6 +171,28 @@ class SupervisorRepairTest(unittest.TestCase):
             self.assertIsNone(self.supervisor.inspect_exit())
         repair.assert_not_called()
 
+    # ---- B135: gateway.log can be empty or hold bytes a prior crash cut mid-write ----
+    def test_an_empty_gateway_log_is_read_as_no_output_not_a_crash(self):
+        """网关被信号杀掉 / 磁盘写满时，gateway.log 可能存在但一个字节都没写进去。"""
+        log = self.root / "state/logs/gateway.log"
+        log.parent.mkdir(parents=True)
+        log.write_bytes(b"")
+        self.supervisor.exit_inspected = False
+        with mock.patch.object(self.supervisor, "repair_config") as repair:
+            self.assertIsNone(self.supervisor.inspect_exit())
+        repair.assert_not_called()
+
+    def test_gateway_log_with_non_utf8_bytes_does_not_crash_the_read(self):
+        """写到一半被截断 / 编码不对的字节：解码要替换掉坏字节，不能整条链路炸掉，
+        也不能把半截乱码误判成一条 invalid-config 路径。"""
+        log = self.root / "state/logs/gateway.log"
+        log.parent.mkdir(parents=True)
+        log.write_bytes(b"starting gateway...\n\xff\xfe\x80\x81 truncated mid-wri")
+        self.supervisor.exit_inspected = False
+        with mock.patch.object(self.supervisor, "repair_config") as repair:
+            self.assertIsNone(self.supervisor.inspect_exit())
+        repair.assert_not_called()
+
     def test_repair_sets_the_startup_notice_and_is_limited(self):
         fake = mock.Mock()
         fake.repair.return_value = {"repaired": True, "step": "migration", "message": config_repair.NOTICE}

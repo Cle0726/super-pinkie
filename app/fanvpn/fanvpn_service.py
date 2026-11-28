@@ -316,8 +316,12 @@ class FanVpnService:
         self._system_method = method
         if method == "pac":
             self.sysproxy.apply_pac(pac_url_for(self.settings.panel_port))
+            port = self.settings.panel_port
         else:
             self.sysproxy.apply_direct(proxy_server_for(self.settings.proxy_port))
+            port = self.settings.proxy_port
+        # B109：记下实际写进去的值（含实际端口），被强杀后下次启动靠它确认「还是我们的」
+        self.snapshot_store.save_applied(self.sysproxy.current(), port)
         return self._state_payload()["system"]
 
     def restore_system_proxy(self) -> None:

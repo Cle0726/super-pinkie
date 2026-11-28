@@ -24,6 +24,12 @@ $runtimeStage = Join-Path $RepoRoot "build\windows-runtime"
 $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
 
+# 先确认取得到内核再开始：C.le. 内核在私有库，没 token / 本地 tgz / 缓存时在这里就说清楚怎么设，
+# 不要等装依赖、下到一半才 404（装内核那一步会把用户目录换成隔离目录，本机 gh 登录在那里看不到）。
+$preflightNode = (Get-Command node.exe -ErrorAction Stop).Source
+& $preflightNode $coreHelper preflight --root $RepoRoot --cache-dir (Join-Path $RepoRoot "build\cache\core")
+if ($LASTEXITCODE -ne 0) { throw "取不到内置内核，构建没有开始；按上面的说明设好再打包" }
+
 python -m pip install --disable-pip-version-check --upgrade pip pyinstaller "pywebview==6.2.1" pywin32 edge-tts aiohttp pyyaml
 if ($LASTEXITCODE -ne 0) { throw "Python 构建依赖安装失败，请检查本机网络或 Python 3.12 环境" }
 python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_version)"

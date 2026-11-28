@@ -747,9 +747,9 @@
     let posterSink = null;
     if (inline) {
       card.classList.add("is-media", `is-${target.kind}`);
-      stage = document.createElement("button");
-      stage.type = "button";
-      stage.className = `laolao-delivery-card__stage is-${target.kind}`;
+      // 原生检查回来之前大按钮里还没有图，先给名字（和 mountInlineMedia 里的一致），读屏不会读成空按钮。
+      stage = makeButton(target.kind === "image" ? `查看大图：${target.name}` : `播放视频：${target.name}`, `laolao-delivery-card__stage is-${target.kind}`);
+      stage.title = target.kind === "image" ? "点击查看大图" : "点击播放";
       card.append(stage, info, actions);
     } else {
       card.append(visual, info, actions);

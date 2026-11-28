@@ -1,6 +1,6 @@
 {
   "injectionTotals": {
-    "important": 5062,
+    "important": 5061,
     "importantIndirect": 7,
     "mutationObserverRefs": 20,
     "mutationObservers": 28,
@@ -419,7 +419,7 @@
     "ui/injections/laolao-desensitize.js": {
       "important": 3,
       "importantIndirect": 0,
-      "lines": 352,
+      "lines": 350,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1329,7 +1329,7 @@
     "ui/injections/laolao-metre-brand.css": {
       "important": 69,
       "importantIndirect": 0,
-      "lines": 250,
+      "lines": 245,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1654,7 +1654,7 @@
     "ui/injections/laolao-metre-transition.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 218,
+      "lines": 217,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1693,7 +1693,7 @@
     "ui/injections/laolao-mode-menu-fx.css": {
       "important": 11,
       "importantIndirect": 0,
-      "lines": 592,
+      "lines": 569,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1966,7 +1966,7 @@
     "ui/injections/laolao-power-settings.css": {
       "important": 1,
       "importantIndirect": 0,
-      "lines": 398,
+      "lines": 396,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2590,7 +2590,7 @@
     "ui/injections/laolao-sidebar-surface.css": {
       "important": 186,
       "importantIndirect": 0,
-      "lines": 315,
+      "lines": 314,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2952,9 +2952,9 @@
       "windowGlobalsIndirect": 0
     },
     "ui/injections/laolao-theme.css": {
-      "important": 557,
+      "important": 556,
       "importantIndirect": 0,
-      "lines": 5388,
+      "lines": 5387,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3275,7 +3275,7 @@
     "ui/injections/laolao-resume.js": 2611,
     "ui/injections/laolao-settings-user.js": 1636,
     "ui/injections/laolao-sidebar.js": 2143,
-    "ui/injections/laolao-theme.css": 5388,
+    "ui/injections/laolao-theme.css": 5387,
     "ui/injections/laolao-workbench.js": 2339
   },
   "manualVersions": {

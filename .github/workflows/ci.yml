@@ -202,27 +202,30 @@ jobs:
         # here is PowerShell, which does not expand globs for native commands.
         # Node expands them itself, but matching the ubuntu job exactly removes
         # a whole class of "does this differ by shell" doubt.
-        #
-        # PYTHONUTF8 pins the interpreter to UTF-8 mode: the test suites were
-        # written for a UTF-8 environment (Linux/macOS) and read/write Chinese
-        # files via Path.read_text()/write_text() without an explicit encoding,
-        # which the stock Windows runner's cp1252 locale then chokes on.  The
-        # product code already pins encoding='utf-8' explicitly for end users;
-        # the suites run only here, so fixing the environment is the correct,
-        # single-place remedy for them.
+        shell: bash
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs
+      - name: Run the Python unit test suite on Windows
+        # B126: split out of the step above. That step ran node (about 22 of
+        # the last 44 green minutes) then python (about 4) back to back under
+        # one 30-minute cap; the median was 25.4 min and the worst was 26.9,
+        # and run 46056820178 blew the cap on both attempts mid-Python-suite,
+        # at a different quick test each time -- not one test hanging, just
+        # the shared budget running out. Each half now gets its own clock.
+        # if: always() keeps the old behavior: both suites still run even if
+        # the other fails (the node step failing must not skip this one).
+        if: always()
+        timeout-minutes: 10
         shell: bash
         env:
+          # PYTHONUTF8 pins the interpreter to UTF-8 mode: the test suites were
+          # written for a UTF-8 environment (Linux/macOS) and read/write Chinese
+          # files via Path.read_text()/write_text() without an explicit encoding,
+          # which the stock Windows runner's cp1252 locale then chokes on.  The
+          # product code already pins encoding='utf-8' explicitly for end users;
+          # the suites run only here, so fixing the environment is the correct,
+          # single-place remedy for them.
           PYTHONUTF8: "1"
-        run: |
-          # Browser-heavy files launch real Chrome and WebKit concurrently.
-          # On the small Windows runner, an input click and a desk mount timed
-          # out under the default process fan-out. Run every file, but bound
-          # the number of processes instead of extending those test deadlines.
-          # Both suites still run even if the other fails.
-          status=0
-          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs || status=1
-          python -m unittest discover -s tests -p '*_test.py' -v || status=1
-          exit $status
+        run: python -m unittest discover -s tests -p '*_test.py' -v
       - name: Check Python services
         shell: bash
         run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py

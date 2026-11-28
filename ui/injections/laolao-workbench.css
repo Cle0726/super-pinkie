@@ -76,7 +76,7 @@ html[data-pinkie-wb="on"] .chat-workbench { grid-template-columns: minmax(0, 1fr
 .pk-wb-act__label { display: none; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .pk-wb-act:hover { color: var(--wb-text); background: color-mix(in srgb, var(--wb-text) 6%, transparent); }
 .pk-wb-act.is-active { color: var(--text-strong, var(--wb-text)); background: color-mix(in srgb, var(--wb-accent) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wb-accent) 28%, transparent); }
-.pk-wb-act.is-active .codicon { color: var(--wb-accent); }
+.pk-wb-act.is-active .codicon { color: color-mix(in srgb, var(--wb-accent) 65%, var(--wb-text)); }
 .pk-wb-views:not(.is-vertical) .pk-wb-act.is-active .pk-wb-act__label { display: inline; }
 .pk-wb-views.is-vertical .pk-wb-act { width: 34px; height: 34px; padding: 0; justify-content: center; }
 .pk-wb-badge {
@@ -99,13 +99,13 @@ html[data-pinkie-wb="on"] .chat-workbench { grid-template-columns: minmax(0, 1fr
 .pk-wb-project { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 12px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--wb-text); }
 .pk-wb-project .codicon { font-size: 14px; color: var(--wb-accent); }
 .pk-wb-project__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pk-wb-project__tag { padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--wb-cle); background: color-mix(in srgb, var(--wb-cle) 12%, transparent); }
+.pk-wb-project__tag { padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--wb-cle); background: color-mix(in srgb, var(--wb-cle) 12%, transparent); } .pk-wb.is-light .pk-wb-project__tag { color: color-mix(in srgb, var(--wb-cle) 75%, #000); }
 
 .pk-wb-tree { padding: 2px 0 24px; outline: none; min-height: calc(100% - 24px); }
 .pk-wb-reference-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 16px; padding: 8px 8px 4px 12px; border-top: 1px solid var(--wb-line); color: var(--wb-mute); font-size: 11px; }
 .pk-wb-reference-head .pk-wb-icon { width: 24px; height: 24px; }
 .pk-wb-row.is-reference-root { margin-top: 3px; color: var(--wb-text); font-weight: 600; }
-.pk-wb-open-project { margin-top: 8px; }
+.pk-wb-open-project { margin-top: 8px; } .pk-wb-empty .pk-wb-open-project { color: var(--wb-text); border-color: var(--wb-mute); } /* (0,2,0) 盖过 .pk-wb button 的 color: inherit，否则继承 .pk-wb-empty 的 muted */
 .pk-wb-tree.is-drop-root { background: color-mix(in srgb, var(--wb-cle) 7%, transparent); }
 .pk-wb-row {
   position: relative; display: flex; align-items: center; gap: 5px; height: 22px; padding-left: calc(8px + var(--depth, 0) * 12px); padding-right: 10px;
@@ -325,7 +325,7 @@ html[data-pinkie-wb="on"] .chat-workbench { grid-template-columns: minmax(0, 1fr
 }
 .pk-wb-status__side { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .pk-wb-status__mode { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 8px 0 6px; border-radius: 9px; font-weight: 600; color: var(--wb-text); background: color-mix(in srgb, var(--wb-accent) 14%, transparent); white-space: nowrap; }
-.pk-wb-status__mode .pk-wb-mark { width: 22px; height: 11px; }
+.pk-wb-status__mode .pk-wb-mark { width: 22px; height: 11px; } .pk-wb.is-light .pk-wb-status__mode .pk-wb-mark { background: linear-gradient(110deg, color-mix(in srgb, var(--wb-accent) 65%, #000), color-mix(in srgb, var(--wb-cle) 65%, #000)); }
 .pk-wb-status__item { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; white-space: nowrap; font-size: 11.5px !important; }
 button.pk-wb-status__item:hover { color: var(--wb-text); background: color-mix(in srgb, var(--wb-text) 8%, transparent); }
 .pk-wb-status__item .codicon { font-size: 13px; }
@@ -591,7 +591,7 @@ html[data-laolao-classic-shell="1"][data-pinkie-wb="on"] body .chat-workbench { 
 .pk-workspace-header .laolao-mode-button__arrow { display: none !important; }
 .pk-workspace-header .laolao-mode-dock-trigger { width: 24px !important; height: 28px !important; min-height: 28px !important; border-radius: 5px !important; background: transparent !important; box-shadow: none !important; }
 .pk-workspace-header__views { display: none; flex: none; gap: 1px; padding: 1px; border-radius: 5px; background: color-mix(in srgb, var(--text) 6%, transparent); }
-.pk-workspace-header__views button { border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: 12px/25px -apple-system, sans-serif; padding: 0 7px; cursor: pointer; }
+.pk-workspace-header__views button { border: 0; border-radius: 4px; background: transparent; color: color-mix(in srgb, var(--muted) 30%, var(--text)); font: 12px/25px -apple-system, sans-serif; padding: 0 7px; cursor: pointer; }
 .pk-workspace-header__views button[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 17%, var(--bg-elevated)); color: var(--text); }
 html[data-pinkie-wb="on"] body .shell.shell--chat { grid-template-rows: 0 minmax(0, 1fr) !important; }
 html[data-pinkie-wb="on"] body .shell--chat .topbar { display: none !important; }

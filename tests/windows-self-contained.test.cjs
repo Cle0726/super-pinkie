@@ -256,8 +256,9 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /threading\.Thread\(target=bootstrap/);
   assert.match(launcher, /Never kill a still-live Gateway/);
   const loading = read('ui/launcher-loading.html');
-  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
-  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/chat"\)/);
+  assert.match(loading, /gatewayPort = .*: "18789";/, 'the splash must default to the real gateway port');
+  assert.match(loading, /fetch\(`http:\/\/127\.0\.0\.1:\$\{gatewayPort\}\/`/);
+  assert.match(loading, /location\.replace\(`http:\/\/127\.0\.0\.1:\$\{gatewayPort\}\/chat`\)/);
   assert.match(loading, /mode: "no-cors"/);
   assert.match(loading, /AbortController/);
   assert.match(loading, /controller\.abort\(\), 2000\)/);
@@ -431,12 +432,35 @@ test('uninstall finds the proxy by command line, not by executable path', () => 
 });
 
 test('Windows bundled watchdog has a dedicated task installer', () => {
-  const installer = read('installer/windows/register-bundled-watchdog.ps1');
+  // The command it registers is built in watchdog-command.ps1, shared with the
+  // unregister script so both name the same task / Run value (B109).
+  const register = read('installer/windows/register-bundled-watchdog.ps1');
+  const installer = register + '\n' + read('installer/windows/watchdog-command.ps1');
+  assert.match(register, /watchdog-command\.ps1/);
   assert.match(installer, /SuperPinkieGatewayWatchdog/);
   assert.match(installer, /windows-gateway-watchdog\.ps1/);
   assert.match(installer, /-Port 18789 -Loop/);
   assert.match(installer, /New-ScheduledTaskTrigger/);
   assert.match(installer, /RunLevel Limited/);
+});
+
+test('B109: the bundled watchdog task does not outlive the App folder', () => {
+  // Deleting the portable folder is how users uninstall. The task used to run
+  // the watchdog from inside it (and start in it), so it failed every minute
+  // for ten years afterwards and there was no way to remove it.
+  const register = read('installer/windows/register-bundled-watchdog.ps1');
+  const command = read('installer/windows/watchdog-command.ps1');
+  assert.doesNotMatch(register, /-File `"\$watchdog`"/, 'the task must not run the watchdog by its path in the App folder');
+  assert.match(register, /Write-BundledWatchdogWrapper/);
+  assert.match(register, /-WorkingDirectory \(Split-Path -Parent \$wrapper\)/, 'nor start in the App folder');
+  assert.match(command, /Unregister-ScheduledTask/);
+  assert.match(command, /Remove-ItemProperty/);
+  assert.match(command, /\.previous-\*/, 'an update mid-swap must not look like an uninstall');
+  const unregister = read('installer/windows/unregister-bundled-watchdog.ps1');
+  assert.match(unregister, /watchdog-command\.ps1/);
+  assert.match(unregister, /Unregister-ScheduledTask/);
+  assert.match(unregister, /Remove-ItemProperty/);
+  assert.match(unregister, /CommandLine\.Contains\(\$wrapper\)/, 'stop only the loop it started, never every powershell.exe');
 });
 
 test('every PowerShell script carries the UTF-8 BOM Windows PowerShell needs', () => {

@@ -248,56 +248,56 @@
 #laolao-desensitize-pop::before{content:"";position:absolute;inset:0 12px auto;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.92),transparent);pointer-events:none}
 
 .ds-head{display:flex;align-items:center;gap:6px}
-.ds-head__title{display:flex;align-items:center;gap:4px;font-size:11.5px;font-weight:680;color:rgba(87,54,74,.78);letter-spacing:.04em;white-space:nowrap}
+.ds-head__title{display:flex;align-items:center;gap:4px;font-size:11.5px;font-weight:680;color:#6a4359;letter-spacing:.04em;white-space:nowrap}
 .ds-head__title svg{width:14px;height:14px;stroke:#ca4e84;fill:none;stroke-width:1.4;stroke-linejoin:round}
 .ds-head__title svg path:first-child{fill:#ca4e84;fill-opacity:.14}
 .ds-bolt{fill:#ca4e84;stroke:none!important}
 
 .ds-select{
   flex:1;min-width:0;height:24px;padding:0 6px;
-  border-radius:8px;border:1px solid rgba(176,95,131,.18);
+  border-radius:8px;border:1px solid #9e5f80;
   background:linear-gradient(135deg,rgba(255,255,255,.48),rgba(255,240,248,.4));
   color:#57364a;font-size:10.5px;font-weight:500;outline:none;
   transition:border-color .16s;
 }
-.ds-select:focus{border-color:rgba(202,78,132,.45)}
+.ds-select:focus{border-color:#a83e70}
 
 .ds-input{
   width:100%;box-sizing:border-box;
   padding:7px 9px;border-radius:10px;
-  border:1px solid rgba(176,95,131,.16);
+  border:1px solid #9e5f80;
   background:linear-gradient(145deg,rgba(255,255,255,.42),rgba(255,240,248,.32));
   color:#57364a;font:12px/1.45 ui-sans-serif,system-ui,sans-serif;
   resize:vertical;outline:none;
   transition:border-color .16s,background .16s;
 }
 .ds-input:focus{
-  border-color:rgba(202,78,132,.42);
+  border-color:#a83e70;
   background:linear-gradient(145deg,rgba(255,255,255,.68),rgba(255,240,248,.52));
 }
-.ds-input::placeholder{color:rgba(87,54,74,.36)}
+.ds-input::placeholder{color:#86596f}
 
 .ds-output{
   background:linear-gradient(145deg,rgba(255,248,252,.52),rgba(251,228,241,.38));
-  border-color:rgba(202,78,132,.22);
+  border-color:#9e5f80;
   font-size:11.5px;
 }
 
 .ds-bar{display:flex;align-items:center;justify-content:space-between}
 
-.ds-status{font-size:10px;font-weight:500;color:rgba(87,54,74,.52)}
+.ds-status{font-size:10px;font-weight:500;color:#7a5068}
 
 .ds-run{
   display:inline-flex;align-items:center;gap:4px;
   height:26px;padding:0 10px;
-  border:1px solid rgba(255,255,255,.28);border-radius:999px;
-  background:linear-gradient(135deg,rgba(216,91,145,.82),rgba(202,78,132,.88));
+  border:1px solid #8f2f5b;border-radius:999px;
+  background:linear-gradient(135deg,#b23a6f,#a3325f);
   color:#fff;font-size:11px;font-weight:680;cursor:pointer;
   box-shadow:0 2px 8px rgba(202,78,132,.22);
   transition:all .16s ease;
 }
 .ds-run:hover:not(:disabled){
-  background:linear-gradient(135deg,rgba(226,105,159,.9),rgba(212,88,142,.94));
+  background:linear-gradient(135deg,#b8427a,#a8356a);
   box-shadow:0 4px 14px rgba(202,78,132,.3);
 }
 .ds-run:disabled{opacity:.6;cursor:wait}
@@ -309,28 +309,26 @@
 .ds-apply{
   align-self:flex-end;
   height:24px;padding:0 10px;
-  border:1px solid rgba(255,255,255,.28);border-radius:999px;
-  background:linear-gradient(135deg,rgba(98,180,147,.78),rgba(74,162,128,.84));
+  border:1px solid #22634a;border-radius:999px;
+  background:linear-gradient(135deg,#2e7a5b,#286f53);
   color:#fff;font-size:10.5px;font-weight:680;cursor:pointer;
   box-shadow:0 2px 6px rgba(74,162,128,.18);
   transition:all .14s ease;
 }
 .ds-apply:hover{
-  background:linear-gradient(135deg,rgba(108,190,157,.88),rgba(84,172,138,.92));
+  background:linear-gradient(135deg,#348363,#2b7558);
   box-shadow:0 3px 10px rgba(74,162,128,.26);
 }
 
-/* 暗色模式 —— 保持粉色调(同 deep-think) */
-html[data-theme-mode="dark"] #laolao-desensitize-pop{
-  color:#57364a;
-  background:linear-gradient(145deg,rgba(255,249,252,.84),rgba(245,218,234,.72));
-  border-color:rgba(255,255,255,.62);
-  box-shadow:0 14px 38px rgba(84,42,65,.18),inset 0 1px rgba(255,255,255,.66);
-}
+/* 夜间：原生 data-theme-mode="dark" 与碧琪 data-pinkie-night 都认，浮窗换深底（同 deep-think）；触发钮静息态不在这里改 */
+:is(html[data-theme-mode="dark"],html[data-pinkie-night]) #laolao-desensitize-pop{color:#f1e4ec;color-scheme:dark;background:linear-gradient(145deg,rgba(46,30,42,.96),rgba(34,22,34,.95));border-color:rgba(255,255,255,.14);box-shadow:0 16px 40px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.06)}
+:is(html[data-theme-mode="dark"],html[data-pinkie-night]) #laolao-desensitize-pop::before{background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent)}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-head__title{color:#e3cbd9}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-head__title svg{stroke:#f08cba}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-head__title svg path:first-child,:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-bolt{fill:#f08cba}
+:is(html[data-theme-mode="dark"],html[data-pinkie-night]) :is(.ds-select,.ds-input){background:rgba(255,255,255,.06);border-color:#a77a93;color:#f1e4ec}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) :is(.ds-select,.ds-input):focus{background:rgba(255,255,255,.09);border-color:#f08cba}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-output{background:rgba(255,255,255,.04)}
+:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-input::placeholder{color:#c0a3b5}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-status{color:#c4a8b9}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-run{border-color:#e283ad}:is(html[data-theme-mode="dark"],html[data-pinkie-night]) .ds-apply{border-color:#6cc59f}
 html[data-theme-mode="dark"] .laolao-desensitize-btn{
   background:linear-gradient(135deg,rgba(255,249,252,.68),rgba(248,220,236,.55));
   border-color:rgba(255,255,255,.48);color:#8c4a6a;
-}
+}html:not([data-laolao-plain-composer]):not([data-pinkie-night]):not([data-theme-mode="dark"]):not([data-laolao-mode="metre"]) .agent-chat__input .laolao-desensitize-btn:not([aria-pressed="true"]):not(.is-active){--fog-muted:var(--muted-strong)}
 
 @keyframes ds-pop-in{from{opacity:0;transform:translateY(6px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes ds-spin{to{transform:rotate(360deg)}}

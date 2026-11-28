@@ -97,7 +97,7 @@ test('crew balloons draw only from what the cards already fetched: no requests, 
   has(cards, "!child.cross && !/:subagent:/i.test(childKey) && rows.has(childKey)", 'personas and archived children are not balloons');
   const head = source('laolao-head.fragment.html');
   assert.ok(head.indexOf('/laolao-crew.js') > 0 && head.indexOf('/laolao-crew.js') < head.indexOf('/laolao-session-cards.js'), 'loads before the cards');
-  has(source('laolao-crew.css'), 'html[data-reduce-motion] .pinkie-crew, html[data-reduce-motion] .pinkie-crew * { animation: none !important;');
+  has(source('laolao-crew.css'), 'html[data-pinkie-reduce-motion] .pinkie-crew, html[data-pinkie-reduce-motion] .pinkie-crew * { animation: none !important;');
 });
 
 test('the 临时 button no longer sits on top of the new-session shortcut', () => {
@@ -177,5 +177,5 @@ test('the icon set is one module, loaded before its callers, and every entry fal
   const css = source('laolao-icons.css');
   has(css, 'html .sidebar .sidebar-new-session:has(> .pinkie-new-session-ic) > .sidebar-new-session__icon { display: none !important; }');
   has(css, 'html .sidebar.sidebar--collapsed .sidebar-new-session:not(.sidebar-new-session--worktree) > .pinkie-new-session-ic { display: inline-flex !important; }', 'the collapsed rail still shows the icon');
-  has(css, 'html[data-reduce-motion] .pinkie-ic * { animation: none !important; transition: none !important; }');
+  has(css, 'html[data-pinkie-reduce-motion] .pinkie-ic * { animation: none !important; transition: none !important; }');
 });

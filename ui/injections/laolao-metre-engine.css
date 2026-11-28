@@ -44,7 +44,7 @@ html[data-laolao-mode="metre"] .pk-eng-menu__item--upstream::after { content: ""
 .pk-eng-menu__back { border: 0; background: transparent; color: var(--metre-muted, #73726C); cursor: pointer; padding: 4px 10px; font: inherit; }
 .pk-eng-menu__wait { padding: 10px; color: var(--metre-muted, #73726C); }
 .pk-eng-menu__off { display: grid; gap: 8px; margin: 4px 4px 8px; padding: 10px; border-radius: 10px; background: var(--metre-hover, #F0EEE6); }
-.pk-eng-menu__levels { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 6px 4px; margin-top: 4px; border-top: 1px solid var(--pk-menu-rule, var(--metre-line, #E8E6DC)); }
+.pk-eng-menu__levels { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 6px 4px; margin-top: 4px; border-top: 1px solid var(--pk-menu-rule, var(--metre-line, #E8E6DC)); position: sticky; bottom: 0; background: var(--metre-surface, #fff); } /* 列表比菜单高时「放手程度」贴住列表底边、不跟着滚走：四档按钮整排可见（L75：差几 px 时按钮下边框被菜单底边切掉）。只动 CSS，不碰 #134 改的 js 那一行 */ .pk-eng-menu__levels.is-below::before { content: ""; position: absolute; left: 0; right: 0; top: -13px; height: 12px; background: linear-gradient(transparent, var(--metre-line-strong, #D9D6CC)); pointer-events: none; } /* B91：贴底的放手程度盖住了列表底边的渐变，列表还没滚到底时把它补在这一节上沿 */
 .pk-eng-menu__label { width: 100%; color: var(--metre-muted, #73726C); font-size: 12px; padding: 0 4px 2px; }
 .pk-eng-seg { border: 1px solid var(--metre-line-strong, #D9D6CC); background: transparent; color: inherit; border-radius: 7px; padding: 4px 9px; cursor: pointer; font: inherit; font-size: 12.5px; }
 .pk-eng-seg[aria-pressed="true"] { background: var(--metre-text, #1F1E1D); color: var(--metre-bg, #FAF9F5); border-color: transparent; }
@@ -229,7 +229,7 @@ html[data-laolao-mode="metre"][data-pinkie-night] .pk-eng-diff__l--del { color: 
 
 @media (max-width: 860px) {
   .pk-eng-stage--drawer { grid-template-columns: minmax(0, 1fr) 0; }
-  .pk-eng-stage--drawer .pk-eng-drawer { position: absolute; inset: 0; z-index: 2; }
+  .pk-eng-stage--drawer .pk-eng-drawer { position: absolute; inset: 0; z-index: 2; grid-column: 1 / -1; grid-row: 1 / -1; } /* 窄宽第 2 列是 0 宽，不改占位抽屉会被压在右边一条窄带里（main 上已有，win-coord 7230136101） */
 }
 @media (prefers-reduced-motion: reduce) {
   .pk-eng-caret, .pk-eng-dot--run, .pk-eng-state--running i { animation: none; }

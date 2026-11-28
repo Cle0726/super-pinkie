@@ -4,6 +4,7 @@
 """
 import json
 import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -108,6 +109,67 @@ class AppWindowTest(unittest.TestCase):
         self.store.ledger_file.write_text(json.dumps(ledger), encoding="utf-8")
         self.store.uninstall(APP)
         self.assertTrue(victim.exists(), "台账被改过也不能删 .lnk 以外的文件")
+
+    # B131：卸载 / 重装时 .lnk 已被用户删掉、所在文件夹没了、或被设成只读（用户和同步盘常给桌面图标打只读），都不能中断清理。
+    def test_uninstall_when_links_or_their_folders_are_already_gone(self):
+        self.install_files()
+        self.install_files(OTHER, "计时器")
+        self.store.install(APP)
+        self.store.install(OTHER)
+        ledger = json.loads(self.store.ledger_file.read_text(encoding="utf-8"))
+        Path(ledger[APP][0]).unlink()  # 用户自己删了开始菜单那个
+        ledger[APP].append(str(self.base / "shell" / "旧桌面" / "单词小游戏.lnk"))  # 记过的文件夹整个没了
+        self.store.ledger_file.write_text(json.dumps(ledger, ensure_ascii=False), encoding="utf-8")
+        self.assertEqual(self.store.uninstall(APP), {"ok": True})
+        self.assertNotIn(APP, self.store.ledger())
+        # 别的作品不受影响。
+        self.assertEqual(self.links(), [os.path.join("Desktop", "计时器.lnk"), os.path.join("Programs", "碧琪应用", "计时器.lnk")])
+
+    def test_uninstall_removes_a_read_only_link(self):
+        self.install_files()
+        self.store.install(APP)
+        desktop = self.base / "shell" / "Desktop" / "单词小游戏.lnk"
+        os.chmod(desktop, stat.S_IREAD)
+        self.addCleanup(lambda: desktop.exists() and os.chmod(desktop, stat.S_IREAD | stat.S_IWRITE))
+        self.assertEqual(self.store.uninstall(APP), {"ok": True})
+        self.assertEqual(self.links(), [])
+        self.assertNotIn(APP, self.store.ledger())
+
+    def test_reinstall_over_a_read_only_link_with_the_same_name(self):
+        self.install_files()
+        self.store.install(APP)
+        desktop = self.base / "shell" / "Desktop" / "单词小游戏.lnk"
+        os.chmod(desktop, stat.S_IREAD)
+        self.addCleanup(lambda: desktop.exists() and os.chmod(desktop, stat.S_IREAD | stat.S_IWRITE))
+        self.assertTrue(self.store.install(APP)["ok"])
+        self.assertEqual(self.links(), [os.path.join("Desktop", "单词小游戏.lnk"), os.path.join("Programs", "碧琪应用", "单词小游戏.lnk")])
+        self.assertTrue(os.access(desktop, os.W_OK), "重装后的图标是新写的，不再只读")
+
+    def test_a_link_that_stays_locked_is_kept_in_the_ledger_for_next_time(self):
+        # 反例：真被占用（清了只读也删不掉）就照旧报「删不掉」、留在台账里，下次卸载再删；放开后能删干净。
+        self.install_files()
+        self.store.install(APP)
+        desktop = self.base / "shell" / "Desktop" / "单词小游戏.lnk"
+        real_unlink = Path.unlink
+
+        def locked(path, *args, **kwargs):
+            if Path(path) == desktop:
+                raise PermissionError(13, "in use", str(path))
+            return real_unlink(path, *args, **kwargs)
+
+        for read_only in (False, True):
+            if read_only:
+                os.chmod(desktop, stat.S_IREAD)
+            with mock.patch.object(Path, "unlink", locked):
+                out = self.store.uninstall(APP)
+            self.assertFalse(out["ok"], out)
+            self.assertEqual(out["left"], [str(desktop)])
+            self.assertEqual(self.store.ledger()[APP], [str(desktop)])
+            self.assertTrue(desktop.exists())
+        os.chmod(desktop, stat.S_IREAD | stat.S_IWRITE)
+        self.assertEqual(self.store.uninstall(APP), {"ok": True})
+        self.assertEqual(self.links(), [])
+        self.assertNotIn(APP, self.store.ledger())
 
     def test_bad_ids_never_reach_the_filesystem(self):
         for bad in ("..", "..\\..\\Windows", "w0123", "W0123456789ABCDE", "", None):

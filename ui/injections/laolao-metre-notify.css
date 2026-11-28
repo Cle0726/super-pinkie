@@ -1,0 +1,7 @@
+/* laolao-metre-notify —— T3 #20（#96 L31）：Metre 侧栏「做完没看」的标记。只在 Metre。
+   后台会话做完、你没在看时，laolao-metre-notify.js 把会话记成 unread；laolao-metre-list.js 给这一行加 .pk-ml-unread（会话名加粗），
+   左边记号位（.pk-ml-dot，空闲时 data-state="idle"、本来不画）这里画一个钴蓝空心圈。打开会话后 unread 清掉，圈跟着消失。
+   在跑 / 等你 / 出错的实心点优先（它们的 data-state 不是 idle），不叠画。 */
+html[data-laolao-mode="metre"] aside.sidebar .pk-ml-unread > .pk-ml-dot[data-state="idle"] {
+  box-shadow: inset 0 0 0 1.6px var(--metre-accent);
+}

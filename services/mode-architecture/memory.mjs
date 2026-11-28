@@ -45,12 +45,22 @@ const isChild = value => /:subagent:/.test(String(value || ''));
 // H1: temp sessions never write long-term memory.
 const isTemp = value => /:dashboard:temp-[0-9a-f-]{36}$/i.test(String(value || ''));
 
-function atomicJson(file, value) {
+// 先写同目录临时文件再 rename：写到一半出错（磁盘满、进程被杀）时原文件不动，临时文件删掉（B89）。
+function atomicText(file, text, mode = 0o600) {
   const directory = path.dirname(file);
   fs.mkdirSync(directory, {recursive: true, mode: 0o700});
   const temporary = path.join(directory, `.${path.basename(file)}.${randomUUID()}.tmp`);
-  fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {encoding: 'utf8', mode: 0o600});
-  fs.renameSync(temporary, file);
+  try {
+    fs.writeFileSync(temporary, text, {encoding: 'utf8', mode});
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    try { fs.rmSync(temporary, {force: true}); } catch {}
+    throw error;
+  }
+}
+
+function atomicJson(file, value) {
+  atomicText(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function tags(value) {
@@ -329,7 +339,8 @@ export class LongTermMemoryStore {
           const next = lineRe.test(current)
             ? current.replace(lineRe, `$1${address}`)
             : `${current ? current.replace(/\s*$/, '\n\n') : '# USER.md - About Your Human\n\n'}- **What to call them:** ${address}\n`;
-          if (next !== current) fs.writeFileSync(userFile, next, 'utf8');
+          // 整文件重写用户自己的 USER.md：走临时文件 + rename，写一半出错不截断原文件；权限照原文件（B89）。
+          if (next !== current) atomicText(userFile, next, fs.existsSync(userFile) ? fs.statSync(userFile).mode & 0o777 : 0o644);
         }
       } catch {}
     }

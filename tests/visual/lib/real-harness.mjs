@@ -800,7 +800,7 @@ export async function startRealUiServer({
 // Browser chosen explicitly so a baseline always comes from the same engine:
 // Playwright's pinned Chromium on Linux and Windows alike (install it with
 // `playwright install chromium-headless-shell`, as CI does). PINKIE_VISUAL_ENGINE
-// overrides (chromium | chrome | msedge) for local experiments only.
+// overrides (chromium | chrome | msedge | webkit | firefox) for local experiments only.
 export function resolveRealEngine(engine = process.env.PINKIE_VISUAL_ENGINE || '') {
   if (engine) return engine;
   // Playwright's own pinned Chromium (headless-shell, revision fixed by the
@@ -811,8 +811,13 @@ export function resolveRealEngine(engine = process.env.PINKIE_VISUAL_ENGINE || '
   return 'chromium';
 }
 
-export async function launchRealBrowser(engine = resolveRealEngine()) {
-  const {chromium} = playwright();
+export async function launchRealBrowser(engine = resolveRealEngine(), pw = playwright()) {
+  if (engine === 'webkit' || engine === 'firefox') {
+    const browser = await pw[engine].launch({headless: true});
+    browser.__pinkieEngine = engine;
+    return browser;
+  }
+  const {chromium} = pw;
   const launchOpts = {
     headless: true,
     args: [

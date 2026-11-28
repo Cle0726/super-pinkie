@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import {EventEmitter} from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -229,6 +230,59 @@ test('a symlink shipped as the engine binary is refused', async () => {
   await assert.rejects(service.install(), /不是普通文件|目录外面/);
   assert.equal(service.installed(), false);
   assert.equal(fs.existsSync(path.join(service.dir, 't3')), false);
+});
+
+// 开机自启（registerEngines 里 prefs.enabled 时 service.start()）和引擎台 ensureRunning / 打开开关会同时调 start()：
+// 两个调用都在 await 安装 / 找端口时看到 child 还是空，各下一遍、各起一个 t3，先起的那个被覆盖成孤儿进程。
+function fakeChild(spawned) {
+  const child = new EventEmitter();
+  child.pid = 4000 + spawned.length;
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = () => { child.killed = true; };
+  setImmediate(() => child.stdout.emit('data', Buffer.from('T3 Code server is ready')));
+  return child;
+}
+
+test('two start() calls at once download once and run a single engine process', async () => {
+  const root = tmp();
+  const {calls, service} = fakeInstall(root);
+  const spawned = [];
+  service.spawnImpl = () => { const child = fakeChild(spawned); spawned.push(child); return child; };
+  const [a, b] = await Promise.all([service.start(), service.start()]);
+  assert.equal(spawned.length, 1, 'only one t3 process is started');
+  assert.equal(calls.filter(call => call[0] === 'curl').length, 2, 'the release and its checksum list are downloaded once');
+  assert.equal(service.child, spawned[0]);
+  assert.ok(a.running && b.running);
+  assert.equal(a.port, b.port);
+  service.stop();
+});
+
+test('two start() calls at once on an installed engine still run a single process, and a later start() reuses it', async () => {
+  const root = tmp();
+  const {service} = fakeInstall(root);
+  fs.mkdirSync(service.dir, {recursive: true});
+  fs.writeFileSync(service.exe, 'exe');
+  const spawned = [];
+  service.spawnImpl = () => { const child = fakeChild(spawned); spawned.push(child); return child; };
+  await Promise.all([service.start(), service.start(), service.start()]);
+  assert.equal(spawned.length, 1);
+  assert.equal(spawned[0].killed, undefined, 'the running process is not killed');
+  await service.start();
+  assert.equal(spawned.length, 1, 'start() while running returns the running one');
+  service.stop();
+});
+
+test('when a shared start() fails, every caller sees the error and the next start() tries again', async () => {
+  const root = tmp();
+  const {service} = fakeInstall(root, {corrupt: true});
+  const spawned = [];
+  service.spawnImpl = () => { const child = fakeChild(spawned); spawned.push(child); return child; };
+  const results = await Promise.allSettled([service.start(), service.start()]);
+  assert.deepEqual(results.map(r => r.status), ['rejected', 'rejected']);
+  assert.ok(results.every(r => /校验不对/.test(r.reason.message)));
+  assert.equal(spawned.length, 0);
+  await assert.rejects(service.start(), /校验不对/, 'a failed start is not cached');
 });
 
 test('provider status keeps sign-in state and plan but never the account e-mail', () => {

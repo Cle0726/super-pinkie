@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import traceback
+import urllib.parse
 
 if "_PINKIE_DESKTOP_PART" not in globals():
     GATEWAY_URL = "http://127.0.0.1:18789/"
@@ -110,8 +111,13 @@ class GatewaySupervisor:
             append_log("launcher", f"gateway owner record not written: {error}")
 
     @staticmethod
+    def port():
+        """Port taken from GATEWAY_URL: 18789 unless an isolated run moved it."""
+        return urllib.parse.urlparse(GATEWAY_URL).port or 18789
+
+    @staticmethod
     def _listener():
-        pid = gateway_listener_pid()
+        pid = gateway_listener_pid(GatewaySupervisor.port())
         if not pid:
             return None
         image, started = process_image_and_start(pid)
@@ -202,7 +208,7 @@ class GatewaySupervisor:
             self.good_saved = False
             command = [
                 str(self.runtime.node), str(self.runtime.openclaw),
-                "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
+                "gateway", "run", "--port", str(self.port()), "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
             ]
             try:
                 gateway_environment = self.runtime.environment()
@@ -578,8 +584,14 @@ class LocalServices:
         for server in list(self.servers):
             try:
                 server.shutdown()
-            except Exception:
-                pass
+            except Exception as error:
+                # Still no raise (close() runs on the exit path), but a server
+                # that did not shut down keeps its port: say which one.
+                try:
+                    address = getattr(server, "server_address", None)
+                    append_log("launcher", f"local service {address or server!r} did not shut down: {error!r}")
+                except Exception:
+                    pass
         process = self.relay
         self.relay = None
         if process and process.poll() is None:

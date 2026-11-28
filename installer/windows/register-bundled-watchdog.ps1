@@ -4,17 +4,18 @@ param(
     [string]$InstallRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 )
 $ErrorActionPreference = 'Stop'
-$taskName = 'SuperPinkieGatewayWatchdog'
-$resourceRoot = if (Test-Path -LiteralPath (Join-Path $InstallRoot '_internal')) { Join-Path $InstallRoot '_internal' } else { $InstallRoot }
-$watchdog = Join-Path $resourceRoot 'services\watchdog\windows-gateway-watchdog.ps1'
-$node = Join-Path $resourceRoot 'runtime\bin\node.exe'
-$openclaw = Join-Path $resourceRoot 'runtime\node_modules\openclaw\openclaw.mjs'
-if (-not (Test-Path -LiteralPath $watchdog) -or -not (Test-Path -LiteralPath $node) -or -not (Test-Path -LiteralPath $openclaw)) {
+. (Join-Path $PSScriptRoot 'watchdog-command.ps1')
+$taskName = $BundledWatchdogTaskName
+$paths = Get-BundledWatchdogPaths $InstallRoot
+if (-not (Test-Path -LiteralPath $paths.Watchdog) -or -not (Test-Path -LiteralPath $paths.Node) -or -not (Test-Path -LiteralPath $paths.OpenClaw)) {
     throw "找不到内置网关文件，请确认 InstallRoot 指向 onedir 程序目录"
 }
 $ps = (Get-Command powershell.exe).Source
-$args = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdog`" -NodePath `"$node`" -OpenClawEntry `"$openclaw`" -Port 18789 -Loop"
-$action = New-ScheduledTaskAction -Execute $ps -Argument $args -WorkingDirectory (Split-Path -Parent $watchdog)
+# The task runs a wrapper outside the App folder (see watchdog-command.ps1), so
+# deleting the folder no longer leaves a task that fails every minute (B109).
+$wrapper = Write-BundledWatchdogWrapper $InstallRoot $paths
+$args = New-BundledWatchdogArguments $wrapper
+$action = New-ScheduledTaskAction -Execute $ps -Argument $args -WorkingDirectory (Split-Path -Parent $wrapper)
 $triggers = @(
     (New-ScheduledTaskTrigger -AtLogOn),
     # Task Scheduler rejects TimeSpan::MaxValue in XML; ten years is
@@ -26,11 +27,11 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit
 try {
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
     Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
-    Write-Host "已注册 $taskName（仅检查监听，不会 taskkill 正在启动的网关）"
+    Write-Host "已注册 $taskName（仅检查监听，不会 taskkill 正在启动的网关；删掉程序文件夹后会自己注销）"
 } catch {
     # Some managed Windows installs deny Task Scheduler writes to standard
     # users. Fall back to the per-user Run key with the same safe check loop.
-    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $runKey = $BundledWatchdogRunKey
     $loopArgs = $args
     New-Item -Path $runKey -Force | Out-Null
     New-ItemProperty -Path $runKey -Name $taskName -PropertyType String -Value "`"$ps`" $loopArgs" -Force | Out-Null

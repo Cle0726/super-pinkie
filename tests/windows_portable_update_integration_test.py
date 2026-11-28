@@ -34,7 +34,11 @@ public class Fixture {
     if (kind == "--child") {
       File.WriteAllText(Environment.GetEnvironmentVariable("FIXTURE_CHILD_PID"),Process.GetCurrentProcess().Id.ToString());
       string stop=Environment.GetEnvironmentVariable("FIXTURE_CHILD_STOP");
-      for (int i=0;i<300 && !File.Exists(stop);i++) Thread.Sleep(100);
+      // B136: 30s (300*100ms) matched the old ~25-30s locked_rollback runtime;
+      // the condition-based lock wait now added there can legitimately run
+      // 44-46s, which made this self-timeout fire before the test's final
+      // fixture_child_alive() check. 120s matches the --hold branch below.
+      for (int i=0;i<1200 && !File.Exists(stop);i++) Thread.Sleep(100);
       return 0;
     }
     if (kind == "--gateway" || kind == "openclaw.mjs") {
@@ -338,7 +342,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                        FIXTURE_CHILD_PID=str(child_pid),FIXTURE_CHILD_STOP=str(child_stop),FIXTURE_NEW_PID=str(new_pid),
                        PSModulePath=str(shadow.parent)+os.pathsep+env.get('PSModulePath',''))
             if gateway_kind in ('external_reappears','locked_rollback'):env['FIXTURE_EXTERNAL_REAPPEARS']='1'
-            if gateway_kind=='locked_rollback':env['FIXTURE_SWAP_SECONDS']='3'
+            if gateway_kind=='locked_rollback':env['FIXTURE_SWAP_SECONDS']='8'  # B136: 3s let Stop-InstallProcesses alone eat the whole retry budget, so Move-Folder's first failure sometimes landed past the deadline and skipped the "busy, retrying" log line before falling back to copy.
             if gateway_kind=='slow_ready':env.update(FIXTURE_READY_DELAY_MS='12000',FIXTURE_START_SECONDS='5')
             locker=None;lock_seen=[]
             if gateway_kind=='scanner_lock':
@@ -351,7 +355,14 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                         if found:
                             try:
                                 with open(found[0],'rb'):
-                                    lock_seen.append(found[0]);time.sleep(6)
+                                    lock_seen.append(found[0])
+                                    # Hold until the helper's rename has actually met the lock. A fixed
+                                    # 6 s hold raced the process-stop phase before the rename (about 8 s
+                                    # on a Windows dev box), so the lock was gone before it was tested.
+                                    # The helper retries the swap for 90 s; give up at 60 s.
+                                    log_path=state/'logs/updater.log';text='';held_until=time.monotonic()+60
+                                    while time.monotonic()<held_until and 'unpacked new version is busy, retrying' not in text:
+                                        time.sleep(.2);text=read_updater_log(log_path,text)
                                 return
                             except OSError:pass  # still being written; try again
                         time.sleep(.02)
@@ -366,7 +377,15 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                         if found:
                             try:
                                 with open(found[0],'rb'):
-                                    lock_seen.append(found[0]);time.sleep(25)
+                                    lock_seen.append(found[0])
+                                    # Hold until the helper has actually given up retrying the rename
+                                    # and switched to the copy fallback, not a guessed duration (B136;
+                                    # the generic "busy, retrying" line fires on every retry inside the
+                                    # FIXTURE_SWAP_SECONDS=3s budget, so waiting for that released the
+                                    # lock too early and let a later retry's plain rename succeed).
+                                    log_path=state/'logs/updater.log';text='';held_until=time.monotonic()+60
+                                    while time.monotonic()<held_until and 'copying the previous version instead' not in text:
+                                        time.sleep(.2);text=read_updater_log(log_path,text)
                                 return
                             except OSError:pass
                         time.sleep(.02)
@@ -396,11 +415,16 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     (state/'gateway-owner.json').write_text(json.dumps({'pid':gateway.pid,'node':recorded_exe}),encoding='utf-8')
                 if gateway_kind in ('external_reappears','locked_rollback'):
                     def revive_previous_gateway():
-                        try:gateway.wait(timeout=40)
+                        # B136: these two windows matched the old ~25-30s
+                        # locked_rollback runtime; the condition-based lock wait
+                        # added there can legitimately push the whole case past
+                        # 50s now, so both are widened to the file's existing
+                        # 60s "give up" convention (see hold_previous_folder).
+                        try:gateway.wait(timeout=60)
                         except subprocess.TimeoutExpired:return
                         # Restart only after the old-gateway stop and folder swap
                         # have completed, so the test exercises the later race.
-                        until=time.monotonic()+35
+                        until=time.monotonic()+60
                         while time.monotonic()<until and not (target/'new-version.txt').is_file():
                             if stop_watch.wait(.1):return
                         if stop_watch.is_set() or not (target/'new-version.txt').is_file():return
