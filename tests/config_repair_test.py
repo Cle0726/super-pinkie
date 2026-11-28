@@ -130,6 +130,54 @@ class ConfigRepairTest(unittest.TestCase):
         self.assertTrue(repairer.save_last_good())
         self.assertEqual(json.loads((self.state / config_repair.LAST_GOOD_NAME).read_text()), {"gateway": {"port": 18789}})
 
+    def test_non_utf8_bytes_go_back_to_last_good(self):
+        # A config written in GBK (or truncated mid multi-byte UTF-8 sequence)
+        # is not valid utf-8-sig: _load must not raise, and repair() must still
+        # restore from the last-good copy instead of leaving the gateway stuck.
+        self.write({"gateway": {"port": 18789}}, self.state / config_repair.LAST_GOOD_NAME)
+        self.config.parent.mkdir(parents=True, exist_ok=True)
+        self.config.write_bytes("设置".encode("gbk"))
+        result = self.repairer(lambda: (True, [])).repair(["<root>"])
+        self.assertEqual(result["step"], "last-good")
+        self.assertEqual(self.read(), {"gateway": {"port": 18789}})
+        self.assertEqual(len(self.kept()), 1)
+
+    def test_truncated_multibyte_utf8_goes_back_to_last_good(self):
+        self.write({"gateway": {"port": 18789}}, self.state / config_repair.LAST_GOOD_NAME)
+        self.config.parent.mkdir(parents=True, exist_ok=True)
+        # A valid UTF-8 JSON document with its last multi-byte character cut off.
+        full = json.dumps({"gateway": {"note": "设置"}}).encode("utf-8")
+        self.config.write_bytes(full[:-1])
+        result = self.repairer(lambda: (True, [])).repair(["<root>"])
+        self.assertEqual(result["step"], "last-good")
+        self.assertEqual(self.read(), {"gateway": {"port": 18789}})
+
+    def test_non_dict_json_is_treated_as_unparseable(self):
+        # A top-level JSON array/scalar is syntactically valid JSON but not a
+        # config object; _load must reject it rather than handing a list
+        # downstream where dict-shaped code would blow up.
+        self.write({"gateway": {"port": 18789}}, self.state / config_repair.LAST_GOOD_NAME)
+        self.config.write_text("[1, 2, 3]", encoding="utf-8")
+        result = self.repairer(lambda: (True, [])).repair(["<root>"])
+        self.assertEqual(result["step"], "last-good")
+        self.assertEqual(self.read(), {"gateway": {"port": 18789}})
+
+    def test_well_formed_json_missing_expected_fields_still_migrates(self):
+        # Syntactically fine, semantically incomplete: no "browser" key at all.
+        # migrate() must tolerate the missing field instead of raising, and
+        # fall through to the subtree/last-good path.
+        self.write({"gateway": {"port": 18789}, "agents": {"list": ["a"]}}, self.state / config_repair.LAST_GOOD_NAME)
+        self.write({"agents": {"list": ["a", "b"]}})
+        answers = iter([(True, [])])
+        result = self.repairer(lambda: next(answers)).repair(["gateway"])
+        self.assertEqual(result["step"], "subtree")
+        self.assertEqual(self.read(), {"gateway": {"port": 18789}, "agents": {"list": ["a", "b"]}})
+
+    def test_empty_object_has_nothing_to_migrate(self):
+        self.write({})
+        result = self.repairer(lambda: (True, [])).repair()
+        self.assertEqual(result, {"repaired": False, "step": "none", "message": "设置文件没有发现问题"})
+
 
 class SupervisorRepairTest(unittest.TestCase):
     def setUp(self):
