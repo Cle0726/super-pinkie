@@ -283,6 +283,8 @@
         "laolao-metre-backstage.js",
         "laolao-metre-queue.js",
         "laolao-metre-list.js",
+        "laolao-metre-notify.css",
+        "laolao-metre-notify.js",
         "laolao-metre-worktree.css",
         "laolao-metre-worktree.js",
         "laolao-metre-peek.css",
