@@ -16,6 +16,7 @@ import socket
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from app.windows_desktop import UpdateHealthReporter, WindowsUpdater, update_helper_protocol, update_in_progress
 
@@ -58,10 +59,13 @@ class ReporterTest(unittest.TestCase):
         (self.root / "updates").mkdir()
         self.node = self.root / "new" / "_internal" / "runtime" / "bin" / "node.exe"
         self.listener = {"pid": 7, "image": None}
-        os.environ["PINKIE_STATE_ROOT"] = str(self.root)
+        # mock.patch.dict restores whatever PINKIE_STATE_ROOT held before this
+        # test (including "unset"), instead of unconditionally popping it.
+        patcher = mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(self.root)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
-        os.environ.pop("PINKIE_STATE_ROOT", None)
         self.temporary.cleanup()
 
     def _marker(self, suffix):
