@@ -137,7 +137,7 @@ class RoundtableWhiteboardTests(unittest.TestCase):
             status, data = call('GET', path + '?since=0')
             self.assertEqual((200, 1), (status, len(json.loads(data)['items'])))
             self.assertEqual(400, call('GET', '/api/sessions/' + 'f' * 32 + '/whiteboard')[0])
-            for asset in ('/whiteboard.js', '/whiteboard.css', '/dom-watch.js'):
+            for asset in ('/whiteboard.js', '/whiteboard.css', '/dom-watch.js', '/laolao-rich-chart.js'):
                 self.assertEqual(200, call('GET', asset)[0], asset)
         finally:
             server.shutdown()

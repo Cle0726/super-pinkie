@@ -419,7 +419,7 @@
     "ui/injections/laolao-desensitize.js": {
       "important": 3,
       "importantIndirect": 0,
-      "lines": 352,
+      "lines": 350,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1329,7 +1329,7 @@
     "ui/injections/laolao-metre-brand.css": {
       "important": 69,
       "importantIndirect": 0,
-      "lines": 250,
+      "lines": 245,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1654,7 +1654,7 @@
     "ui/injections/laolao-metre-transition.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 218,
+      "lines": 217,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1693,7 +1693,7 @@
     "ui/injections/laolao-mode-menu-fx.css": {
       "important": 11,
       "importantIndirect": 0,
-      "lines": 592,
+      "lines": 569,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1966,7 +1966,7 @@
     "ui/injections/laolao-power-settings.css": {
       "important": 1,
       "importantIndirect": 0,
-      "lines": 398,
+      "lines": 396,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2473,7 +2473,7 @@
     "ui/injections/laolao-session-cards.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 527,
+      "lines": 526,
       "mutationObserverRefs": 1,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2590,7 +2590,7 @@
     "ui/injections/laolao-sidebar-surface.css": {
       "important": 186,
       "importantIndirect": 0,
-      "lines": 311,
+      "lines": 310,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,

@@ -239,16 +239,17 @@
       }
       more.onclick = event => sidebar.sessionMenu(event.currentTarget, key, currentTitle(key), false, {isChild:Boolean(data?.parentKey)});
     }
-    const canFork = !data?.parentKey && !/:subagent:/i.test(key);
+    // 非 Metre：每组只在回答下方操作栏挂一个键（对应组内最后一条可分叉气泡），悬停不压正文；Metre 的页脚排法（laolao-metre-skin.css）靠键留在气泡里。
+    const canFork = !data?.parentKey && !/:subagent:/i.test(key), metre = document.documentElement.getAttribute('data-laolao-mode') === 'metre', last = new Map();
+    const forkFrom = bubble => () => sidebar?.openChildSessionDialog(key, currentTitle(key), {fromMessage:true, forkAt:forkEntryId(bubble.dataset.messageId, pane.state?.chatMessages)});
     for (const bubble of pane.querySelectorAll('.chat-group.assistant .chat-bubble[data-message-id]')) {
-      let button = bubble.querySelector('.pinkie-fork-action');
-      if (!canFork || bubble.classList.contains('streaming') || bubble.classList.contains('chat-bubble--tool-shell')) { button?.remove(); continue; }
-      if (!button) {
-        button = cardButton('从这里分出去', null, 'pinkie-fork-action'); bubble.append(button);
-      }
-      button.onclick = () => sidebar?.openChildSessionDialog(key, currentTitle(key),
-        {fromMessage:true, forkAt:forkEntryId(bubble.dataset.messageId, pane.state?.chatMessages)});
+      const ok = canFork && !bubble.classList.contains('streaming') && !bubble.classList.contains('chat-bubble--tool-shell'), footer = !metre && bubble.closest('.chat-group')?.querySelector('.chat-group-footer'), button = bubble.querySelector(':scope > .pinkie-fork-action');
+      if (!ok || footer) { button?.remove(); if (ok) last.set(footer, bubble); } else (button || bubble.appendChild(cardButton('从这里分出去', null, 'pinkie-fork-action'))).onclick = forkFrom(bubble);
     }
+    for (const button of pane.querySelectorAll('.chat-group-footer .pinkie-fork-action')) if (!last.has(button.closest('.chat-group-footer'))) button.remove();
+    for (const [footer, bubble] of last) { const slot = footer.querySelector('.chat-group-footer-actions') || footer.appendChild(el('div', 'chat-group-footer-actions'));
+      Object.assign(slot.querySelector('.pinkie-fork-action') || slot.appendChild(cardButton('从这里分出去', null, 'pinkie-fork-action')), {onclick: forkFrom(bubble)}).dataset.messageId = bubble.dataset.messageId; }
+    pane.dispatchEvent(new CustomEvent('pk-chat-turns', {bubbles: true, detail: {key}}));
   }
 
   function renderManageCard(card, key) {
@@ -512,9 +513,7 @@
   window.PinkieSessionCards = {cardActions, manageSummary, proposalState, chooseAnchor, forkEntryId, cardMeasure};
   if (typeof MutationObserver !== 'function') return;
   window.Pinkie?.domWatch?.createObserver(reconcile)?.watch(document.documentElement, {childList: true});
-  window.addEventListener('popstate', reconcile);
-  window.addEventListener('resize', reconcile);
-  window.addEventListener('pinkie:session-selected', reconcile);
+  for (const name of ['popstate', 'resize', 'pinkie:session-selected', 'laolao:modechange']) window.addEventListener(name, reconcile);
   window.addEventListener('pinkie:sidebar-gateway-ready', refreshSoon);
   window.addEventListener('pinkie:gateway-event', ({detail}) => {
     const eventKey = detail?.payload?.sessionKey;

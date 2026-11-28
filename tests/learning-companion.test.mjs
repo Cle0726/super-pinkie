@@ -186,3 +186,33 @@ test('personal days validate formats; gateway checks the learning session', asyn
   assert.equal(ok.ok, true);
   assert.equal(ok.value.line.source, 'template');
 });
+
+test('background daily line and clippings: a disk error on the final write is not an unhandled rejection, and the next call tries again', async t => {
+  const unhandled = [];
+  const onUnhandled = error => unhandled.push(error);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  // 把目标文件换成非空目录：rename 一定失败（root 也一样），而且只坏最后那一次写。
+  const jam = file => { fs.rmSync(file, {recursive: true, force: true}); fs.mkdirSync(path.join(file, 'jam'), {recursive: true}); };
+  let jammed = 0, calls = 0, agents = 0;
+  const {companion} = fixture(t, {
+    model: async () => { calls++; if (!jammed++) jam(companion.dailyFile('2026-10-29')); return {value: {line: '今天也慢慢来'}}; },
+    agent: async () => { agents++; if (agents === 1) jam(companion.clipFile('2026-10-29')); return '{"clippings":[]}'; },
+  });
+  // 不去 await 后台任务：wait=false 的调用方也不 await 它，要看的就是没人接时会不会漏出去。
+  assert.equal((await companion.daily()).line.pending, true);
+  assert.equal((await companion.clippings()).status, 'running');
+  for (let i = 0; i < 200 && companion.jobs.size; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual([calls, agents], [1, 1], '后台任务真的跑过、写盘故障真的触发过');
+  assert.equal(companion.jobs.size, 0);
+  assert.deepEqual(unhandled, []);
+  fs.rmSync(companion.dailyFile('2026-10-29'), {recursive: true, force: true});
+  fs.rmSync(companion.clipFile('2026-10-29'), {recursive: true, force: true});
+  const daily = await companion.daily({wait: true});
+  assert.equal(calls, 2);
+  assert.equal(daily.line.text, '今天也慢慢来');
+  const clip = await companion.clippings({wait: true});
+  assert.equal(agents, 2);
+  assert.equal(clip.status, 'none');
+});
