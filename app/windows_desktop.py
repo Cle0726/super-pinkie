@@ -1084,6 +1084,20 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     window.events.maximized += maximized
     window.events.restored += restored
     window.events.closed += closed
+
+    def exit_fallback(reason):
+        # Tray 「退出碧琪」 when the window would not close: closed() never ran,
+        # so do its part here, then the same final exit as a normal close.
+        append_log("launcher", f"{reason}; exiting through finish_exit")
+        guard_stop.set()
+        for name, fn in (("services close", services.close), ("computer close", computer.close)):
+            try:
+                fn()
+            except Exception as error:  # noqa: BLE001 - the exit path must not raise
+                append_log("launcher", f"tray quit: {name} failed: {error!r}")
+        run_finish_exit(force_close_gateway=True)
+
+    bridge._exit_fallback = exit_fallback  # private: js_api must not expose it to the page
     # Start local services independently of WebView2. A broken/slow renderer
     # must never prevent the Gateway from being launched.
 
