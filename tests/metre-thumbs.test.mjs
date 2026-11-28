@@ -226,7 +226,20 @@ test('焦点环画在格子上：img 聚焦时格子画钴蓝环（外扩、不�
   assert.doesNotMatch(ring.body, /!\s*important/);
   // run 46101879996：环的下边外扩进输入框（实色底、定位元素、DOM 里靠后）被盖住。聚焦的格子要抬一层画在输入框上面。
   assert.equal(decl.position, 'relative', `聚焦格子要是定位元素，z-index 才生效：position ${decl.position}`);
-  assert.ok(Number(decl['z-index']) >= 1, `聚焦格子要抬到输入框上面，环的下边才不被盖住：z-index ${decl['z-index']}`);
+  // run 46111752572：只抬到 1 不够。输入框（laolao-theme.css 的 .agent-chat__composer-combobox）是 z-index 1，
+  // 输入盒外的流光（laolao-redesign.css 的 .agent-chat__input::after）是 z-index 2，同层时 DOM 里靠后的画在上面。
+  // 从这两个文件里读出它们现在的 z-index，聚焦格子要比它们都高。
+  const zOf = (file, re) => {
+    const src = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+    const m = re.exec(src);
+    assert.ok(m, `${file} 里找不到要对比的规则 ${re}`);
+    const z = /(?:^|[;{\s])z-index:\s*(-?\d+)/.exec(m[1]);
+    assert.ok(z, `${file} 那条规则里没有 z-index：${m[1].slice(0, 200)}`);
+    return Number(z[1]);
+  };
+  const comboZ = zOf('ui/injections/laolao-theme.css', /html:not\(\[data-laolao-plain-composer\]\) \.agent-chat__composer-combobox \{([^}]*)\}/);
+  const glowZ = zOf('ui/injections/laolao-redesign.css', /\.agent-chat__input::after \{([^}]*)\}/);
+  assert.ok(Number(decl['z-index']) > Math.max(comboZ, glowZ), `聚焦格子 z-index ${decl['z-index']} 要高过输入框 ${comboZ} 和流光 ${glowZ}，环的下边才不被盖住`);
   // 环挂的格子就是 thumbs.js 让 img 可 Tab 的那种格子：img 是格子的直接子元素（原生模板 <div class="chat-attachment-thumb"><img …>）
   const e = env();
   e.fire('focusin', e.textarea);
