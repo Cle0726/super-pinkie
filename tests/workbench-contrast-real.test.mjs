@@ -168,7 +168,15 @@ async function openBench(page, width, bound) {
   if (bound) {
     await page.evaluate(() => { void window.__pinkieWorkbench.open('/proj/README.md', {pinned: true}); });
     await page.waitForFunction(() => document.querySelector('.pk-wb-status__mode .pk-wb-mark'), null, {timeout: 15_000});
-    await page.waitForTimeout(1200);
+    // B34: was a fixed 1200ms sleep (05b1a7ce) guessing at settle time. Monaco cold-loads
+    // its ~15MB bundle on the first text tab (same cause metre-files.test.mjs's settledTab
+    // diagnoses, L84b) and a slow Windows runner can take well over a second doing it, so
+    // measuring before the tab leaves pending/loading would read a half-built DOM. Wait on
+    // that real condition instead of a guessed duration.
+    await page.waitForFunction(() => {
+      const tab = window.__pinkieWorkbench.state.tabs.find((t) => t.path === '/proj/README.md');
+      return Boolean(tab) && !['pending', 'loading'].includes(tab.kind);
+    }, null, {timeout: 15_000});
     await page.evaluate(() => window.__pinkieWorkbench.renderStatus?.());
   } else {
     await page.waitForFunction(() => document.querySelector('.pk-wb-open-project'), null, {timeout: 15_000});
