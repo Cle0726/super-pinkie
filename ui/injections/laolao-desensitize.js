@@ -328,7 +328,7 @@
 html[data-theme-mode="dark"] .laolao-desensitize-btn{
   background:linear-gradient(135deg,rgba(255,249,252,.68),rgba(248,220,236,.55));
   border-color:rgba(255,255,255,.48);color:#8c4a6a;
-}
+}html:not([data-laolao-plain-composer]):not([data-pinkie-night]):not([data-theme-mode="dark"]):not([data-laolao-mode="metre"]) .agent-chat__input .laolao-desensitize-btn:not([aria-pressed="true"]):not(.is-active){--fog-muted:var(--muted-strong)}
 
 @keyframes ds-pop-in{from{opacity:0;transform:translateY(6px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes ds-spin{to{transform:rotate(360deg)}}
