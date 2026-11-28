@@ -153,6 +153,47 @@ def find_edge():
     return next((path for path in candidates if path.is_file()), None)
 
 
+EXPORT_TIMEOUT_S = 90
+
+
+def _taskkill(pid, timeout):
+    """End a process and everything it started (Windows only)."""
+    if os.name != "nt":
+        return
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def run_edge_export(command, timeout=EXPORT_TIMEOUT_S, grace=5):
+    """Run headless Edge for an export; give up after ``timeout``, never wait unbounded.
+
+    B111: subprocess.run(capture_output=True, timeout=...) kills only msedge.exe
+    and then, on Windows, waits with no limit for the output pipes to close, so an
+    Edge helper still holding them would keep the export call (and the page's
+    bridge call) from ever returning. Nothing reads Edge's output: it goes to
+    DEVNULL, and a timeout ends the whole process tree.
+    """
+    process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    try:
+        return process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            _taskkill(process.pid, grace)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        try:
+            process.kill()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=grace)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        raise
+
+
 def edge_export_command(edge, html_file, out_file, pdf, width=900, height=1200):
     url = Path(html_file).resolve().as_uri()
     base = [str(edge), "--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
@@ -379,7 +420,10 @@ class WindowsNative:
             out = work / ("out." + ext)
             height = clamp_size(message.get("height"), 1200, 400, 16000)
             command = edge_export_command(edge, source, out, pdf, clamp_size(message.get("width"), 900, 320, 2400), height)
-            subprocess.run(command, timeout=90, capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            try:
+                run_edge_export(command)
+            except subprocess.TimeoutExpired:
+                return {"ok": False, "error": ("PDF" if pdf else "长图") + f"导出超过 {EXPORT_TIMEOUT_S} 秒没完成，已停止"}
             if not out.is_file() or out.stat().st_size == 0:
                 return {"ok": False, "error": ("PDF" if pdf else "长图") + "没生成出来"}
             target = self._ask_save(name, ext)
