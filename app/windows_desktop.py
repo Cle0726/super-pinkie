@@ -864,6 +864,13 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     debug_port = smoke_debug_port()
     if debug_port:
         webview.settings["REMOTE_DEBUGGING_PORT"] = debug_port
+        # pywebview's edgechromium backend wires OPEN_DEVTOOLS_IN_DEBUG to
+        # CoreWebView2's AreDevToolsEnabled, which also gates the remote
+        # debugging protocol server, not just the F12 panel. Its default is
+        # True; left alone, debug=True below would pop DevTools on every
+        # normal launch. Turn it off here so only the isolated smoke
+        # endpoint trades the F12 panel for a working CDP port.
+        webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
 
     runtime = BundledRuntime(resource_root)
     if not runtime.valid():
@@ -1155,7 +1162,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
 
     threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
     webview.start(
-        gui="edgechromium", debug=False, private_mode=False,
+        gui="edgechromium", debug=bool(debug_port), private_mode=False,
         storage_path=str(webview_storage),
     )
     run_finish_exit(force_close_gateway=guard_force_exit["active"])
