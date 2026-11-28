@@ -94,13 +94,24 @@ export class EngineDispatch {
 
   async listen() {
     if (this.server) return this.port;
-    if (!this.isEnabled()) throw new Error('外部引擎没有打开');
-    const server = http.createServer((req, res) => this.handle(req, res));
-    await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-    server.unref?.();
-    this.server = server;
-    this.port = server.address().port;
-    return this.port;
+    // 并发调用（比如两段对话同时第一次发话）都等同一次绑定，不然各自起一个 HTTP 服务：
+    // 后起的那个覆盖 this.server，先起的那个没人再持有引用、永远关不掉。
+    if (this._listening) return this._listening;
+    const attempt = (async () => {
+      if (!this.isEnabled()) throw new Error('外部引擎没有打开');
+      const server = http.createServer((req, res) => this.handle(req, res));
+      await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+      server.unref?.();
+      this.server = server;
+      this.port = server.address().port;
+      return this.port;
+    })();
+    this._listening = attempt;
+    try {
+      return await attempt;
+    } finally {
+      if (this._listening === attempt) this._listening = null;
+    }
   }
   close() {
     try { this.server?.close(); } catch {}

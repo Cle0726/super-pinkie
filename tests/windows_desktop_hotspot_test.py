@@ -147,7 +147,10 @@ class _Run:
         self.webview = types.ModuleType("webview")
         self.webview.settings = {}
         self.webview.create_window = create_window
-        self.webview.start = lambda **_kwargs: calls.append("webview.start")
+        def start(**kwargs):
+            calls.append("webview.start")
+            self.start_kwargs = kwargs
+        self.webview.start = start
         inapp = SimpleNamespace(install=lambda *_a: None, manager=lambda: None)
 
         stack = contextlib.ExitStack()
@@ -200,7 +203,9 @@ class UpdateInProgressGateTest(unittest.TestCase):
 
 class WindowCreationTest(unittest.TestCase):
     """60bf391e：先退旧网关再判断热不热（否则新版显示旧版页面）；c092fc4b：透明背景在首帧前设好（否则闪白）；
-    3dad11aa：冒烟测试的 DevTools 端口走 pywebview 自己的设置（WebView2 环境变量会被它盖掉）。"""
+    3dad11aa：冒烟测试的 DevTools 端口走 pywebview 自己的设置（WebView2 环境变量会被它盖掉）；
+    本修复：冒烟端口打开时 webview.start 也要带 debug=True 并关掉 OPEN_DEVTOOLS_IN_DEBUG
+    （否则 CoreWebView2 把远程调试协议端口和 F12 面板一起锁住，探针连不上 CDP）。"""
 
     def test_stale_gateway_is_retired_before_the_warm_probe(self):
         run = _Run(self, gateway_up=True)
@@ -217,6 +222,16 @@ class WindowCreationTest(unittest.TestCase):
         smoke = _Run(self, env={"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:63938"})
         self.assertEqual(smoke.webview.settings.get("REMOTE_DEBUGGING_PORT"), 63938)
         self.assertNotIn("REMOTE_DEBUGGING_PORT", _Run(self).webview.settings)
+
+    def test_smoke_runs_open_the_cdp_port_without_popping_devtools(self):
+        smoke = _Run(self, env={"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:63938"})
+        self.assertIs(smoke.webview.settings.get("OPEN_DEVTOOLS_IN_DEBUG"), False)
+        self.assertIs(smoke.start_kwargs["debug"], True)
+
+    def test_a_normal_start_never_touches_devtools_or_debug(self):
+        normal = _Run(self)
+        self.assertNotIn("OPEN_DEVTOOLS_IN_DEBUG", normal.webview.settings)
+        self.assertIs(normal.start_kwargs["debug"], False)
 
 
 class WebViewThreadingTest(unittest.TestCase):
