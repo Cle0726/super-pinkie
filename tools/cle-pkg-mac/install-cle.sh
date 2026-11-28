@@ -1,19 +1,19 @@
 #!/bin/bash
 # 用 C.le. 包替换当前的 超級碧琪.app。旧 App 不删，改名成 超級碧琪.app.cle-replaced-<stamp> 留在原目录，restore.sh 能直接改名回来。
 # 用法：bash install-cle.sh [--yes]   （不带 --yes 只列计划，什么都不动）
-# 先要有 backup-current.sh 做的完整备份；包的 build-info channel 必须等于 CLE_EXPECT_CHANNEL（默认 cle）。
+# 先要有 backup-current.sh 做的完整备份；包怎么认见 lib.sh 的 cle_pkg_refusal（有 core 字段要 core=cle，老包看 channel）。
 set -euo pipefail
 CLE_HERE="$(cd "$(dirname "$0")" && pwd -P)"
 # shellcheck source=lib.sh
 . "$CLE_HERE/lib.sh"
 
 install_stage() {
-  local ch
+  local why
   rm -rf "$STAGE"
   "$DITTO" "$PKG" "$STAGE"
-  ch="$(cle_info_field "$STAGE/$CLE_BUILD_INFO_REL" channel)"
-  if [ "$ch" != "$EXPECT_CHANNEL" ]; then
-    printf '放进 %s 后 channel 是 %s，不是 %s\n' "$STAGE" "'$ch'" "'$EXPECT_CHANNEL'" >&2
+  why="$(cle_pkg_refusal "$STAGE/$CLE_BUILD_INFO_REL")"
+  if [ -n "$why" ]; then
+    printf '放进 %s 后 %s\n' "$STAGE" "$why" >&2
     exit 1
   fi
 }
@@ -35,16 +35,16 @@ install_swap() {
 }
 
 cle_cmd_install_cle() {
-  local present ch
+  local present why
   LATEST="$(cle_latest_backup)"
   if [ -z "$LATEST" ]; then cle_problem "$BACKUP_DIR 下没有这个 App 的完整备份，先跑 backup-current.sh"; fi
   present="$(cle_manifest_get "$LATEST/manifest.txt" app.present)"
   if [ "$present" = 1 ] && [ ! -d "$LATEST/$CLE_APP_NAME" ]; then cle_problem "最新备份 $LATEST 不完整（记着有 App，却没拷到）"; fi
   cle_say "兜底备份：$LATEST"
   if [ ! -d "$PKG" ]; then cle_problem "找不到包 $PKG"; fi
-  if [ ! -f "$PKG/$CLE_BUILD_INFO_REL" ]; then cle_problem "包里没有 $CLE_BUILD_INFO_REL，认不出 channel"; fi
-  ch="$(cle_info_field "$PKG/$CLE_BUILD_INFO_REL" channel)"
-  if [ "$ch" != "$EXPECT_CHANNEL" ]; then cle_problem "$PKG 的 channel 是 '$ch'，不是 '$EXPECT_CHANNEL'，不装"; fi
+  if [ ! -f "$PKG/$CLE_BUILD_INFO_REL" ]; then cle_problem "包里没有 $CLE_BUILD_INFO_REL，认不出 core / channel"; fi
+  why="$(cle_pkg_refusal "$PKG/$CLE_BUILD_INFO_REL")"
+  if [ -n "$why" ]; then cle_problem "$PKG 的 $why，不装"; fi
   if cle_app_running; then cle_problem "碧琪 App 正在运行，请先退出再装"; fi
 
   STAMP="$(cle_stamp)"
@@ -59,7 +59,7 @@ cle_cmd_install_cle() {
 
   cle_run "检查签名：$CODESIGN --verify --deep $PKG" "$CODESIGN" --verify --deep "$PKG"
   if [ -e "$STAGE" ]; then cle_say "提示：上次留下的 $STAGE 会先清掉"; fi
-  cle_run "把包拷进 $STAGE，再确认 channel=$EXPECT_CHANNEL" install_stage
+  cle_run "把包拷进 $STAGE，再核一遍（$(cle_pkg_rule)）" install_stage
   if [ -d "$APP" ]; then
     cle_run "旧 App 改名成 $REPLACED 留着，新 App 放到 $APP，记进 $LATEST/installs.tsv" install_swap
   else
