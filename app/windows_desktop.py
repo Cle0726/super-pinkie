@@ -316,7 +316,16 @@ def http_identity(url):
 
 
 def gateway_listener_pid(port=18789, runner=None):
-    """PID of the process listening on the loopback gateway port, if any."""
+    """PID of the process listening on the loopback gateway port, if any.
+
+    ``netstat -p TCP`` lists both the IPv4 rows (``TCP``) and the IPv6 rows
+    (``TCP6``) for a TCP listener. A gateway bound only on the IPv6 loopback
+    (``[::1]``) -- e.g. because something else is squatting on
+    127.0.0.1:<port> -- used to be invisible here: retire_stale() never saw
+    it, never killed it, and an update silently kept talking to the old
+    gateway (the B44/B95 "update did nothing" bug class, just on the other
+    address family).
+    """
     if os.name != "nt" and runner is None:
         return None
     try:
@@ -328,7 +337,7 @@ def gateway_listener_pid(port=18789, runner=None):
         return None
     for line in str(result.stdout or "").splitlines():
         parts = line.split()
-        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING":
+        if len(parts) >= 5 and parts[0].upper() in ("TCP", "TCP6") and parts[3].upper() == "LISTENING":
             if parts[1].rsplit(":", 1)[-1] == str(port) and parts[4].isdigit():
                 return int(parts[4])
     return None
