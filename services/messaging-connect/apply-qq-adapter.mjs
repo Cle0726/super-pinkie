@@ -1,7 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import {applyPublisherPatch, planPublisherPatch} from './publisher-patch.mjs';
 
 // Publisher baselines are from the integrity-verified @openclaw/qqbot 2026.7.1 tarball.
 export const QQ_ADAPTER_BASELINES = Object.freeze({
@@ -16,7 +15,6 @@ const PATCHED_HASHES = Object.freeze({
   'dist/config-schema-JZEf1dvB.js': 'e8e1414387c75f7ea59872b7362451be3b287e1c84930f93ab583bd13c0c2151',
   'openclaw.plugin.json': 'f8e50832f2ba0bb34bc40de9e2c1aaf7f7c969f262f471de321bd9e9cf8c7962',
 });
-const hash = source => createHash('sha256').update(source).digest('hex');
 
 function replaceOnce(source, before, after, label) {
   if (source.split(before).length !== 2) throw new Error(`Unknown QQ ${label} structure`);
@@ -98,53 +96,20 @@ const TRANSFORMS = Object.freeze({
   'openclaw.plugin.json': adaptQQManifestSource,
 });
 
+// 报错文案与合并前逐字相同（tests/publisher-patch.test.mjs 锁住）。
+export const QQ_PATCH = Object.freeze({
+  name: '@openclaw/qqbot', version: '2026.7.1',
+  requirement: 'QQ adapter requires verified @openclaw/qqbot 2026.7.1',
+  publisher: 'QQ', patch: 'QQ adapter', hashLabel: 'QQ adapter patch', preflight: 'adapter',
+  baselines: QQ_ADAPTER_BASELINES, patched: PATCHED_HASHES, transforms: TRANSFORMS,
+});
+
 export function planQQAdapter(root) {
-  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  if (pkg.name !== '@openclaw/qqbot' || pkg.version !== '2026.7.1') throw new Error('QQ adapter requires verified @openclaw/qqbot 2026.7.1');
-  const plan = Object.entries(QQ_ADAPTER_BASELINES).map(([relative, baseline]) => {
-    const file = path.join(root, relative);
-    if (!fs.lstatSync(file).isFile()) throw new Error(`QQ publisher target must be a regular file: ${relative}`);
-    const source = fs.readFileSync(file, 'utf8'), digest = hash(source);
-    if (digest !== baseline && digest !== PATCHED_HASHES[relative]) throw new Error(`QQ publisher file changed: ${relative}; nothing was written`);
-    const next = digest === baseline ? TRANSFORMS[relative](source) : source;
-    if (hash(next) !== PATCHED_HASHES[relative]) throw new Error(`QQ adapter patch hash mismatch: ${relative}; nothing was written`);
-    return {file, relative, source, next, mode: fs.statSync(file).mode & 0o777};
-  });
-  // Check every original backup and temporary destination before the first write.
-  for (const item of plan) {
-    const backup = `${item.file}.pinkie-original`, temporary = `${item.file}.pinkie-tmp`;
-    if (fs.existsSync(backup) && (!fs.lstatSync(backup).isFile() || hash(fs.readFileSync(backup)) !== QQ_ADAPTER_BASELINES[item.relative])) {
-      throw new Error(`QQ adapter backup changed: ${item.relative}; nothing was written`);
-    }
-    if (fs.existsSync(temporary)) throw new Error(`QQ adapter temporary file already exists: ${item.relative}; nothing was written`);
-  }
-  return plan;
+  return planPublisherPatch(root, QQ_PATCH);
 }
 
 export function applyQQAdapter(root) {
-  const plan = planQQAdapter(root);
-  const changed = plan.filter(item => item.source !== item.next);
-  // Avoid overwriting a publisher file modified since preflight.
-  for (const item of plan) if (fs.readFileSync(item.file, 'utf8') !== item.source) throw new Error('QQ publisher changed during adapter preflight; nothing was written');
-  const written = [], backups = [], temporary = [];
-  try {
-    for (const item of changed) {
-      const backup = `${item.file}.pinkie-original`, temp = `${item.file}.pinkie-tmp`;
-      if (!fs.existsSync(backup)) {
-        fs.writeFileSync(backup, item.source, {flag: 'wx', mode: item.mode}); backups.push(backup);
-      }
-      fs.writeFileSync(temp, item.next, {flag: 'wx', mode: item.mode}); temporary.push(temp);
-    }
-    for (const item of changed) {
-      fs.renameSync(`${item.file}.pinkie-tmp`, item.file); written.push(item);
-    }
-  } catch (error) {
-    for (const item of written) fs.writeFileSync(item.file, item.source, {mode: item.mode});
-    for (const file of temporary) fs.rmSync(file, {force: true});
-    for (const file of backups) fs.rmSync(file, {force: true});
-    throw error;
-  }
-  return plan.map(item => ({file: item.file, changed: item.source !== item.next, sha256: hash(item.next)}));
+  return applyPublisherPatch(root, QQ_PATCH);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

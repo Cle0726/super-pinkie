@@ -17,8 +17,7 @@
     '..#...#...#..', '.#....#....#.', '.#....#....#.', '.#....#....#.', '#############'];
   const HEAD = ['.##.', '####', '.##.'], SQUASH = ['.####.', '######'];   // 音符头；落地那一下压扁成矮一格、宽两格
   const reduced = () => root.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-  const dark = () => root.getAttribute('data-theme') === 'dark' || root.hasAttribute('data-pinkie-night')
-    || (!root.getAttribute('data-theme') && Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches));
+  const dark = () => root.getAttribute('data-theme') === 'dark' || root.hasAttribute('data-pinkie-night');
   const palette = () => dark()
     ? {bg: '#151514', line: '#6E6B63', on: '#ECEAE4', dim: '#34332F', accent: '#93A5EE', lamp: '#E9C77A', warm: '255,214,140'}
     : {bg: '#F7F6F3', line: '#9C988F', on: '#1B1A18', dim: '#DDDAD3', accent: '#2F4BB0', lamp: '#D89A2C', warm: '232,168,60'};

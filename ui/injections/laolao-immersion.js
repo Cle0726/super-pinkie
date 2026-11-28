@@ -99,7 +99,7 @@
     ], {duration: 380, easing: "cubic-bezier(.25,.8,.3,1)"}).finished.finally(() => ghost.remove());
   };
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.altKey || isRunning()) return;
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229 || e.altKey || isRunning()) return;
     if (e.target.closest?.(".agent-chat__composer-combobox textarea")) flyAway();
   }, true);
   document.addEventListener("pointerdown", (e) => {
