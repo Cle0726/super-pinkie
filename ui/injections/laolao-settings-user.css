@@ -158,12 +158,12 @@ html:not([data-pinkie-night], [data-theme-mode="dark"], [data-theme="dark"], [da
 #laolao-user-settings .pinkie-user-settings__status {
   min-height: 17px;
   margin: 7px 0 0;
-  color: #54846e;
+  color: #487560;
   font-size: 11px;
   line-height: 1.45;
 }
 #laolao-user-settings .pinkie-user-settings__status[data-state="error"] { color: #b13d63; }
-#laolao-user-settings .pinkie-user-settings__status[data-state="busy"] { color: #947248; }
+#laolao-user-settings .pinkie-user-settings__status[data-state="busy"] { color: #83653f; }
 
 #laolao-user-settings .pinkie-user-settings__wechat {
   display: grid;
