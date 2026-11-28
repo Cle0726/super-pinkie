@@ -53,34 +53,45 @@ test('camp HUD: name and intimacy level never overlap, stage tag and camp text a
   const {harness, close} = await harnessWithGame();
   const browser = await launchWithHarness(harness, () => playwright().webkit.launch({headless: true}));
   try {
-    for (const {width, hour, theme} of CASES) {
-      const page = await browser.newPage({viewport: {width, height: 900}, reducedMotion: 'reduce'});
+    // 同一个 hour 只开一次页（goto + deskReady），组内按 theme 切日夜、按 width 调 setViewportSize 再量，页面加载 4 → 2。
+    for (const hour of [...new Set(CASES.map(c => c.hour))]) {
+      const group = CASES.filter(c => c.hour === hour);
+      const page = await browser.newPage({viewport: {width: group[0].width, height: 900}, reducedMotion: 'reduce'});
       const errors = []; page.on('pageerror', e => errors.push(e.message));
       await page.addInitScript(h => { window.__pkBeijingHour = h; }, hour);
       await page.goto(harness.url);
       await deskReady(page, 'today');
-      if (theme === 'night') { await page.getByRole('button', {name: '切换日间和夜间'}).click(); await page.locator('#pinkie-study-desk[data-theme="night"]').waitFor(); }
-      const r = await page.evaluate(measure);
-      const at = `${width}px 桌面${theme} 舞台${r.time}`;
-      assert.equal(r.time, hour >= 18 ? 'night' : 'day', at);
-      assert.equal(r.metaDisplay, 'grid', `${at}：.pkg-who__meta 的 grid 规则被吞`);
-      assert.equal(r.overlap, 0, `${at}：「日常碧琪」与「亲密度」重叠`);
-      assert.equal(r.bLines, 1, `${at}：名字折成 ${r.bLines} 行`);
-      assert.equal(r.smallLines, 1, `${at}：「亲密度」被挤成 ${r.smallLines} 行`);
-      assert.equal(r.smallOutOfWho, 0, `${at}：「亲密度」溢出 .pkg-who ${r.smallOutOfWho}px`);
-      assert.equal(r.smallVsPurse, 0, `${at}：「亲密度」压到 .pkg-purse 分割线`);
-      assert.equal(r.smallVsStars, 0, `${at}：「亲密度」与星星图标重叠`);
-      assert.equal(r.hudVsSeg, 0, `${at}：HUD 压到 .pkg-seg`);
-      assert.deepEqual(r.kidsVsSeg, [], `${at}：HUD 子项压到 .pkg-seg`);
-      assert.deepEqual(r.kidsOutOfHud, [], `${at}：HUD 子项溢出 .pkg-hud`);
-      for (const k of ['small', 'span']) {
-        assert.ok(r[k].chain >= 4.5, `${at}：角标 ${k}「${r[k].text}」对比度 ${r[k].chain.toFixed(2)} < 4.5`);
-        assert.ok(r[k].sky >= 4.5, `${at}：角标 ${k}「${r[k].text}」在最不利天空上 ${r[k].sky.toFixed(2)} < 4.5`);
+      let shown = 'day';
+      for (const {width, theme} of group) {
+        if (page.viewportSize().width !== width) {
+          await page.setViewportSize({width, height: 900});
+          await page.waitForFunction(w => window.innerWidth === w, width);
+          await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+          await page.waitForTimeout(300);
+        }
+        if (theme !== shown) { await page.getByRole('button', {name: '切换日间和夜间'}).click(); await page.locator(`#pinkie-study-desk[data-theme="${theme}"]`).waitFor(); shown = theme; }
+        const r = await page.evaluate(measure);
+        const at = `${width}px 桌面${theme} 舞台${r.time}`;
+        assert.equal(r.time, hour >= 18 ? 'night' : 'day', at);
+        assert.equal(r.metaDisplay, 'grid', `${at}：.pkg-who__meta 的 grid 规则被吞`);
+        assert.equal(r.overlap, 0, `${at}：「日常碧琪」与「亲密度」重叠`);
+        assert.equal(r.bLines, 1, `${at}：名字折成 ${r.bLines} 行`);
+        assert.equal(r.smallLines, 1, `${at}：「亲密度」被挤成 ${r.smallLines} 行`);
+        assert.equal(r.smallOutOfWho, 0, `${at}：「亲密度」溢出 .pkg-who ${r.smallOutOfWho}px`);
+        assert.equal(r.smallVsPurse, 0, `${at}：「亲密度」压到 .pkg-purse 分割线`);
+        assert.equal(r.smallVsStars, 0, `${at}：「亲密度」与星星图标重叠`);
+        assert.equal(r.hudVsSeg, 0, `${at}：HUD 压到 .pkg-seg`);
+        assert.deepEqual(r.kidsVsSeg, [], `${at}：HUD 子项压到 .pkg-seg`);
+        assert.deepEqual(r.kidsOutOfHud, [], `${at}：HUD 子项溢出 .pkg-hud`);
+        for (const k of ['small', 'span']) {
+          assert.ok(r[k].chain >= 4.5, `${at}：角标 ${k}「${r[k].text}」对比度 ${r[k].chain.toFixed(2)} < 4.5`);
+          assert.ok(r[k].sky >= 4.5, `${at}：角标 ${k}「${r[k].text}」在最不利天空上 ${r[k].sky.toFixed(2)} < 4.5`);
+        }
+        assert.deepEqual(r.low, [], `${at}：营地文字对比度 < 4.5`);
+        assert.ok(r.borders.length > 1, `${at}：没找到 .pkg-target`);
+        for (const bd of r.borders) assert.ok(bd.k >= 3, `${at}：${bd.cls} 边框对比度 ${bd.k.toFixed(2)} < 3`);
+        assert.deepEqual(errors, [], at);
       }
-      assert.deepEqual(r.low, [], `${at}：营地文字对比度 < 4.5`);
-      assert.ok(r.borders.length > 1, `${at}：没找到 .pkg-target`);
-      for (const bd of r.borders) assert.ok(bd.k >= 3, `${at}：${bd.cls} 边框对比度 ${bd.k.toFixed(2)} < 3`);
-      assert.deepEqual(errors, [], at);
       await page.close();
     }
   } finally { try { await browser.close(); } finally { await close(); } }
