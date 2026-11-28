@@ -48,13 +48,13 @@ function handler(){
 }
 async function deskPage(server){
  const browser=await h.launchWithHarness(server,sharedChrome);
- if(!desk){const context=await browser.newContext({viewport:{width:1440,height:900}});const d={context,page:await context.newPage(),errors:[]};d.page.on('pageerror',e=>d.errors.push(e.message));desk=d;}
+ if(!desk){const context=await browser.newContext({viewport:{width:1440,height:900}});await context.route('**/__blank',r=>r.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>blank</title>'}));const d={context,page:await context.newPage(),errors:[]};d.page.on('pageerror',e=>d.errors.push(e.message));desk=d;}
  return desk;
 }
 async function run(fn,{custom=handler()}={}){
  const server=await sharedHarness();
  const {context,page,errors}=await deskPage(server);
- // 干净复位：先离开学习台到同源空页（404，无脚本），上一例的请求随之中止；清掉存储、cookie、视口和页面错误，再换 handler 进学习台。
+ // 干净复位：先离开学习台到同源空页（context.route 回 200 空文档，无脚本；harness 回 404 时 Chromium 会报 ERR_HTTP_RESPONSE_CODE_FAILURE，about:blank 又读不了 localStorage），上一例的请求随之中止；清掉存储、cookie、视口和页面错误，再换 handler 进学习台。
  await page.goto(new URL('/__blank',server.url).href);
  await page.evaluate(()=>{localStorage.clear();sessionStorage.clear();});await context.clearCookies();await page.setViewportSize({width:1440,height:900});
  useHandler(server,custom);errors.length=0;
