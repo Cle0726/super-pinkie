@@ -173,6 +173,11 @@ html[data-laolao-mode="metre"] .chat-attachment-thumb .chat-attachment-remove {
   border-radius: 3px; background: transparent; color: var(--metre-text);
 }
 html[data-laolao-mode="metre"] .chat-attachment-thumb .chat-attachment-remove:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); }
+/* 图片缩略图的键盘焦点环（L26，uireview / mac1 11-27）：laolao-metre-thumbs.js 让格子里的 <img> 能 Tab 到，
+ * 但原生 .chat-attachment-thumb 是 overflow: hidden、6px 圆角，img 撑满格子，laolao-metre-skin.css 给 [tabindex] 的
+ * 外扩焦点环画在 img 外面，整圈被格子裁掉，聚焦和没聚焦的截图逐字节相同。环改画在格子上：格子自己的 outline
+ * 不受它自己的 overflow 裁剪；颜色、宽度、外扩和 Metre 通用焦点环一样，日夜跟着 --metre-cobalt 走。 */
+html[data-laolao-mode="metre"] .chat-attachment-thumb:has(> img:focus-visible) { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
 
 /* M3 置顶消息（laolao-metre-pins.js）：页脚行里时间后面一个小字「置顶」键，平时淡，悬停这组消息或已置顶时才显出来；
  * 对话顶上一条「已置顶 N 条」签条，点开是列表（谁说的 · 摘要 · 取消）。分叉键在页脚行右边，这个在左边的发送者 / 时间后面，不相交。 */

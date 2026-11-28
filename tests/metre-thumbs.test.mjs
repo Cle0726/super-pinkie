@@ -207,3 +207,26 @@ test('接线：头片段在 suggest 后面加载、登记在 metre 区域、例�
   assert.doesNotMatch(code, /window\s*\.\s*__[\w$]+\s*(?:\|\||&&|\?\?)?=(?!=)/, '只读看图器，不新挂 window.__');
   assert.ok(SRC.split('\n').length < 1500);
 });
+
+// uireview 13:16Z / mac1 13:59Z：Tab 落到图片上了，但 focus 和 strip 两张图逐字节相同。原生 .chat-attachment-thumb 是
+// overflow: hidden、6px 圆角，img 撑满格子，Metre 通用焦点环（[tabindex]:focus-visible，外扩 2px）画在 img 外面，整圈被格子裁掉。
+// 修法：Metre 下 img 聚焦时把环画在格子自己身上（格子的 outline 不受它自己的 overflow 裁剪）。去掉这条规则这里就红。
+test('焦点环画在格子上：img 聚焦时格子画钴蓝环（外扩、不被格子自己的 overflow 裁掉），只在 Metre，不加 !important', () => {
+  const css = read('ui/injections/laolao-metre-chat.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const RING = /^html\[data-laolao-mode="metre"\]\s+\.chat-attachment-thumb:has\(\s*>\s*img:focus-visible\s*\)$/;
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({sels: m[1].split(',').map((s) => s.trim()), body: m[2]}));
+  const ring = rules.find((r) => r.sels.some((s) => RING.test(s)));
+  assert.ok(ring, 'laolao-metre-chat.css 要有一条「格子里的 img 聚焦时给格子画环」的规则');
+  const decl = {};
+  for (const d of ring.body.split(';')) { const at = d.indexOf(':'); if (at > 0) decl[d.slice(0, at).trim()] = d.slice(at + 1).trim(); }
+  const outline = /^(\d+(?:\.\d+)?)px solid var\(--metre-cobalt\)$/.exec(decl.outline || '');
+  assert.ok(outline && Number(outline[1]) >= 2, `环要是 ≥2px 的钴蓝实线：${decl.outline}`);
+  const offset = /^(-?\d+(?:\.\d+)?)px$/.exec(decl['outline-offset'] || '');
+  assert.ok(offset && Number(offset[1]) >= 0, `环画在格子外面（格子自己的 overflow 不裁 outline）：outline-offset ${decl['outline-offset']}`);
+  assert.doesNotMatch(ring.body, /!\s*important/);
+  // 环挂的格子就是 thumbs.js 让 img 可 Tab 的那种格子：img 是格子的直接子元素（原生模板 <div class="chat-attachment-thumb"><img …>）
+  const e = env();
+  e.fire('focusin', e.textarea);
+  assert.equal(e.img.getAttribute('tabindex'), '0');
+  assert.equal(e.img.parent, e.imgCell, 'img 是格子的直接子元素');
+});

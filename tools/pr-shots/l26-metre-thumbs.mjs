@@ -12,6 +12,37 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import * as H from '../../tests/visual/lib/real-harness.mjs';
+import {decodePng} from '../../tests/visual/lib/png-diff.mjs';
+
+// 焦点环看不看得见（uireview 13:16Z）：focus 和 strip 两张图在聚焦格子外扩 8px 那一块逐像素比，
+// 变了的像素里出现最多的颜色当环色，和 strip 同位置的底色算 WCAG 对比度（要 ≥ 3）。
+const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+const ratio = (a, b) => { const x = lum(a), y = lum(b); return +((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)).toFixed(2); };
+function ringDiff(stripBuf, focusBuf, rect, dpr) {
+  if (!rect) return {error: 'no focused cell'};
+  const a = decodePng(stripBuf), b = decodePng(focusBuf);
+  if (a.width !== b.width || a.height !== b.height) return {error: 'size differs'};
+  const pad = 8, s = dpr || 1;
+  const x0 = Math.max(0, Math.floor((rect[0] - pad) * s)), y0 = Math.max(0, Math.floor((rect[1] - pad) * s));
+  const x1 = Math.min(a.width, Math.ceil((rect[0] + rect[2] + pad) * s)), y1 = Math.min(a.height, Math.ceil((rect[1] + rect[3] + pad) * s));
+  let changed = 0, total = 0;
+  const colors = new Map();
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * a.width + x) * 4; total++;
+      const d = Math.max(Math.abs(a.data[i] - b.data[i]), Math.abs(a.data[i + 1] - b.data[i + 1]), Math.abs(a.data[i + 2] - b.data[i + 2]));
+      if (d <= 10) continue;
+      changed++;
+      const fg = [b.data[i], b.data[i + 1], b.data[i + 2]];
+      const k = fg.join(',');
+      const c = colors.get(k) || {fg, bg: [a.data[i], a.data[i + 1], a.data[i + 2]], n: 0};
+      c.n++; colors.set(k, c);
+    }
+  }
+  const top = [...colors.values()].sort((p, q) => q.n - p.n)[0];
+  return {box: [x0, y0, x1 - x0, y1 - y0], changed, total, ring: top ? {fg: top.fg, bg: top.bg, ratio: ratio(top.fg, top.bg)} : null};
+}
 
 const args = process.argv.slice(2);
 const at = args.indexOf('--out');
@@ -31,6 +62,7 @@ const shot = async (page, name, theme, width, extra = {}) => {
   const buf = await page.screenshot({path: path.join(out, file)});
   lines.push({name: `${name}-${width}-${theme}`, file, os: process.platform, browser: engine || 'chromium', width, height: HEIGHT,
     bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), ...extra});
+  return buf;
 };
 
 // 页面里画两张 PNG（一张横、一张竖长），交给原生输入框当附件；再加一个文本文件附件当对照。
@@ -74,7 +106,7 @@ async function cell(theme, width) {
     const strip = await page.waitForFunction(() => document.querySelectorAll('.chat-attachments-preview .chat-attachment-thumb img').length >= 2, null, {timeout: 15_000})
       .then(() => true, () => false);
     await page.waitForTimeout(300);
-    await shot(page, 'thumbs-strip', theme, width, {mode, strip});
+    const stripBuf = await shot(page, 'thumbs-strip', theme, width, {mode, strip});
     report.push({theme, width, step: 'strip', mode, seeded, strip, ...(await viewerState(page))});
 
     await page.locator('.chat-attachments-preview .chat-attachment-thumb:not(.chat-attachment-thumb--file) img').first().click({timeout: 5000}).catch((e) => console.log('[l26] 点缩略图失败：' + e.message.split('\n')[0]));
@@ -94,9 +126,22 @@ async function cell(theme, width) {
     // 再记 Tab 顺序（图片 → 移除）和 Enter 能否打开看图器。
     const focusInfo = () => page.evaluate(() => {
       const a = document.activeElement;
+      const cs = a ? getComputedStyle(a) : null;
+      const cell = a?.closest?.('.chat-attachment-thumb');
+      const ccs = cell ? getComputedStyle(cell) : null;
+      const chain = [];
+      for (let n = a; n && chain.length < 4; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        chain.push({el: n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : ''), overflow: s.overflowX + '/' + s.overflowY, radius: s.borderTopLeftRadius});
+        if (n.classList.contains('chat-attachments-preview')) break;
+      }
+      const r = cell?.getBoundingClientRect();
       return {tag: a?.tagName || null, role: a?.getAttribute?.('role') ?? null, label: a?.getAttribute?.('aria-label') ?? null,
         img: a?.tagName === 'IMG' && Boolean(a.closest('.chat-attachments-preview .chat-attachment-thumb:not(.chat-attachment-thumb--file)')),
-        remove: Boolean(a?.closest?.('.chat-attachment-remove')), outline: a ? getComputedStyle(a).outlineStyle + ' ' + getComputedStyle(a).outlineWidth : null};
+        remove: Boolean(a?.closest?.('.chat-attachment-remove')), focusVisible: Boolean(a?.matches?.(':focus-visible')),
+        outline: cs ? `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor} offset ${cs.outlineOffset}` : null,
+        cellOutline: ccs ? `${ccs.outlineStyle} ${ccs.outlineWidth} ${ccs.outlineColor} offset ${ccs.outlineOffset}` : null,
+        cellRect: r ? [r.left, r.top, r.width, r.height].map((v) => Math.round(v)) : null, dpr: window.devicePixelRatio, chain};
     });
     await page.mouse.move(0, HEIGHT - 1);
     await page.locator('.agent-chat__composer-combobox textarea').first().focus({timeout: 5000}).catch((e) => console.log('[l26] 聚焦输入框失败：' + e.message.split('\n')[0]));
@@ -107,14 +152,15 @@ async function cell(theme, width) {
       if (onImg.img) break;
     }
     await page.waitForTimeout(200);
-    await shot(page, 'thumbs-focus', theme, width, {focused: Boolean(onImg?.img)});
+    const focusBuf = await shot(page, 'thumbs-focus', theme, width, {focused: Boolean(onImg?.img)});
+    const ring = ringDiff(stripBuf, focusBuf, onImg?.cellRect, onImg?.dpr);
     await page.keyboard.press('Tab');
     const next = await focusInfo();
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Enter');
     const enterOpens = await page.waitForFunction(() => document.querySelector('#laolao-image-viewer.is-open img')?.complete, null, {timeout: 5000}).then(() => true, () => false);
     await page.keyboard.press('Escape');
-    report.push({theme, width, step: 'focus', shiftTabs: steps + 1, onImg, nextIsRemove: next.remove, enterOpens, ...(await viewerState(page)), pageErrors});
+    report.push({theme, width, step: 'focus', shiftTabs: steps + 1, onImg, ring, nextIsRemove: next.remove, enterOpens, ...(await viewerState(page)), pageErrors});
   } finally {
     await context.close();
   }
