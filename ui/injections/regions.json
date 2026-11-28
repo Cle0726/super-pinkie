@@ -77,6 +77,9 @@
         "laolao-session-cards.js",
         "laolao-session-tools.css",
         "laolao-session-tools.js",
+        "laolao-session-board.css",
+        "laolao-session-board.js",
+        "laolao-session-board-data.js",
         "laolao-crew.css",
         "laolao-crew.js"
       ]
@@ -237,6 +240,7 @@
         "laolao-metre-board.css",
         "laolao-metre-board.js",
         "laolao-metre-board-data.js",
+        "laolao-metre-session-board.css",
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
         "laolao-metre-engine-upstream.js",
@@ -266,6 +270,7 @@
         "laolao-metre-prompts.js",
         "laolao-metre-transition.js",
         "laolao-metre-prefs.js",
+        "laolao-metre-pins.js",
         "laolao-metre-stagefx.js",
         "laolao-metre-fav.css",
         "laolao-metre-fav.js",

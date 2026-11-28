@@ -31,7 +31,37 @@ except ImportError:  # imported as app.windows_desktop (tests, no app/ on sys.pa
     from app import release_notes
 
 
-GATEWAY_URL = "http://127.0.0.1:18789/"
+DEFAULT_GATEWAY_PORT = 18789
+# B95: isolated test runs of the packaged exe move the gateway off 18789 so
+# they never meet the user's real one. Normal starts set neither of these.
+GATEWAY_PORT_ENV = "PINKIE_GATEWAY_PORT"
+GATEWAY_PORT_FLAG = "--gateway-port"
+
+
+def gateway_port(arguments=None, environ=None):
+    """Loopback gateway port: 18789 unless an isolated test run overrides it.
+
+    ``--gateway-port=N`` or ``--gateway-port N`` on the command line wins over
+    PINKIE_GATEWAY_PORT. Anything that is not a plain number in 1024-65535
+    falls back to 18789, so a stray or malformed value never moves a normal
+    user's gateway somewhere else.
+    """
+    args = [str(a) for a in (getattr(sys, "argv", [])[1:] if arguments is None else arguments)]
+    value = None
+    for index, argument in enumerate(args):
+        if argument.startswith(GATEWAY_PORT_FLAG + "="):
+            value = argument[len(GATEWAY_PORT_FLAG) + 1:]
+        elif argument == GATEWAY_PORT_FLAG:
+            value = args[index + 1] if index + 1 < len(args) else ""
+    if value is None:
+        value = (os.environ if environ is None else environ).get(GATEWAY_PORT_ENV)
+    if value is None or not re.fullmatch(r"[0-9]{4,5}", value):
+        return DEFAULT_GATEWAY_PORT
+    port = int(value)
+    return port if 1024 <= port <= 65535 else DEFAULT_GATEWAY_PORT
+
+
+GATEWAY_URL = f"http://127.0.0.1:{gateway_port()}/"
 GATEWAY_CHAT_URL = urllib.parse.urljoin(GATEWAY_URL, "chat")
 PARTY_URL = "http://127.0.0.1:18889/"
 ROUNDTABLE_URL = "http://127.0.0.1:18891/"
@@ -469,6 +499,11 @@ except ImportError:  # imported as app.windows_desktop (tests, no app/ on sys.pa
 
 
 _load_desktop_part("windows_bridge_scripts")
+if (urllib.parse.urlparse(GATEWAY_URL).port or DEFAULT_GATEWAY_PORT) != DEFAULT_GATEWAY_PORT:
+    # B95: chat-UI links are recognised by port; follow an isolated run's port.
+    BRIDGE_SCRIPT = BRIDGE_SCRIPT.replace(
+        f"url.port === '{DEFAULT_GATEWAY_PORT}'", f"url.port === '{urllib.parse.urlparse(GATEWAY_URL).port}'"
+    )
 _load_desktop_part("windows_bridge")
 
 
@@ -731,7 +766,9 @@ def log_gateway_answer(timeout=300.0, interval=0.25):
 
 
 def startup_fallback_html():
-    return STARTUP_FALLBACK_HTML
+    # B95: the built-in page polls the gateway too, so it follows a moved port.
+    port = urllib.parse.urlparse(GATEWAY_URL).port or DEFAULT_GATEWAY_PORT
+    return STARTUP_FALLBACK_HTML.replace(f"127.0.0.1:{DEFAULT_GATEWAY_PORT}/", f"127.0.0.1:{port}/")
 
 
 def watch_failed_file_navigation(window, log=None, limit=3):
@@ -801,12 +838,19 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # built-in page instead and record where the file was expected.
     loading_html = None if loading_file.is_file() else startup_fallback_html()
     append_log("launcher", f"splash {loading}" + ("" if loading_html is None else " is MISSING; using the built-in page"))
+    splash_fragment = {}
     if update_health_token:
         # First start right after an update: the splash says so, instead of a
         # bare gateway counter that looks like nothing happened.
         version_file = Path(resource_root) / "VERSION"
         version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
-        loading += "#" + urllib.parse.urlencode({"updated": version or "1"})  # not "?": .NET's Uri makes it %3F
+        splash_fragment["updated"] = version or "1"
+    port = urllib.parse.urlparse(GATEWAY_URL).port or DEFAULT_GATEWAY_PORT
+    if port != DEFAULT_GATEWAY_PORT:
+        # B95: the splash polls the gateway itself, so it must know the port.
+        splash_fragment["gateway"] = str(port)
+    if splash_fragment:
+        loading += "#" + urllib.parse.urlencode(splash_fragment)  # not "?": .NET's Uri makes it %3F
     gateway = GatewaySupervisor(runtime)
     bridge._gateway = gateway
     # A gateway kept alive by an older version would otherwise be adopted

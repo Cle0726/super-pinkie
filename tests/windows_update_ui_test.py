@@ -326,7 +326,9 @@ class StartupRescueTest(unittest.TestCase):
     def test_updated_marker_travels_in_the_fragment(self):
         # A "?" in a file URL becomes "%3F" in .NET's Uri, so the splash was never found after an update.
         source = (ROOT / "app/windows_desktop.py").read_text(encoding="utf-8")
-        self.assertIn('loading += "#" + urllib.parse.urlencode({"updated"', source)
+        # B95: the fragment also carries a moved gateway port, so it is built up first.
+        self.assertIn('splash_fragment["updated"] = version or "1"', source)
+        self.assertIn('loading += "#" + urllib.parse.urlencode(splash_fragment)', source)
         self.assertNotIn('loading += "?"', source)
         page = (ROOT / "ui/launcher-loading.html").read_text(encoding="utf-8")
         self.assertIn("location.hash.slice(1) || location.search", page)
