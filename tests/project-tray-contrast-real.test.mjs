@@ -5,7 +5,7 @@
 // 反例写在测试里：把旧配方原样贴回页面，同一套量法必须量出不合格。
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {REPO_ROOT, installRealControlUi, openRealScenePage, startRealUiServer} from './visual/lib/real-harness.mjs';
+import {REPO_ROOT, installRealControlUi, launchRealBrowser, openRealScenePage, startRealUiServer} from './visual/lib/real-harness.mjs';
 import {playwright} from '../tools/study-desk/harness.mjs';
 
 const SCENES = ['home-project', 'sidebar-expanded'];
@@ -83,34 +83,44 @@ test('#261 项目模式：「临时」、工作程度芯片与箭头、「工具
   try { pw = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
   let installed; let server; let browser;
   t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
-  try { browser = await pw.webkit.launch({headless: true}); }
-  catch (err) { t.skip(`WebKit is not installed: ${err.message.split('\n')[0]}`); return; }
+  const engine = process.env.PINKIE_VISUAL_ENGINE || 'webkit';
+  try { browser = await launchRealBrowser(engine, pw); }
+  catch (err) { t.skip(`${engine} is not installed: ${err.message.split('\n')[0]}`); return; }
   installed = installRealControlUi({repoRoot: REPO_ROOT});
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
 
-  const badByTheme = {day: [], night: []};
+  // 同一个 (scene, theme) 只开一次页，依次量 1440 / 820；反例 <style> 每个宽度量完即移除，页面加载 8 → 4。
+  const cells = {};
+  const cell = (theme, width) => (cells[`${theme} ${width}`] ??= {good: [], bad: []});
+  const read = async (page, id, theme, width) => {
+    await page.waitForTimeout(400);
+    await settle(page);
+    const r = await page.evaluate(measure);
+    assert.equal(r.mode, 'project', `${id} ${theme} ${width}: 不是项目模式`);
+    assert.equal(r.night, theme === 'night', `${id} ${theme} ${width}: 日夜没切对`);
+    return r.items.map((i) => ({...i, name: `${id}/${i.name}`}));
+  };
   for (const theme of ['day', 'night']) {
-    for (const width of WIDTHS) {
-      const good = []; const bad = [];
-      for (const id of SCENES) {
-        const {context, page} = await openRealScenePage(browser, server.origin, id, theme, {timezoneId: 'Asia/Shanghai'});
-        try {
+    for (const id of SCENES) {
+      const {context, page} = await openRealScenePage(browser, server.origin, id, theme, {timezoneId: 'Asia/Shanghai'});
+      try {
+        for (const width of WIDTHS) {
           await page.setViewportSize({width, height: 900});
-          await page.waitForTimeout(400);
-          await settle(page);
-          const r = await page.evaluate(measure);
-          assert.equal(r.mode, 'project', `${id} ${theme} ${width}: 不是项目模式`);
-          assert.equal(r.night, theme === 'night', `${id} ${theme} ${width}: 日夜没切对`);
-          good.push(...r.items.map((i) => ({...i, name: `${id}/${i.name}`})));
-
-          await page.addStyleTag({content: OLD_RECIPE});
-          await page.waitForTimeout(400);
-          await settle(page);
-          bad.push(...(await page.evaluate(measure)).items.map((i) => ({...i, name: `${id}/${i.name}`})));
-        } finally {
-          await context.close();
+          cell(theme, width).good.push(...await read(page, id, theme, width));
+          const old = await page.addStyleTag({content: OLD_RECIPE});
+          cell(theme, width).bad.push(...await read(page, id, theme, width));
+          await old.evaluate((n) => n.remove());
         }
+      } finally {
+        await context.close();
       }
+    }
+  }
+
+  for (const theme of ['day', 'night']) {
+    const badOfTheme = [];
+    for (const width of WIDTHS) {
+      const {good, bad} = cell(theme, width);
       const tag = `${theme} ${width}`;
       console.log(`ℹ ${tag}: ${fmt(good)}`);
       console.log(`ℹ ${tag} 旧配方: ${fmt(bad)}`);
@@ -124,9 +134,9 @@ test('#261 项目模式：「临时」、工作程度芯片与箭头、「工具
         const g = good.find((i) => i.name === b.name);
         assert.ok(g && b.ratio < g.ratio, `${tag}: 旧配方没贴上「${b.name}」— 改后 ${g?.ratio.toFixed(2)}，旧配方 ${b.ratio.toFixed(2)}`);
       }
-      badByTheme[theme].push(...bad.map((i) => ({...i, name: `${width}/${i.name}`})));
+      badOfTheme.push(...bad.map((i) => ({...i, name: `${width}/${i.name}`})));
     }
     // 夜间 820 没有「临时」，旧配方下芯片和「工具」在夜间本来就达标（6.55 / 3.97 / 4.79），所以反例按日、夜各自汇总判断，不要求每一格都不达标。
-    assert.ok(low(badByTheme[theme]).length >= 1, `${theme}: 反例没生效：贴回旧配方后仍全部达标 — ${fmt(badByTheme[theme])}`);
+    assert.ok(low(badOfTheme).length >= 1, `${theme}: 反例没生效：贴回旧配方后仍全部达标 — ${fmt(badOfTheme)}`);
   }
 });

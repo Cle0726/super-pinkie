@@ -3,7 +3,7 @@
 // #7 说明行 / 卡片来源 / 「从作品库移除」字 ≥4.5；#8 关闭钮 × ≥4.5、版本分隔点 ≥3；
 // #9 筛选胶囊 / 查看器按钮 / 搜索框边框 ≥3，搜索框 placeholder ≥4.5。1440/820 × 日/夜，按实际绘制底色合成计算。
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, {after, before, describe} from 'node:test';
 import {
   REPO_ROOT,
   assertRealPageLoaded,
@@ -12,9 +12,9 @@ import {
   openRealScenePage,
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
-import {playwright} from '../tools/study-desk/harness.mjs';
 
 const HEIGHT = 800;
+const WIDTHS = [1440, 820];
 
 const initScript = () => {
   const item = {id: 'a1b2', kind: 'doc', title: '单词表.txt', path: 'C:/work/单词表.txt', mode: 'project', sessionKey: '',
@@ -120,49 +120,74 @@ function collect(where, result, problems) {
   }
 }
 
-test('作品库与查看器：窗口键不遮挡、说明字 / 关闭钮 / 边框对比度达标', async (t) => {
-  const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  let browser = null;
-  t.after(async () => {
-    await browser?.close();
-    await server.close();
-    installed.cleanup();
+// 同一页面换宽度：等窗口键胶囊跟到新右缘、两帧；作品库与查看器每个宽度都从关闭状态重开，
+// 焦点落点、遮挡与配色全部按新宽度重新量，不沿用上一宽度的布局。
+async function measureAt(page, width, where, problems) {
+  await page.setViewportSize({width, height: HEIGHT});
+  await page.waitForFunction((w) => {
+    const caption = document.getElementById('pinkie-native-window-controls');
+    return caption && Math.abs(caption.getBoundingClientRect().right - w) < 40;
+  }, width, {timeout: 10_000});
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.evaluate(() => window.PinkieArtifacts.open());
+  await page.waitForSelector('.pinkie-art-page .pinkie-art-card__meta', {timeout: 10_000});
+  await page.waitForFunction(() => document.activeElement?.matches('.pinkie-art-search') && document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
+  collect(`${where} 作品库`, await page.evaluate(probe, LIBRARY), problems);
+  await page.evaluate(() => document.activeElement?.blur());
+  collect(`${where} 作品库静止态`, await page.evaluate(probe, {cover: [], text: [], dots: [], edges: ['.pinkie-art-page .pinkie-art-search'], placeholder: []}), problems);
+  await page.evaluate(() => window.PinkieArtifacts.openViewer(window.__artTestItem.id));
+  await page.waitForSelector('.pinkie-art-view .pinkie-art-btn--quiet', {timeout: 10_000});
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
+  collect(`${where} 查看器`, await page.evaluate(probe, VIEWER), problems);
+  await page.evaluate(() => {
+    document.querySelector('.pinkie-art-viewer .pinkie-art-close')?.click();
+    window.PinkieArtifacts.close();
   });
-  browser = process.env.PINKIE_VISUAL_ENGINE === 'webkit'
-    ? await playwright().webkit.launch({headless: true})
-    : await launchRealBrowser();
+  await page.waitForFunction(() => !document.querySelector('.pinkie-art-viewer, .pinkie-art-page'), null, {timeout: 10_000});
+}
 
-  const problems = [];
-  for (const scene of ['settings', 'home-unrestricted']) {
-    for (const theme of ['day', 'night']) {
-      for (const width of [1440, 820]) {
-        const where = `${scene}/${theme}/${width}`;
+describe('真浏览器（server / browser 全文件复用一次）', () => {
+  let installed = null;
+  let server = null;
+  let browser = null;
+  const closeAll = async () => {
+    const [b, s, i] = [browser, server, installed];
+    browser = server = installed = null;
+    try { await b?.close(); }
+    finally {
+      try { await s?.close(); }
+      finally { i?.cleanup(); }
+    }
+  };
+  before(async () => {
+    try {
+      installed = installRealControlUi({repoRoot: REPO_ROOT});
+      server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+      browser = await launchRealBrowser();
+    } catch (error) {
+      await closeAll();
+      throw error;
+    }
+  }, {timeout: 120_000});
+  after(closeAll);
+
+  test('作品库与查看器：窗口键不遮挡、说明字 / 关闭钮 / 边框对比度达标', {timeout: 240_000}, async (t) => {
+    const problems = [];
+    for (const scene of ['settings', 'home-unrestricted']) {
+      for (const theme of ['day', 'night']) {
+        const started = Date.now();
         const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, scene, theme, {initScript});
         try {
           await assertRealPageLoaded(page);
-          await page.setViewportSize({width, height: HEIGHT});
           await page.waitForFunction(() => window.__laolaoSidebar?.gwRequest?.__art === true, null, {timeout: 15_000});
-          await page.waitForFunction((w) => {
-            const caption = document.getElementById('pinkie-native-window-controls');
-            return caption && Math.abs(caption.getBoundingClientRect().right - w) < 40;
-          }, width, {timeout: 10_000});
-          await page.evaluate(() => window.PinkieArtifacts.open());
-          await page.waitForSelector('.pinkie-art-page .pinkie-art-card__meta', {timeout: 10_000});
-          await page.waitForFunction(() => document.activeElement?.matches('.pinkie-art-search') && document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
-          collect(`${where} 作品库`, await page.evaluate(probe, LIBRARY), problems);
-          await page.evaluate(() => document.activeElement?.blur());
-          collect(`${where} 作品库静止态`, await page.evaluate(probe, {cover: [], text: [], dots: [], edges: ['.pinkie-art-page .pinkie-art-search'], placeholder: []}), problems);
-          await page.evaluate(() => window.PinkieArtifacts.openViewer(window.__artTestItem.id));
-          await page.waitForSelector('.pinkie-art-view .pinkie-art-btn--quiet', {timeout: 10_000});
-          await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
-          collect(`${where} 查看器`, await page.evaluate(probe, VIEWER), problems);
-          assert.deepEqual(pageErrors, [], `${where} pageerror`);
+          for (const width of WIDTHS) await measureAt(page, width, `${scene}/${theme}/${width}`, problems);
+          assert.deepEqual(pageErrors, [], `${scene}/${theme} pageerror`);
         } finally {
           await context.close();
         }
+        t.diagnostic(`${scene}/${theme} 用时 ${Date.now() - started}ms`);
       }
     }
-  }
-  assert.deepEqual(problems, []);
+    assert.deepEqual(problems, []);
+  });
 });

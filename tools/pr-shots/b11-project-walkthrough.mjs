@@ -246,8 +246,15 @@ function audit({cap}) {
             if (k > best) { best = k; fg = f; color = paint; }
           }
         }
+      } else if (isMask) {
+        // 遮罩里画出来的是 background-image 渐变，background-color 被盖住：逐个色标量，取最低。
+        const stops = s.backgroundImage && s.backgroundImage !== 'none' ? s.backgroundImage.match(/(?:rgba?|color)\([^()]*\)/g) || [] : [];
+        let worst = Infinity;
+        for (const paint of stops.length ? stops : [s.backgroundColor]) {
+          const f = fgOn(paint, e, bg);
+          if (f && ratio(f, bg.c) < worst) { worst = ratio(f, bg.c); fg = f; color = paint; }
+        }
       } else {
-        if (isMask) color = s.backgroundColor;
         fg = fgOn(color, e, bg);
       }
       if (fg) {
