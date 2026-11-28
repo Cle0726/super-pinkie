@@ -36,6 +36,23 @@ WINDOW_SIZE = (1100, 760)
 # waiting and launch anyway -- a stuck probe must never hang 打开 or crash it.
 INSTANCE_PROBE_TIMEOUT_S = 0.8
 
+# B139: a work's title comes from apps\index.json (written by the gateway, not
+# checked here) and is used to reach IShellLinkW/IPersistFile as one filename
+# component, not free text. '/' or '\\' in the title makes Path() treat it as
+# separators -- with enough '../' segments the .lnk write escapes the intended
+# Start Menu / Desktop folder; the other characters below make Save() fail
+# with ERROR_INVALID_NAME; a bare trailing '.' or ' ' is silently stripped by
+# Windows itself and can make two differently-named apps collide on one file.
+_UNSAFE_SHORTCUT_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+_MAX_SHORTCUT_NAME = 120  # keeps folder + name comfortably under MAX_PATH
+
+
+def _safe_shortcut_name(name):
+    """`name` made safe as a single Windows file-name component for a .lnk."""
+    cleaned = _UNSAFE_SHORTCUT_CHARS.sub("_", str(name or "")).strip(" .")
+    cleaned = cleaned[:_MAX_SHORTCUT_NAME].strip(" .")
+    return cleaned or "作品"
+
 
 def state_root():
     configured = os.environ.get("PINKIE_STATE_ROOT")
@@ -353,10 +370,11 @@ class AppShortcuts:
         target, arguments = self._launch(app["id"])
         icon = app["dir"] / "icon.ico"
         folders = [Path(str(shell.SpecialFolders("Programs"))) / START_MENU_FOLDER, Path(str(shell.SpecialFolders("Desktop")))]
+        safe_name = _safe_shortcut_name(app["name"])
         made = []
         for folder in folders:
             folder.mkdir(parents=True, exist_ok=True)
-            link_path = folder / f"{app['name']}.lnk"
+            link_path = folder / f"{safe_name}.lnk"
             link = shell.CreateShortcut(str(link_path))
             link.TargetPath = target
             link.Arguments = arguments
