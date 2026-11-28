@@ -82,6 +82,26 @@ class GatewayProxyTest(unittest.TestCase):
         self.assertIsNone(self.repair())
         self.assertEqual(self.config.read_text(encoding="utf-8"), "{not json")
 
+    def test_malformed_proxy_url_is_left_enabled(self):
+        for bad_url in ("not-a-url", "127.0.0.1:7897", "ftp://127.0.0.1:21", "http://", "   "):
+            with self.subTest(bad_url=bad_url):
+                self.write({"proxy": {**REPORTED, "proxyUrl": bad_url}})
+                self.assertIsNone(self.repair())
+                config = self.read()
+                self.assertIs(config["proxy"]["enabled"], True)
+                self.assertEqual(config["proxy"]["proxyUrl"], bad_url)
+                self.assertIsNone(gateway_proxy.load_record(self.state))
+
+    def test_malformed_proxy_url_is_logged(self):
+        self.write({"proxy": {**REPORTED, "proxyUrl": "not-a-url"}})
+        self.repair()
+        self.assertTrue(any("not a usable proxy URL" in line for line in self.messages))
+
+    def test_socks_scheme_is_accepted(self):
+        self.write({"proxy": {**REPORTED, "proxyUrl": "socks5://127.0.0.1:1080"}})
+        self.assertEqual(self.repair(), "socks5://127.0.0.1:1080")
+        self.assertIs(self.read()["proxy"]["enabled"], False)
+
     def test_existing_proxy_variables_win(self):
         env = gateway_proxy.apply_environment({"HTTPS_PROXY": "http://corp:8080"}, "http://127.0.0.1:7897")
         self.assertEqual(env["HTTPS_PROXY"], "http://corp:8080")

@@ -25,11 +25,29 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import urllib.parse
 
 RECORD_NAME = "gateway-proxy.json"
 # Modes in which the operator explicitly asked for loopback to be proxied or
 # refused. Those are deliberate choices, not the accident this module repairs.
 EXPLICIT_LOOPBACK_MODES = ("proxy", "block")
+# Schemes OpenClaw's own HTTP(S)_PROXY takeover can actually route through.
+_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
+
+
+def _is_usable_proxy_url(url):
+    """True when ``url`` has a scheme and host this takeover can route through.
+
+    A typo'd or garbage ``proxyUrl`` (bare host, unknown scheme, no host at
+    all) cannot be handed to HTTP_PROXY/HTTPS_PROXY either, so disabling the
+    block for it would just leave the gateway with no proxy and no way back
+    -- the operator's block stays untouched instead.
+    """
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
+    return parts.scheme.lower() in _PROXY_SCHEMES and bool(parts.hostname)
 
 
 def record_path(state_root):
@@ -60,8 +78,9 @@ def _write_json(path, data):
             os.unlink(temporary)
 
 
-def takeover(config):
+def takeover(config, log=None):
     """Disable an enabled root proxy in a config dict. Returns its URL or None."""
+    log = log or (lambda message: None)
     proxy = config.get("proxy") if isinstance(config, dict) else None
     if not isinstance(proxy, dict) or proxy.get("enabled") is not True:
         return None
@@ -71,8 +90,14 @@ def takeover(config):
     if not isinstance(url, str) or not url.strip():
         # Without a URL OpenClaw reads OPENCLAW_PROXY_URL; nothing to carry over.
         return None
+    url = url.strip()
+    if not _is_usable_proxy_url(url):
+        # A malformed proxyUrl can't be routed either; leave the block as the
+        # operator wrote it rather than disabling it for nothing.
+        log(f"gateway proxy: proxyUrl {url!r} is not a usable proxy URL; left enabled")
+        return None
     proxy["enabled"] = False
-    return url.strip()
+    return url
 
 
 def proxy_url(state_root, config):
@@ -108,7 +133,7 @@ def repair(config_path, state_root, log=None):
     config_path = Path(config_path)
     try:
         raw, config = _read(config_path)
-        url = takeover(config)
+        url = takeover(config, log=log)
         if url is None:
             stored = load_record(state_root)
             if stored and proxy_url(state_root, config) is None:
