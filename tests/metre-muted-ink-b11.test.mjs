@@ -123,15 +123,30 @@ test('B11：只在 Metre 里、不加强制覆盖、文件不变长', () => {
 });
 
 // ---------- 浏览器里再量一次：计算后的颜色 ----------
-let sharedBrowser;
-after(async () => { const b = await sharedBrowser; await b?.close?.(); });
-async function start() {
+// 整个文件只起一个浏览器、一张页面，日夜正反例都靠 setContent 换内容；after 里先关页面再关浏览器。
+let shared;
+after(async () => {
+  const s = await shared;
+  await s?.page?.close?.();
+  await s?.browser?.close?.();
+});
+async function launch() {
   let lib;
   try { lib = playwright(); } catch { return {why: 'Playwright is not installed here'}; }
   for (const options of [{}, {channel: 'chrome'}, {channel: 'msedge'}]) {
     try { return await lib.chromium.launch({headless: true, ...options}); } catch {}
   }
   return {why: 'no Chromium browser here'};
+}
+async function start() {
+  const browser = await launch();
+  if (browser.why) return browser;
+  try {
+    return {browser, page: await browser.newPage({viewport: {width: 820, height: 400}})};
+  } catch (e) {
+    await browser.close();
+    throw e;
+  }
 }
 const varCss = (v, night) => `html[data-laolao-mode="metre"]${night ? '[data-pinkie-night]' : ''} {${Object.entries(v).map(([k, x]) => `--metre-${k}:${x};`).join('')}}`;
 const html = (theme, cite, ws) => `<!doctype html><html data-laolao-mode="metre"${theme === 'night' ? ' data-pinkie-night' : ''}><head>
@@ -155,29 +170,25 @@ async function computed(page) {
 }
 
 test('B11：浏览器里计算后的颜色也 ≥ 4.5:1，换回旧写法就不到（日夜）', async (t) => {
-  sharedBrowser ??= start();
-  const b = await sharedBrowser;
-  if (b.why) { t.skip(b.why); return; }
+  shared ??= start();
+  const s = await shared;
+  if (s.why) { t.skip(s.why); return; }
+  const {page} = s;
   for (const theme of ['day', 'night']) {
     const v = THEMES[theme];
-    const page = await b.newPage({viewport: {width: 820, height: 400}});
-    try {
-      await page.setContent(html(theme, citeCss, wsCss));
-      const got = await computed(page);
-      const pairs = [['label', 'bg'], ['n', 'hover'], ['host', 'surface'], ['host', 'hover'], ['count', 'surface'], ['count', 'hover'], ['count', 'side-active']];
-      for (const [k, on] of pairs) {
-        const r = ratio(got[k], rgb(v[on]));
-        t.diagnostic(`${theme} ${k} rgb(${got[k]}) on ${v[on]} ${r.toFixed(2)}:1`);
-        assert.ok(r >= 4.5, `${theme} ${k} 在 --metre-${on} 上只有 ${r.toFixed(2)}:1`);
-      }
-      if (theme === 'day') {
-        await page.setContent(html(theme, revert(citeCss), revert(wsCss)));
-        const old = await computed(page);
-        assert.ok(ratio(old.label, rgb(v.bg)) < 4.5 && ratio(old.n, rgb(v.hover)) < 4.5 && ratio(old.count, rgb(v.hover)) < 4.5,
-          `反例没生效：${JSON.stringify(old)}`);
-      }
-    } finally {
-      await page.close();
+    await page.setContent(html(theme, citeCss, wsCss));
+    const got = await computed(page);
+    const pairs = [['label', 'bg'], ['n', 'hover'], ['host', 'surface'], ['host', 'hover'], ['count', 'surface'], ['count', 'hover'], ['count', 'side-active']];
+    for (const [k, on] of pairs) {
+      const r = ratio(got[k], rgb(v[on]));
+      t.diagnostic(`${theme} ${k} rgb(${got[k]}) on ${v[on]} ${r.toFixed(2)}:1`);
+      assert.ok(r >= 4.5, `${theme} ${k} 在 --metre-${on} 上只有 ${r.toFixed(2)}:1`);
+    }
+    if (theme === 'day') {
+      await page.setContent(html(theme, revert(citeCss), revert(wsCss)));
+      const old = await computed(page);
+      assert.ok(ratio(old.label, rgb(v.bg)) < 4.5 && ratio(old.n, rgb(v.hover)) < 4.5 && ratio(old.count, rgb(v.hover)) < 4.5,
+        `反例没生效：${JSON.stringify(old)}`);
     }
   }
 });
