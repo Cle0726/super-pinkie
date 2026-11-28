@@ -111,6 +111,24 @@ const boardShown = (page, on) => page.waitForFunction((want) => {
   return Boolean(root && scrim) && root.hidden === !want && scrim.hidden === !want;
 }, on, {timeout: 5_000}).catch(() => {});
 
+// 等 selector 的位置 / 大小连续两帧不变，用来确认改窗口大小触发的媒体查询 / 回流已经稳定（没有单一的「已就绪」标志位）。
+// 等不到（selector 还没出现）不在这里报错，交给后面原有断言给出真正的失败信息。
+const layoutStable = (page, selector) => page.evaluate((sel) => new Promise((resolve) => {
+  const el = document.querySelector(sel);
+  if (!el) { resolve(); return; }
+  let last = null;
+  let frames = 0;
+  const tick = () => {
+    const r = el.getBoundingClientRect();
+    const now = `${r.top}|${r.left}|${r.width}|${r.height}`;
+    frames += 1;
+    if (now === last || frames > 90) { resolve(); return; }
+    last = now;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}), selector);
+
 test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert page behind; old look (no scrim) fails', async (t) => {
   const server = await serverForFile();
   const browser = await browserForTest();
@@ -123,8 +141,8 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
       for (const [W, H] of SIZES) {
         const tag = `${W}-${theme}`;
         await page.setViewportSize({width: W, height: H});
-        // 保留死等：改窗口大小后等布局 / 媒体查询（窄屏 inset: 8px）切换稳定，白板打开时按当时的顶栏位置让位，没有单一可等状态。
-        await page.waitForTimeout(150);
+        // 等布局 / 媒体查询（窄屏 inset: 8px）切换稳定：.topbar 连续两帧位置不变才算数。
+        await layoutStable(page, '.topbar');
         await openBoard(page);
         await boardShown(page, true);
 
@@ -163,8 +181,8 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         // 点遮罩：不穿透、白板关掉、inert 全撤
         const before = await page.evaluate(() => location.href);
         await page.mouse.click(...hit[clickKey].at);
-        // 保留死等：后面还要证明「点遮罩没穿透到页面」（地址没变，没发生的事），得留时间窗让错误的导航有机会发生。
-        await page.waitForTimeout(200);
+        // 等白板真正关掉（正确行为）；这也给了「点遮罩穿透导致导航」这个错误行为足够的时间窗去发生，交给下面的地址断言去抓。
+        await boardShown(page, false);
         const after = await backdrop(page);
         assert.equal(after.open, false, `${tag}: 点遮罩要关白板`);
         assert.equal(after.scrim, false, `${tag}: 关掉后遮罩要藏`);
@@ -258,8 +276,8 @@ test('#113 real page: whiteboard toolbar clears the desktop shell window control
         const tag = `${W}-${theme}`;
         await page.setViewportSize({width: W, height: H});
         await page.evaluate(NATIVE_STUB, W);
-        // 保留死等：改窗口大小、放好替身后等布局稳定，白板打开时按当时替身 / 顶栏的位置让位，没有单一可等状态。
-        await page.waitForTimeout(150);
+        // 等布局稳定：窗口键替身连续两帧位置不变才算数（白板打开时按当时替身 / 顶栏的位置让位，没有单一的就位标志位）。
+        await layoutStable(page, '#pinkie-native-window-controls');
         await openBoard(page);
         await boardShown(page, true);
 
@@ -275,8 +293,8 @@ test('#113 real page: whiteboard toolbar clears the desktop shell window control
         assert.deepEqual(shell, [false, false], `${tag}: 白板开着时桌面壳的窗口键 / 拖动条不能设 inert`);
         const btn = await page.locator('#pinkie-native-window-controls button').boundingBox();
         await page.mouse.click(btn.x + btn.width / 2, btn.y + btn.height / 2);
-        // 保留死等：下面还要证明「点窗口键不关白板」（没发生的事），得留时间窗让错误的关闭有机会发生。
-        await page.waitForTimeout(100);
+        // 等点击回调跑完（window.__stubClicks 变成 1）；这也给了「点窗口键关白板」这个错误行为足够的时间窗去发生，交给下面的 open 断言去抓。
+        await page.waitForFunction(() => window.__stubClicks === 1, null, {timeout: 5_000}).catch(() => {});
         const after = await page.evaluate(() => ({clicks: window.__stubClicks, open: window.Pinkie.whiteboard.isOpen()}));
         assert.deepEqual(after, {clicks: 1, open: true}, `${tag}: 白板开着时窗口键要点得动、点了不关白板 ${JSON.stringify(after)}`);
 
