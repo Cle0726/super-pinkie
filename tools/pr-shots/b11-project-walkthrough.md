@@ -56,7 +56,7 @@ Linux 32 张图全部拍到，四类页面 data-laolao-mode 都是 project，没
 | 17 | 首页 / 设置 | `.dashboard-header__breadcrumb`（上游 Control UI 结构，文件未定位） | 面包屑「C.le. › 碧琪 › 聊天 / 设置」scrollWidth 比 clientWidth 多 4px，没有省略号；图里没看出被切，待核对 | sw 65 / cw 61（Linux、Windows 一致） | 待定位 |
 | 18 | 首页 | `aside.chat-workspace-rail--collapsed`（laolao-classic-shell.css:411 附近） | 收起的右侧竖栏文字多 4px；图里竖排标签显示完整，待核对 | sw 40 / cw 36 | 未被占 |
 | 19 | 设置页 | `openclaw-config-page .qs-segmented__btn`、`.page-title`（文件未定位） | 「高级」页签、「设置」大标题（22px 不算大字）略低于阈值 | 3.7 / 3.77 | 待定位 |
-| 20 | 设置页 | laolao-settings-user.css `.pinkie-user-settings__status` | 「还没有连接微信。」11px 略低于阈值 | 4.18 | 别人占着：#179 #236 |
+| 20 | 设置页 | laolao-settings-user.css `.pinkie-user-settings__status` | 「还没有连接微信。」11px 略低于阈值 | 4.18 | 已修：mac/b11-settings-status-contrast（默认 #487560、busy #83653f，卡片底 5.13 / 5.25） |
 | 21 | 侧栏 / 工作台 | `.laolao-mode-button__label` | 「项目模式」12px 略低于阈值 | 4.26–4.29 | 模式切换区，文件未定位 |
 | 22 | 作品库 | laolao-artifacts.css `.pinkie-art-icon` | 无缩略图卡片的占位图标偏淡（装饰性） | 2.19 | 未被占 |
 

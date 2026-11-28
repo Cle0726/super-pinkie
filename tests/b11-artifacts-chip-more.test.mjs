@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import test from 'node:test';
+import test, {after, before, describe} from 'node:test';
 import {
   REPO_ROOT,
   assertRealPageLoaded,
@@ -107,53 +107,86 @@ async function swapToOld(page, css) {
   await page.waitForTimeout(150);
 }
 
-test('真浏览器：选中键字 ≥4.5、「再看更多」边框 ≥3；换回旧写法必须跌破', {timeout: 240_000}, async (t) => {
-  const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  let browser = null;
-  t.after(async () => {
-    await browser?.close();
-    await server.close();
-    installed.cleanup();
-  });
-  browser = process.env.PINKIE_VISUAL_ENGINE === 'webkit'
-    ? await playwright().webkit.launch({headless: true})
-    : await launchRealBrowser();
+// 换宽度后等布局和过渡停稳，再把焦点和指针挪开，避免 hover / focus 样式混进量值。
+async function settleAt(page, width) {
+  await page.setViewportSize({width, height: 800});
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.waitForSelector('.pinkie-art-page .pinkie-art-more:not([hidden])', {timeout: 10_000});
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.mouse.move(1, 799);
+}
 
-  const problems = [];
-  let oldDayChip = Infinity;
-  let oldMore = Infinity;
-  for (const scene of ['settings', 'home-unrestricted']) {
-    for (const theme of ['day', 'night']) {
-      for (const width of [1440, 820]) {
-        const where = `${scene}/${theme}/${width}`;
+const WIDTHS = [1440, 820];
+
+describe('真浏览器（server / browser 全文件复用一次）', () => {
+  let installed = null;
+  let server = null;
+  let browser = null;
+
+  const closeAll = async () => {
+    const [b, s, i] = [browser, server, installed];
+    browser = server = installed = null;
+    try { await b?.close(); }
+    finally {
+      try { await s?.close(); }
+      finally { i?.cleanup(); }
+    }
+  };
+  before(async () => {
+    try {
+      installed = installRealControlUi({repoRoot: REPO_ROOT});
+      server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+      browser = process.env.PINKIE_VISUAL_ENGINE === 'webkit'
+        ? await playwright().webkit.launch({headless: true})
+        : await launchRealBrowser();
+    } catch (error) {
+      await closeAll();
+      throw error;
+    }
+  }, {timeout: 120_000});
+  after(closeAll);
+
+  // 同一个 scene×theme 只开一次页：改后依次量 1440 → 820，换回旧写法后再量 820 → 1440，宽度×新旧组合一个不少。
+  test('选中键字 ≥4.5、「再看更多」边框 ≥3；换回旧写法必须跌破', {timeout: 240_000}, async (t) => {
+    const problems = [];
+    let oldDayChip = Infinity;
+    let oldMore = Infinity;
+    for (const scene of ['settings', 'home-unrestricted']) {
+      for (const theme of ['day', 'night']) {
+        const started = Date.now();
         const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, scene, theme, {initScript});
         try {
           await assertRealPageLoaded(page);
-          await page.setViewportSize({width, height: 800});
           await page.waitForFunction(() => window.__laolaoSidebar?.gwRequest?.__art === true, null, {timeout: 15_000});
           await page.evaluate(() => window.PinkieArtifacts.open());
-          await page.waitForSelector('.pinkie-art-page .pinkie-art-more:not([hidden])', {timeout: 10_000});
-          await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
-          await page.evaluate(() => document.activeElement?.blur());
-          await page.mouse.move(1, 799);
-          const after = await page.evaluate(probe);
-          t.diagnostic(`${where} 改后 ${JSON.stringify(after)}`);
-          if (!after.chip || !(after.chip.ratio >= 4.5)) problems.push(`${where} 选中键字 <4.5 ${JSON.stringify(after.chip)}`);
-          if (!after.more || !(after.more.ratio >= 3)) problems.push(`${where} 再看更多边框 <3 ${JSON.stringify(after.more)}`);
+          for (const width of WIDTHS) {
+            const where = `${scene}/${theme}/${width}`;
+            await settleAt(page, width);
+            const after = await page.evaluate(probe);
+            t.diagnostic(`${where} 改后 ${JSON.stringify(after)}`);
+            if (!after.chip || !(after.chip.ratio >= 4.5)) problems.push(`${where} 选中键字 <4.5 ${JSON.stringify(after.chip)}`);
+            if (!after.more || !(after.more.ratio >= 3)) problems.push(`${where} 再看更多边框 <3 ${JSON.stringify(after.more)}`);
+          }
           await swapToOld(page, CSS_OLD);
-          const before = await page.evaluate(probe);
-          t.diagnostic(`${where} 改前 ${JSON.stringify(before)}`);
-          if (theme === 'day') oldDayChip = Math.min(oldDayChip, before.chip?.ratio ?? Infinity);
-          oldMore = Math.min(oldMore, before.more?.ratio ?? Infinity);
-          assert.deepEqual(pageErrors, [], `${where} pageerror`);
+          for (const width of [...WIDTHS].reverse()) {
+            const where = `${scene}/${theme}/${width}`;
+            await settleAt(page, width);
+            const before = await page.evaluate(probe);
+            t.diagnostic(`${where} 改前 ${JSON.stringify(before)}`);
+            if (!before.chip || !before.more) problems.push(`${where} 反例没量到元素 ${JSON.stringify(before)}`);
+            if (theme === 'day') oldDayChip = Math.min(oldDayChip, before.chip?.ratio ?? Infinity);
+            oldMore = Math.min(oldMore, before.more?.ratio ?? Infinity);
+          }
+          assert.deepEqual(pageErrors, [], `${scene}/${theme} pageerror`);
         } finally {
           await context.close();
         }
+        t.diagnostic(`${scene}/${theme} 用时 ${Date.now() - started}ms`);
       }
     }
-  }
-  assert.deepEqual(problems, []);
-  assert.ok(oldDayChip < 4.5, `反例：旧 82% 日间选中键字应 <4.5，实际最差 ${oldDayChip}`);
-  assert.ok(oldMore < 3, `反例：旧 pa-line 边框应 <3，实际最差 ${oldMore}`);
+    assert.deepEqual(problems, []);
+    assert.ok(oldDayChip < 4.5, `反例：旧 82% 日间选中键字应 <4.5，实际最差 ${oldDayChip}`);
+    assert.ok(oldMore < 3, `反例：旧 pa-line 边框应 <3，实际最差 ${oldMore}`);
+  });
 });

@@ -52,8 +52,8 @@ if [[ -z "$NODE_BIN" ]]; then
   exit 1
 fi
 
-# Always install the core runtime from core-manifest.json (openclaw by default,
-# or cle when PINKIE_CORE=cle). Never read any globally installed OpenClaw on
+# Always install the core runtime from core-manifest.json (its "default",
+# or PINKIE_CORE=openclaw|cle). Never read any globally installed OpenClaw on
 # the build host, and keep the host's real user folders out of core install,
 # Cua staging, skin injection, and runtime patches. npm still reads the host's
 # .npmrc when present, while swiftc and codesign keep the real HOME.
@@ -102,11 +102,24 @@ run_with_isolated_home() {
 }
 
 OPENCLAW_CORE_STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-core.XXXXXX")"
-run_with_isolated_home env PATH="$(dirname "$NODE_BIN"):$PATH" \
+# manifest.mjs install 最后一行输出 {"core","version","node","sha256","packageRoot"}：
+# 照旧打进构建日志，同时截下来写进 build-info.json 的 core / coreVersion / coreSha256。
+CORE_INSTALL_OUT="$OPENCLAW_BUILD_HOME/core-install.out"
+if ! run_with_isolated_home env PATH="$(dirname "$NODE_BIN"):$PATH" \
   "$NODE_BIN" "$REPO_ROOT/tools/core/manifest.mjs" install \
   --root "$REPO_ROOT" \
   --prefix "$OPENCLAW_CORE_STAGE_ROOT" \
-  --cache-dir "$CORE_CACHE_ROOT"
+  --cache-dir "$CORE_CACHE_ROOT" > "$CORE_INSTALL_OUT"; then
+  cat "$CORE_INSTALL_OUT"
+  echo "error: core-manifest.json 的内核没装上" >&2
+  exit 1
+fi
+cat "$CORE_INSTALL_OUT"
+CORE_INSTALL_INFO="$(grep '^{"core":' "$CORE_INSTALL_OUT" | tail -n 1 || true)"
+if [[ -z "$CORE_INSTALL_INFO" ]]; then
+  echo "error: 内核装完没输出 core/version/sha256，写不了 build-info.json" >&2
+  exit 1
+fi
 OPENCLAW_ROOT="$OPENCLAW_CORE_STAGE_ROOT/node_modules/openclaw"
 if [[ ! -f "$OPENCLAW_ROOT/package.json" || ! -f "$OPENCLAW_ROOT/openclaw.mjs" ]]; then
   echo "error: 无法确认 core-manifest.json 安装的内核包目录：$OPENCLAW_ROOT" >&2
@@ -366,10 +379,16 @@ if [[ "$GUARD_CHANNEL" == "release" ]]; then
   cp "$REPO_ROOT/ui/assets/laolao-splash-video-poster-release.png" "$CONTENTS/Resources/SuperPinkie/ui/assets/laolao-splash-video-poster.png"
 fi
 GUARD_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
-"$RUNTIME_ROOT/bin/node" - "$CONTENTS/Resources/SuperPinkie/build-info.json" "$GUARD_CHANNEL" "$VERSION" "$GUARD_COMMIT" "$PINKIE_STATE_ROOT_FOR_GUARD/updates/release-signature.json" <<'NODE'
+"$RUNTIME_ROOT/bin/node" - "$CONTENTS/Resources/SuperPinkie/build-info.json" "$GUARD_CHANNEL" "$VERSION" "$GUARD_COMMIT" "$PINKIE_STATE_ROOT_FOR_GUARD/updates/release-signature.json" "$CORE_INSTALL_INFO" <<'NODE'
 const fs = require('fs');
-const [file, channel, version, commit, sigFile] = process.argv.slice(2);
+const [file, channel, version, commit, sigFile, coreJson] = process.argv.slice(2);
 const info = {guard: channel === 'release', channel, version, commit};
+// 内核来源只是附加字段：channel / guard 仍只有 dev / release，给 guard.mjs 用，这里不碰。
+const core = JSON.parse(coreJson);
+if (core.core !== 'openclaw' && core.core !== 'cle') throw new Error(`build-info: 认不出的内核 ${JSON.stringify(core.core)}`);
+info.core = core.core;
+info.coreVersion = String(core.version || '');
+info.coreSha256 = core.sha256 || null;
 if (channel === 'release') {
   const fb = {};
   if (process.env.PINKIE_FEEDBACK_REPO) fb.repo = process.env.PINKIE_FEEDBACK_REPO.trim();
