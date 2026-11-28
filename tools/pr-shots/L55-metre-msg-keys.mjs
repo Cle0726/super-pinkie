@@ -90,6 +90,10 @@ async function cell(sceneId, theme, width) {
     const keys = await keyState(page);
     const keysWithout = await without(page, keyState);
     const keysChanged = JSON.stringify(keys) !== JSON.stringify(keysWithout.style);
+    // uireview 00:36Z：静止时按键行不露出来，拍之前把鼠标停在最后一条用户消息上（量值仍在上面、hover 前量）。
+    const lastUser = await page.evaluateHandle(() => [...document.querySelectorAll('.chat-group.user')].pop() || null);
+    if (await lastUser.evaluate((el) => !!el)) await lastUser.asElement().hover({timeout: 3000}).catch(() => {});
+    await page.waitForTimeout(200);
     await shot(page, 'msg-keys', theme, width, {mode, ready, keysChanged});
 
     const editBtn = await page.$('.chat-group.user .pinkie-msg-row .pinkie-msg-btn:nth-child(2)');
