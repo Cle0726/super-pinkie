@@ -43,18 +43,36 @@ class StaleProxyRecovery(unittest.TestCase):
         self.backend.write(key, "ProxyServer", ws.REG_SZ, "corp-proxy:8080")
         self.original = self.manager.current()
 
-    def take_over(self, method="pac"):
-        """照 FanVpnService.apply_system_proxy：先拍快照再接管，然后进程被强杀（不还原）。"""
+    def take_over(self, method="pac", port=None):
+        """照 FanVpnService.apply_system_proxy：先拍快照再接管、记下写了什么，然后进程被强杀（不还原）。"""
         self.store.save(self.manager.snapshot())
         if method == "pac":
-            self.manager.apply_pac(ws.pac_url_for(fb.DEFAULT_PANEL_PORT))
+            port = port or fb.DEFAULT_PANEL_PORT
+            self.manager.apply_pac(ws.pac_url_for(port))
         else:
-            self.manager.apply_direct(ws.proxy_server_for(fb.DEFAULT_PROXY_PORT))
+            port = port or fb.DEFAULT_PROXY_PORT
+            self.manager.apply_direct(ws.proxy_server_for(port))
+        self.store.save_applied(self.manager.current(), port)
 
     def recover(self, listening=False):
-        return fb.recover_stale_system_proxy(
-            manager=self.manager, store=self.store, port_listening=lambda port: listening,
-        )
+        self.probed = []
+
+        def probe(port):
+            self.probed.append(port)
+            return listening
+
+        return fb.recover_stale_system_proxy(manager=self.manager, store=self.store, port_listening=probe)
+
+    def assert_left_alone(self, setup, expect="not-ours"):
+        """另一套代理接手后：注册表一个字节都不能动。"""
+        setup()
+        before = self.manager.current()
+        raw = self.backend.path.read_bytes() if hasattr(self.backend, "path") else None
+        self.assertEqual(self.recover(), expect)
+        self.assertEqual(self.manager.current(), before)
+        if raw is not None:
+            self.assertEqual(self.backend.path.read_bytes(), raw, "不能写注册表")
+        self.assertEqual(self.probed, [], "不是我们的就不用去探端口")
 
     def test_killed_with_pac_on_next_start_restores_user_proxy(self):
         self.take_over("pac")
@@ -88,6 +106,70 @@ class StaleProxyRecovery(unittest.TestCase):
         before = self.manager.current()
         self.assertEqual(self.recover(), "not-ours")
         self.assertEqual(self.manager.current(), before)
+
+    # win-coord on #584: the same bypass list as ours does not prove the proxy is ours.
+    # Another local proxy (different port, or a different PAC path) may have kept it.
+    def test_other_loopback_proxy_on_another_port_with_our_bypass_list_is_left_alone(self):
+        def setup():
+            self.take_over("direct")
+            self.backend.write(ws.INTERNET_SETTINGS, "ProxyServer", ws.REG_SZ, "127.0.0.1:7890")
+            self.assertEqual(self.manager.current()["ProxyOverride"], ws.DEFAULT_OVERRIDE)
+            self.assertTrue(self.manager.is_managed(), "looks like ours by the old rule")
+
+        self.assert_left_alone(setup)
+
+    def test_other_loopback_pac_path_with_our_bypass_list_is_left_alone(self):
+        def setup():
+            self.take_over("pac")
+            self.backend.write(ws.INTERNET_SETTINGS, "AutoConfigURL", ws.REG_SZ,
+                               f"http://127.0.0.1:{fb.DEFAULT_PANEL_PORT}/clash.pac")
+            self.assertTrue(self.manager.is_managed())
+
+        self.assert_left_alone(setup)
+
+    def test_other_loopback_pac_on_another_port_with_our_bypass_list_is_left_alone(self):
+        def setup():
+            self.take_over("pac")
+            self.backend.write(ws.INTERNET_SETTINGS, "AutoConfigURL", ws.REG_SZ, "http://127.0.0.1:7890/proxy.pac")
+            self.assertTrue(self.manager.is_managed())
+
+        self.assert_left_alone(setup)
+
+    def test_switched_from_our_pac_to_static_loopback_is_left_alone(self):
+        def setup():
+            self.take_over("pac")
+            key = ws.INTERNET_SETTINGS
+            self.backend.write(key, "AutoConfigURL", ws.REG_SZ, "")
+            self.backend.write(key, "ProxyServer", ws.REG_SZ, "127.0.0.1:7890")
+            self.backend.write(key, "ProxyEnable", ws.REG_DWORD, 1)
+
+        self.assert_left_alone(setup)
+
+    def test_fanvpn_on_a_non_default_port_is_still_recognised(self):
+        # The default port was taken, so FanVPN bound another one: the record has the real one.
+        self.take_over("pac", port=10877)
+        self.assertEqual(self.recover(), "restored")
+        self.assertEqual(self.probed, [10877])
+        self.assertEqual(self.manager.current(), self.original)
+
+    def test_probes_the_recorded_port(self):
+        self.take_over("direct")
+        self.assertEqual(self.recover(listening=True), "in-use")
+        self.assertEqual(self.probed, [fb.DEFAULT_PROXY_PORT])
+
+    def test_snapshot_without_applied_record_is_left_alone(self):
+        # A snapshot from a build that did not keep the record: cannot confirm, touch nothing.
+        def setup():
+            self.take_over("pac")
+            self.store.applied_path.unlink()
+
+        self.assert_left_alone(setup, expect="unconfirmed")
+        self.assertIsNotNone(self.store.load(), "keep it for FanVPN's own restore")
+
+    def test_clear_removes_the_applied_record_too(self):
+        self.take_over("pac")
+        self.assertEqual(self.recover(), "restored")
+        self.assertFalse(self.store.applied_path.exists())
 
     def test_port_still_answering_means_another_instance_owns_it(self):
         self.take_over("pac")

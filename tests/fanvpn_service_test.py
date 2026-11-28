@@ -174,6 +174,20 @@ class SystemProxyTest(ServiceMixin, unittest.TestCase):
         self.assertIsNone(cur["AutoConfigURL"])
         self.assertIsNone(self.svc.snapshot_store.load())
 
+    def test_apply_records_what_it_wrote_for_stale_recovery(self):
+        # B109：被强杀后下次启动只认这份记录，所以要记实际写进去的值和实际端口。
+        self.svc.settings.panel_port = 10877
+        self.svc.apply_system_proxy("pac")
+        applied = self.svc.snapshot_store.load_applied()
+        self.assertEqual(applied["values"], self.svc.sysproxy.current())
+        self.assertEqual(applied["values"]["AutoConfigURL"], "http://127.0.0.1:10877/proxy.pac")
+        self.assertEqual(applied["port"], 10877)
+        self.svc.apply_system_proxy("direct")
+        applied = self.svc.snapshot_store.load_applied()
+        self.assertEqual((applied["values"]["ProxyServer"], applied["port"]), ("127.0.0.1:10809", 10809))
+        self.svc.restore_system_proxy()
+        self.assertIsNone(self.svc.snapshot_store.load_applied())
+
     def test_restore_without_snapshot_only_disables(self):
         self.svc.sysproxy.apply_direct("127.0.0.1:1")
         with self.assertLogs("fanvpn_service", "WARNING"):
