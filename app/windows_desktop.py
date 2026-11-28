@@ -231,11 +231,32 @@ def state_root():
     return root
 
 
+# Six+ services (launcher, computer, updater, guard, setup, native, relay) all
+# write through this one function and none of them ever stop running for the
+# life of the install, so with no cap a log quietly grows for weeks until it
+# fills the system drive. One rotated backup per name keeps recent history
+# available for debugging without letting any single file grow unbounded.
+_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
 def append_log(name, message):
     try:
         directory = state_root() / "logs"
         directory.mkdir(parents=True, exist_ok=True)
-        with (directory / f"{name}.log").open("a", encoding="utf-8") as handle:
+        current = directory / f"{name}.log"
+        try:
+            oversized = current.stat().st_size >= _LOG_MAX_BYTES
+        except OSError:
+            oversized = False
+        if oversized:
+            try:
+                current.replace(directory / f"{name}.log.1")
+            except OSError:
+                # Another process (the App and the update helper can both
+                # append here) may be mid-rotation; losing this one rotation
+                # just means the file grows a bit more, not that logging stops.
+                pass
+        with current.open("a", encoding="utf-8") as handle:
             handle.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
     except OSError:
         # The App and the update helper can append to this file at the same
