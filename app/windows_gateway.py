@@ -584,8 +584,14 @@ class LocalServices:
         for server in list(self.servers):
             try:
                 server.shutdown()
-            except Exception:
-                pass
+            except Exception as error:
+                # Still no raise (close() runs on the exit path), but a server
+                # that did not shut down keeps its port: say which one.
+                try:
+                    address = getattr(server, "server_address", None)
+                    append_log("launcher", f"local service {address or server!r} did not shut down: {error!r}")
+                except Exception:
+                    pass
         process = self.relay
         self.relay = None
         if process and process.poll() is None:
