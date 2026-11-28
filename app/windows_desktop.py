@@ -942,15 +942,12 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def enforce_guard_exit():
         guard_force_exit["active"] = True
         guard_stop.set()
-        for fn in (services.close, computer.close, gateway.close):
-            try:
-                fn()
-            except Exception:
-                pass
-        try:
-            window.destroy()
-        except Exception:
-            pass
+        run_exit_steps("guard exit", [
+            ("services close", services.close),
+            ("computer close", computer.close),
+            ("gateway close", gateway.close),
+            ("window destroy", window.destroy),
+        ])
         run_finish_exit(force_close_gateway=True)
 
     def monitor_guard():
@@ -1108,6 +1105,24 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         storage_path=str(webview_storage),
     )
     run_finish_exit(force_close_gateway=guard_force_exit["active"])
+
+
+def run_exit_steps(context, steps, log=None):
+    """Run every (name, fn) exit step, even when an earlier one raised.
+
+    Exit paths must not raise, but a step that fails silently is how a gateway
+    ends up still holding its port, or the process never exits because a window
+    is left: each failure goes to the launcher log with its step name.
+    """
+    log = log or append_log
+    for name, fn in steps:
+        try:
+            fn()
+        except Exception as error:  # noqa: BLE001 - the exit path must not raise
+            try:
+                log("launcher", f"{context}: {name} failed: {error!r}")
+            except Exception:  # noqa: BLE001 - nor may its logging
+                pass
 
 
 def finish_exit(bridge, gateway, webview_storage, leave=os._exit, force_close_gateway=False):
