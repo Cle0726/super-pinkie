@@ -1,5 +1,5 @@
 // 11-24 第 5 轮追加：Metre 的待发送一条（laolao-metre-queue.js）和侧栏会话列表的整理（laolao-metre-list.js），真浏览器里跑。
-import {test} from 'node:test';
+import {test, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -8,6 +8,9 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 const inj = (f) => fileURLToPath(new URL('../ui/injections/' + f, import.meta.url));
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 const launch = () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+let browserPromise;
+const getBrowser = () => browserPromise || (browserPromise = launch());
+after(async () => { if (browserPromise) await (await browserPromise).close(); });
 
 const PAGE = `<!doctype html><html data-laolao-mode="metre"><head><style>
   body{margin:0;font:14px sans-serif} .chat-main{width:900px;margin:40px auto}
@@ -20,9 +23,10 @@ const PAGE = `<!doctype html><html data-laolao-mode="metre"><head><style>
 <div class="agent-chat__composer-combobox"><textarea></textarea></div></div></openclaw-chat-pane></body></html>`;
 
 test(`Metre queue: one 30px line on the composer’s top edge; expanded rows are 28px with move / edit / steer / delete (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await launch();
+  const browser = await getBrowser();
+  const context = await browser.newContext({viewport: {width: 1200, height: 700}});
   try {
-    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    const page = await context.newPage();
     await page.setContent(PAGE);
     await page.evaluate(() => {
       const pane = document.querySelector('openclaw-chat-pane'), log = window.log = [];
@@ -57,15 +61,16 @@ test(`Metre queue: one 30px line on the composer’s top edge; expanded rows are
     assert.deepEqual(await page.evaluate(() => window.log), ['steer:q1', 'remove:q2', 'remove:q1', 'draft:第二条'], '插话走已有的插话；删除和编辑走原生的方法');
     await page.locator('.pk-mq__btn--clear').click();
     assert.equal(await page.evaluate(() => document.querySelector('openclaw-chat-pane').state.chatQueue.length), 0, '全部清掉');
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 // 11-24 16:10 打回第 2 条：排队一出现，原生的大卡片先露出来、停约 5 秒才缩成一行（.pk-mq 要等别的事件才画）。
 // 复发测试：原生排队区插进来以后不碰页面，0 ms 和 300 ms 各量一次 .chat-queue，都不超过 32px；300 ms 时那一条已经画好；再排一条也跟着变。
 test(`Metre queue: the native big card never shows — 0 ms and 300 ms after the queue appears it is one line (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await launch();
+  const browser = await getBrowser();
+  const context = await browser.newContext({viewport: {width: 1200, height: 700}});
   try {
-    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    const page = await context.newPage();
     await page.setContent(PAGE);
     await page.evaluate(() => {
       document.querySelector('.chat-queue').remove();
@@ -96,16 +101,17 @@ test(`Metre queue: the native big card never shows — 0 ms and 300 ms after the
     await page.waitForFunction(() => /待发送 3/.test(document.querySelector('.pk-mq__bar')?.textContent || ''), null, {timeout: 5_000});   // 等那一条按新队列重画
     assert.match(await page.locator('.pk-mq__bar').innerText(), /待发送 3/, '再排一条，这一条跟着变');
     assert.ok((await page.locator('.chat-queue').boundingBox()).height <= 32);
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 // 11-24 16:10 打回第 3 条：侧栏会话行悬停时，「置顶 / 重命名 / 归档 / ⋯」四个键是绝对定位、透明底，长标题的字从键底下透出来。
 // 复发测试：长标题悬停时，标题可见部分的右端 ≤ 第一个按键的左端，而且标题确实被省略了（不是没压到是因为标题短）。
 // 原生的会话行规则（链接 flex:auto / min-width:0、会话名省略号、行尾区 flex:none）照 control-ui 打包里的写法补在页面上。
 test(`Metre session list: on hover a long title makes room for the row keys and ellipsizes instead of running under them (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await launch();
+  const browser = await getBrowser();
+  const context = await browser.newContext({viewport: {width: 1200, height: 700}});
   try {
-    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    const page = await context.newPage();
     await page.setContent(PAGE);
     await page.addStyleTag({content: `.sidebar-recent-session__link{min-width:0;flex:auto;display:flex;align-items:center;gap:8px;text-decoration:none}
       .sidebar-recent-session__name{text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:auto;overflow:hidden}
@@ -131,13 +137,14 @@ test(`Metre session list: on hover a long title makes room for the row keys and 
     const idle = await page.evaluate(() => ({time: getComputedStyle(document.querySelector('.pinkie-session-time')).display, keys: +getComputedStyle(document.querySelector('.laolao-row-actions')).opacity}));
     assert.notEqual(idle.time, 'none', '不悬停时时间照常显示');
     assert.equal(idle.keys, 0, '不悬停时按键不露');
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 test(`Metre session list: one layer of date groups, status marks from backend state, relative time, hover-only actions (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await launch();
+  const browser = await getBrowser();
+  const context = await browser.newContext({viewport: {width: 1200, height: 700}});
   try {
-    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    const page = await context.newPage();
     await page.setContent(PAGE);
     await page.evaluate(() => {
       window.PinkieSessionList = {sessionStatus: (s) => s.phase || '', beginRename: (k) => window.log.push('rename:' + k)};
@@ -164,34 +171,36 @@ test(`Metre session list: one layer of date groups, status marks from backend st
     for (const i of [0, 1, 2]) await acts.nth(i).click({force: true});
     assert.deepEqual(await page.evaluate(() => window.log), ['pin:agent:metre:a', 'rename:agent:metre:a', 'archive:agent:metre:a']);
     assert.equal(await page.evaluate(() => window.PinkieMetreList.relTime(new Date(2026, 10, 23, 17, 11).getTime(), new Date(2026, 10, 23, 19, 0).getTime())), '17:11');
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 // 11-24 第 6 轮整页走查：Metre 首页不挂碧琪小伙伴（bubble 没建出来），窗口一改尺寸 laolao-companion.js 的 liftHome 就读 undefined.classList 报错
 test(`Metre home: resizing the window does not throw from the companion’s home lift (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await launch();
+  const browser = await getBrowser();
+  const context = await browser.newContext({viewport: {width: 1200, height: 700}});
   try {
-    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.setContent(`<!doctype html><html data-laolao-mode="metre" data-laolao-startup-home="1"><body><div class="laolao-startup-home"><div class="agent-chat__welcome">早上好</div></div></body></html>`);
     await page.addScriptTag({path: inj('laolao-companion.js')});
     await page.setViewportSize({width: 1000, height: 640}); await page.waitForTimeout(500);   // 保留：断言改尺寸「不报错」，给 resize 处理留时间
     await page.setViewportSize({width: 1200, height: 700}); await page.waitForTimeout(500);   // 保留：同上
     assert.deepEqual(errors.filter((m) => /classList|liftHome/.test(m)), [], '改窗口尺寸不报错');
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 // 11-24 第 6 轮整页走查：Metre 皮肤给所有元素设了标准 scrollbar-color，Chromium 就丢掉原生 6px 的 ::-webkit-scrollbar，侧栏会话列表被 15px 的系统滚动条挤窄
 test(`Metre keeps the native 6px scrollbar (sidebar list is not squeezed by a 15px system bar) (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await launch();
+  const browser = await getBrowser();
+  const context = await browser.newContext({viewport: {width: 800, height: 600}});
   try {
-    const page = await browser.newPage({viewport: {width: 800, height: 600}});
+    const page = await context.newPage();
     await page.setContent(`<!doctype html><html data-laolao-mode="metre"><head><style>::-webkit-scrollbar{width:6px;height:6px}</style></head><body>
       <div id="s" style="width:240px;height:100px;overflow-y:auto;scrollbar-gutter:stable"><div style="height:400px"></div></div></body></html>`);
     await page.addStyleTag({path: inj('laolao-metre-skin.css')});
     const gutter = await page.evaluate(() => { const s = document.getElementById('s'); return s.offsetWidth - s.clientWidth; });
     assert.equal(gutter, 6, `滚动条预留 6px（实际 ${gutter}px）`);
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 test('wiring: only Metre calls the list decorator; both scripts are in the head and owned by a region; no timers or observers', () => {
