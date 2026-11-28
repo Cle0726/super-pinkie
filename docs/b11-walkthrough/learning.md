@@ -38,7 +38,7 @@
 | L8 | `laolao-learning-library.css`：`.pinkie-library__search`、`.pinkie-library__primary` | desk-library，日/夜，1440/820 | 书架搜索框和「＋ 打开电子书」按钮边框几乎看不出 | 边框 1.43~1.46（要 3） | 无 |
 | L9 | `laolao-study-desk-board.js:77`（`data.answered.independentRate`） | desk-board 起每页 pageErrors | 看板数据缺 `answered` 时直接抛 `TypeError: Cannot read properties of undefined (reading 'independentRate')` | — | 无 |
 | L10 | `laolao-study-desk-vocab.js`（`.v-count` 文案） | desk-vocab，日/夜 | 生词本标题上方直接显示 JS 异常原文「Cannot read properties of undefined (reading 'due')」（见 desk-vocab-1440-day.png） | — | 无 |
-| L11 | `laolao-game-hud.css`：`.pkg-purse .pkg-cell .pkg-glyph[data-kind="stars"] svg`（钱包星星，`#D99A1E`） | desk-today / desk-gamepractice，日，1440/820 | 日间钱包里的星星图标偏淡（#474 取色修正后复测发现） | 2.27（像素 2.21~2.25，要 3） | 无 |
+| L11 | `laolao-game-hud.css`：`.pkg-purse .pkg-cell .pkg-glyph[data-kind="stars"] svg`（钱包星星，`#D99A1E`） | desk-today / desk-gamepractice，日，1440/820 | 日间钱包里的星星图标偏淡（#474 取色修正后复测发现） | 2.27（像素 2.21~2.25，要 3） | 本单：`mac/b11-purse-stars-day` |
 | L12 | `laolao-desk-reward.css`：`.pk-drill-nib svg`（`color:var(--pink)` 落在 `--hair` 上） | desk-drill，日，1440/820 | 日间刷题进度笔尖图标偏淡 | 2.75（像素 3.3，要 3） | 无 |
 | L13 | `laolao-context-compact.js`：`.laolao-context-viewer summary svg`（上下文圆环，`#bd73a2`） | home / desk-chat，日，1440/820 | 日间上下文圆环偏淡；DOM 3.42 过线，但抗锯齿后像素只有 2.08~2.79，修之前要定按哪个算 | 3.42（像素 2.08~2.79） | 无 |
 
