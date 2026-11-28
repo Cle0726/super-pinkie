@@ -1130,15 +1130,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # 会让用户浏览器突然断掉；所以只在进程真正退出时还原。
     # 不注册这个的话，用户点了开关后直接关掉进程，注册表里会留着
     # 一个指向已死端口的 PAC，下次开机整个系统都没网。
-    def _restore_fanvpn_on_exit():
-        try:
-            import fanvpn_bridge
-
-            fanvpn_bridge.shutdown()
-        except Exception:  # noqa: BLE001 - 退出路径绝不能抛
-            pass
-
-    atexit.register(_restore_fanvpn_on_exit)
+    atexit.register(restore_fanvpn_on_exit)
 
     threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
     webview.start(
@@ -1164,6 +1156,30 @@ def run_exit_steps(context, steps, log=None):
                 log("launcher", f"{context}: {name} failed: {error!r}")
             except Exception:  # noqa: BLE001 - nor may its logging
                 pass
+
+
+def restore_fanvpn_on_exit(shutdown=None, log=None):
+    """Exit hook: put the system proxy back that FanVPN set.
+
+    It never raises (this runs on the exit path), but a failure is logged: if
+    the restore fails, the registry keeps a PAC that points at a dead port and
+    the whole machine has no network after the next boot, and the log is the
+    only place that says why.
+    """
+    log = log or append_log
+    try:
+        if shutdown is None:
+            try:
+                import fanvpn_bridge
+            except ImportError:  # imported as app.windows_desktop (tests)
+                from app import fanvpn_bridge
+            shutdown = fanvpn_bridge.shutdown
+        shutdown()
+    except Exception as error:  # noqa: BLE001 - the exit path must not raise
+        try:
+            log("launcher", f"FanVPN system proxy restore on exit failed: {error!r}")
+        except Exception:  # noqa: BLE001 - nor may its logging
+            pass
 
 
 def finish_exit(bridge, gateway, webview_storage, leave=os._exit, force_close_gateway=False):
