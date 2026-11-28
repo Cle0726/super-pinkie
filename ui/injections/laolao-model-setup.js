@@ -373,7 +373,7 @@
       if (preset.id === "custom" || !all.length) {
         const manual = el("input", "pinkie-model-setup__input", pick); manual.placeholder = "列表里没有？手动填模型名，回车添加";
         manual.addEventListener("keydown", (event) => {
-          if (event.key !== "Enter" || !manual.value.trim()) return;
+          if (event.key !== "Enter" || event.isComposing || event.keyCode === 229 || !manual.value.trim()) return;
           all.push({id: manual.value.trim(), name: manual.value.trim(), vision: false}); renderPick({...res, models: all}); });
       }
       filter?.addEventListener("input", () => { const q = filter.value.trim().toLowerCase(); for (const r of rows) r.rowEl.hidden = q && !r.check.value.toLowerCase().includes(q); });
