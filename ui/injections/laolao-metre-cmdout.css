@@ -1,0 +1,26 @@
+/* laolao-metre-cmdout —— L37 / T3#9：Metre 工作过程里命令那一步的命令头（laolao-metre-cmdout.js 画）。
+ * 只在 data-laolao-mode="metre" 下生效，其他模式一个字不动；不改原生工具卡和共用的 laolao-tool-rows.css 的规则，
+ * 只给新加的 .pk-mcmd 上样式。颜色用 Metre 皮肤的变量；失败色和 laolao-metre-code.css 的 diff 删除行同一套。 */
+html[data-laolao-mode="metre"] .pk-mcmd {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 6px; padding: 4px 8px; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--metre-line, rgba(0, 0, 0, 0.10));
+  font-size: 12px; line-height: 18px; color: var(--metre-muted, #73726C);
+}
+html[data-laolao-mode="metre"] .pk-mcmd__line {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 12px/18px ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--metre-text, #1F1E1C);
+}
+html[data-laolao-mode="metre"] .pk-mcmd__status { flex: none; white-space: nowrap; }
+/* 失败色用皮肤的 --metre-danger：它日夜都有定义（夜间在 [data-pinkie-night] 和 [data-theme="dark"] 下都生效），
+ * 不自己按 [data-pinkie-night] 分日夜——Metre 夜间可能只带 data-theme="dark"（laolao-metre-contrast.css 注释），那样会停在日间色。 */
+html[data-laolao-mode="metre"] .pk-mcmd__status[data-kind="fail"] { color: var(--metre-danger, #A8432F); }
+html[data-laolao-mode="metre"] .pk-mcmd__status[data-kind="running"] { color: var(--metre-cobalt, #2D4FA3); }
+html[data-laolao-mode="metre"] .pk-mcmd__actions { flex: none; display: inline-flex; gap: 4px; }
+html[data-laolao-mode="metre"] .pk-mcmd__btn {
+  appearance: none; margin: 0; padding: 1px 8px; border: 0; border-radius: 4px; background: none; cursor: pointer;
+  font: inherit; color: var(--metre-text, #1F1E1C);
+}
+html[data-laolao-mode="metre"] .pk-mcmd__btn:hover { background: var(--metre-hover, rgba(0, 0, 0, 0.05)); color: var(--metre-text, #1F1E1C); }
+html[data-laolao-mode="metre"] .pk-mcmd__btn:focus-visible { outline: 2px solid var(--metre-cobalt, #2D4FA3); outline-offset: 1px; }
