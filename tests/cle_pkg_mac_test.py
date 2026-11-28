@@ -33,7 +33,8 @@ def _bash():
 BASH = _bash()
 
 FAKES = {
-    "fake-launchctl": 'printf "%s\\n" "$*" >> "$FAKE_LOG/launchctl.log"\nexit 0\n',
+    "fake-launchctl": 'printf "%s\\n" "$*" >> "$FAKE_LOG/launchctl.log"\n'
+    'if [ "$1" = bootstrap ] && [ -n "${FAKE_BOOTSTRAP_FAIL:-}" ]; then exit 5; fi\nexit 0\n',
     "fake-pgrep": 'printf "%s\\n" "$*" >> "$FAKE_LOG/pgrep.log"\n'
     'if [ -n "${FAKE_PGREP_HIT:-}" ]; then exit 0; fi\nexit 1\n',
     "fake-codesign": 'printf "%s\\n" "$*" >> "$FAKE_LOG/codesign.log"\n'
@@ -42,13 +43,17 @@ FAKES = {
 }
 
 
-def make_app(path, version, channel):
+def make_app(path, version, channel, core=None):
     (path / "Contents" / "MacOS").mkdir(parents=True, exist_ok=True)
-    (path / "Contents" / "MacOS" / "SuperPinkie").write_text(f"bin {version} {channel}\n")
+    (path / "Contents" / "MacOS" / "SuperPinkie").write_text(f"bin {version} {channel} {core}\n")
     info = path / BUILD_REL
     info.parent.mkdir(parents=True, exist_ok=True)
+    extra = ""
+    if core is not None:
+        # 同 desktop/macos/build.sh 的写法：多行 JSON，四个原字段在前，core 三字段在后
+        extra = f',\n  "core": "{core}",\n  "coreVersion": "{version}-core",\n  "coreSha256": null'
     info.write_text(
-        f'{{"guard": false, "channel": "{channel}", "version": "{version}", "commit": "c-{version}"}}\n'
+        f'{{"guard": false, "channel": "{channel}", "version": "{version}", "commit": "c-{version}"{extra}}}\n'
     )
 
 
@@ -316,6 +321,61 @@ class ClePkgMacTest(unittest.TestCase):
         self.assertIn("[会失败]", r.stdout)
         self.ok("install-cle", CLE_EXPECT_CHANNEL="dev")
         self.assertEqual(channel_of(self.app), "dev")
+
+    def test_core_field_cle_installs_whatever_guard_channel(self):
+        self.ok("backup-current")
+        make_app(self.pkg, "3.0.0", "dev", core="cle")
+        r = self.ok("install-cle")
+        self.assertIn("core=cle", r.stdout)
+        self.assertEqual(channel_of(self.app), "dev")
+
+    def test_core_field_not_cle_refused_even_with_expected_channel(self):
+        self.ok("backup-current")
+        make_app(self.pkg, "3.0.0", "dev", core="openclaw")
+        for extra in ({}, {"CLE_EXPECT_CHANNEL": "dev"}):
+            r = self.run_tool("install-cle", "--yes", **extra)
+            self.assertEqual(r.returncode, 1, f"{extra}\n{r.stdout}\n{r.stderr}")
+            self.assertIn("core 是 'openclaw'，不是 'cle'", r.stderr)
+            self.assertEqual(channel_of(self.app), "release")
+        self.assertEqual(self.replaced_list(), [])
+        self.assertEqual(self.logged("codesign"), [])
+
+    def test_core_field_cle_checks_channel_only_when_expected(self):
+        self.ok("backup-current")
+        make_app(self.pkg, "3.0.0", "dev", core="cle")
+        r = self.run_tool("install-cle", "--yes", CLE_EXPECT_CHANNEL="release")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("channel 是 'dev'，不是 'release'", r.stderr)
+        self.assertEqual(channel_of(self.app), "release")
+        self.ok("install-cle", CLE_EXPECT_CHANNEL="dev")
+        self.assertEqual(channel_of(self.app), "dev")
+
+    def test_core_pkg_with_launch_agents_and_bootstrap_failure(self):
+        self.plist(GATEWAY, "g1")
+        self.plist(WATCHDOG, "w1")
+        self.ok("backup-current")
+        make_app(self.pkg, "3.0.0", "dev", core="cle")
+        self.ok("install-cle")
+        self.assertEqual(self.logged("launchctl"), [])
+        self.plist(GATEWAY, "g2")
+        self.plist(REAPPLY, "r1")
+        r = self.ok("restore", FAKE_BOOTSTRAP_FAIL="1")
+        self.assertIn(f"{GATEWAY} bootstrap 没成功", r.stderr)
+        self.assertEqual(channel_of(self.app), "release")
+        self.assertEqual((self.agents / f"{GATEWAY}.plist").read_text(), "g1")
+        self.assertEqual((self.agents / f"{WATCHDOG}.plist").read_text(), "w1")
+        self.assertFalse((self.agents / f"{REAPPLY}.plist").exists())
+        [backup] = self.backups_list()
+        [after] = sorted((backup / "after-install").iterdir())
+        self.assertEqual(channel_of(after / "app"), "dev")
+        self.assertEqual((after / "LaunchAgents" / f"{GATEWAY}.plist").read_text(), "g2")
+        self.assertEqual((after / "LaunchAgents" / f"{REAPPLY}.plist").read_text(), "r1")
+        calls = self.logged("launchctl")
+        self.assertIn(f"bootout {self.domain}/{GATEWAY}", calls)
+        self.assertIn(f"bootstrap {self.domain} {self.agents}/{GATEWAY}.plist", calls)
+        self.assertIn(f"bootout {self.domain}/{REAPPLY}", calls)
+        self.assertFalse([c for c in calls if REAPPLY in c and c.startswith("bootstrap")])
+        self.assertFalse([c for c in calls if WATCHDOG in c])
 
     def test_install_needs_complete_backup(self):
         r = self.run_tool("install-cle", "--yes")
