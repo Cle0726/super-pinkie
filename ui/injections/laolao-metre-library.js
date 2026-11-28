@@ -48,9 +48,10 @@
   }
   // 挂在 window 捕获阶段：比作品库查看器挂在 document 上的 Esc 先跑，一次 Esc 只关预览，不连查看器一起关
   function onPanelKey(event) { if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); closePanel(); } }
-  async function openPreview(path) {
+  // opener：谁打开的就回到谁。WebKit / WKWebView 鼠标点按钮不给焦点，document.activeElement 那时是 body（B63）
+  async function openPreview(path, opener) {
     closePanel();
-    returnFocus = document.activeElement;
+    returnFocus = opener || document.activeElement;
     panel = el('div', 'pk-mlib-preview');
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
@@ -96,14 +97,14 @@
   }
 
   // ---------- 打开：工作台在就开标签，不在就只读预览 ----------
-  async function openInBench(path) {
+  async function openInBench(path, opener) {
     const bench = window.__pinkieWorkbench;
     if (bench && typeof bench.show === 'function' && (await bench.show())) {
       const slash = String(path).replace(/\\/g, '/');   // 只换斜杠，大小写原样（norm 的小写只用来比较）
       await bench.open(bench.rel ? bench.rel(slash) : slash, {pinned: true});
       return 'bench';
     }
-    return openPreview(path).then(() => 'preview');
+    return openPreview(path, opener).then(() => 'preview');
   }
 
   // ---------- 作品库查看器里的键 ----------
@@ -139,7 +140,7 @@
       const relabel = () => paintStrip(strip, key, view);
       relabel();
       // 工作台出来了就收起查看器（全屏遮罩会盖住工作台）；走查看器自己的「点遮罩关闭」，让它的 finish() 收掉 Esc 监听
-      key.addEventListener('click', () => void openInBench(item.path).then(where => {
+      key.addEventListener('click', () => void openInBench(item.path, key).then(where => {
         const mask = actions.closest('.pinkie-art-viewer');
         if (where === 'bench' && mask?.isConnected) mask.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
       }));

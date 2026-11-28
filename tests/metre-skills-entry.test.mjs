@@ -41,40 +41,36 @@ test('G3 real page: Metre settings shows a skills entry that routes to /skills w
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
+  // B101（提速）：每个主题只开一页（原来正例、反例各开一页，每页又是场景 + /settings 两次加载）。
+  // 先跑反例：把按钮换成不带监听的克隆，点了必须还在 /settings；再把原来那个按钮节点放回去（监听在它自己身上，跟着回来），
+  // 跑正例。「不重载」标记在反例之前就打上了，反例要是重载了页面，正例那条也会红。
   for (const theme of ['day', 'night']) {
-    // 正例：卡片在、看得见、点了进 /skills，同一个页面（标记还在）。
-    {
-      const {context, page} = await openMetreSettings(browser, server.origin, theme);
-      try {
-        const got = await page.evaluate(readCard, CARD);
-        assert.ok(got, `${theme}: Metre 设置弹层里没有技能卡`);
-        assert.equal(got.hidden, false, `${theme}: Metre 里技能卡被藏着`);
-        assert.ok(got.h > 40, `${theme}: 技能卡高度 ${got.h}`);
-        assert.match(got.text, /技能/);
-        assert.match(got.text, /打开技能/);
-        assert.doesNotMatch(got.text, /OpenClaw|Claude/);
-        await page.click(BTN);
-        await page.waitForFunction(() => location.pathname === '/skills', null, {timeout: 10_000});
-        await page.waitForSelector('openclaw-skills-page', {timeout: 30_000});
-        assert.equal(await page.evaluate(() => window.__g3NoReload), 1, `${theme}: 跳 /skills 时整页重载了`);
-        await page.waitForFunction(() => document.querySelector('#laolao-user-settings')?.hidden === true, null, {timeout: 10_000});
-      } finally {
-        await context.close();
-      }
-    }
-    // 反例：按钮没接上（克隆不带监听），点了必须还在 /settings。
-    {
-      const {context, page} = await openMetreSettings(browser, server.origin, theme);
-      try {
-        await page.evaluate((sel) => { const b = document.querySelector(sel); b.replaceWith(b.cloneNode(true)); }, BTN);
-        await page.click(BTN);
-        await page.waitForTimeout(800);
-        const where = await page.evaluate(() => location.pathname);
-        assert.ok(where.startsWith('/settings'), `${theme}: 反例没红——没接上的按钮也跳到了 ${where}`);
-        assert.equal(await page.$('openclaw-skills-page'), null, `${theme}: 反例里技能页出现了`);
-      } finally {
-        await context.close();
-      }
+    const {context, page} = await openMetreSettings(browser, server.origin, theme);
+    try {
+      // 反例：按钮没接上（克隆不带监听），点了必须还在 /settings。
+      await page.evaluate((sel) => { const b = document.querySelector(sel); window.__g3Orig = b; b.replaceWith(b.cloneNode(true)); }, BTN);
+      await page.click(BTN);
+      await page.waitForTimeout(800);
+      const where = await page.evaluate(() => location.pathname);
+      assert.ok(where.startsWith('/settings'), `${theme}: 反例没红——没接上的按钮也跳到了 ${where}`);
+      assert.equal(await page.$('openclaw-skills-page'), null, `${theme}: 反例里技能页出现了`);
+      await page.evaluate((sel) => { const dead = document.querySelector(sel); dead.replaceWith(window.__g3Orig); delete window.__g3Orig; }, BTN);
+
+      // 正例：卡片在、看得见、点了进 /skills，同一个页面（标记还在）。
+      const got = await page.evaluate(readCard, CARD);
+      assert.ok(got, `${theme}: Metre 设置弹层里没有技能卡`);
+      assert.equal(got.hidden, false, `${theme}: Metre 里技能卡被藏着`);
+      assert.ok(got.h > 40, `${theme}: 技能卡高度 ${got.h}`);
+      assert.match(got.text, /技能/);
+      assert.match(got.text, /打开技能/);
+      assert.doesNotMatch(got.text, /OpenClaw|Claude/);
+      await page.click(BTN);
+      await page.waitForFunction(() => location.pathname === '/skills', null, {timeout: 10_000});
+      await page.waitForSelector('openclaw-skills-page', {timeout: 30_000});
+      assert.equal(await page.evaluate(() => window.__g3NoReload), 1, `${theme}: 跳 /skills 时整页重载了`);
+      await page.waitForFunction(() => document.querySelector('#laolao-user-settings')?.hidden === true, null, {timeout: 10_000});
+    } finally {
+      await context.close();
     }
   }
 

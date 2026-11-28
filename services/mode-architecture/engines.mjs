@@ -212,6 +212,7 @@ export class EngineService {
     exec = runProcess, spawnImpl = spawn, proxy = localProxy, logger = null, now = () => Date.now()} = {}) {
     Object.assign(this, {root, version, platform, arch, exec, spawnImpl, proxy, logger, now});
     this.child = null;
+    this.starting = null;
     this.port = 0;
     this.error = '';
     this.restarts = [];
@@ -278,9 +279,15 @@ export class EngineService {
     }
   }
 
-  async start() {
+  // 开机自启和引擎台 / 开关可能同时调：正在起的时候后来的人等同一个，不再各下一遍、各起一个 t3（先起的那个会变孤儿进程）。
+  start() {
     this.wanted = true;
-    if (this.child) return this.status();
+    if (this.starting) return this.starting; // 已经 spawn、还没等到 ready 的那一段也算正在起，后来的人等 ready
+    if (this.child) return Promise.resolve(this.status());
+    return this.starting = this.boot().finally(() => { this.starting = null; });
+  }
+
+  async boot() {
     if (!this.installed()) await this.install();
     fs.mkdirSync(this.home, {recursive: true});
     this.port = await freePort();

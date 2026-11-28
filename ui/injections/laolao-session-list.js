@@ -448,7 +448,7 @@
         if (!items.length) return;
         event.preventDefault(); selected = (selected + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
         paint(); results.children[selected]?.scrollIntoView({block: 'nearest'});
-      } else if (event.key === 'Enter' && event.target === input && items.length) { event.preventDefault(); open(items[selected]); }
+      } else if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229 && event.target === input && items.length) { event.preventDefault(); open(items[selected]); }
     };
     input.focus();
   }
