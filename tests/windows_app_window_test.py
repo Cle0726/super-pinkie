@@ -171,6 +171,48 @@ class AppWindowTest(unittest.TestCase):
         self.assertEqual(self.links(), [])
         self.assertNotIn(APP, self.store.ledger())
 
+    # B139：作品标题由网关写进 apps\index.json，这里拿到手时没核过——标题里的
+    # '/' 或 '\' 会被 Path 当成路径分隔符，带够 '../' 就能把 .lnk 写出开始菜单/
+    # 桌面文件夹之外；':' '*' '?' '"' '<' '>' '|' 这些字符在真 Windows 上会让
+    # IPersistFile.Save 报 ERROR_INVALID_NAME（RealShortcutTest 覆盖真的那一半）。
+    def test_install_sanitizes_a_title_that_tries_to_escape_the_shortcut_folder(self):
+        self.install_files(name="evil/../../../escape")
+        out = self.store.install(APP)
+        self.assertTrue(out["ok"], out)
+        # 两个 .lnk 都老老实实留在它们自己的文件夹里，没有任何一段跑到 base 外面。
+        for path in out["shortcuts"]:
+            self.assertTrue(Path(path).resolve().is_relative_to(self.base.resolve()), path)
+        self.assertEqual(self.links(), [os.path.join("Desktop", "evil_.._.._.._escape.lnk"),
+                                        os.path.join("Programs", "碧琪应用", "evil_.._.._.._escape.lnk")])
+
+    def test_install_sanitizes_windows_reserved_filename_characters(self):
+        self.install_files(name='bad:name*here?"<>|')
+        out = self.store.install(APP)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(self.links(), [os.path.join("Desktop", "bad_name_here_____.lnk"),
+                                        os.path.join("Programs", "碧琪应用", "bad_name_here_____.lnk")])
+
+    def test_install_strips_trailing_dots_and_spaces_from_the_title(self):
+        # Windows 本身会把文件名末尾的 '.' 和 ' ' 悄悄去掉；不提前做，"A." 和 "A" 两个
+        # 不同标题会落到同一个 .lnk 上，后装的悄悄盖了前一个。
+        self.install_files(name="名字... ")
+        out = self.store.install(APP)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(self.links(), [os.path.join("Desktop", "名字.lnk"), os.path.join("Programs", "碧琪应用", "名字.lnk")])
+
+    def test_install_falls_back_to_a_default_name_when_the_title_sanitizes_to_nothing(self):
+        self.install_files(name="...")
+        out = self.store.install(APP)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(self.links(), [os.path.join("Desktop", "作品.lnk"), os.path.join("Programs", "碧琪应用", "作品.lnk")])
+
+    def test_install_truncates_an_overlong_title_instead_of_overflowing_the_path(self):
+        self.install_files(name="x" * 300)
+        out = self.store.install(APP)
+        self.assertTrue(out["ok"], out)
+        link_name = Path(out["shortcuts"][0]).name
+        self.assertEqual(link_name, "x" * 120 + ".lnk")
+
     def test_bad_ids_never_reach_the_filesystem(self):
         for bad in ("..", "..\\..\\Windows", "w0123", "W0123456789ABCDE", "", None):
             self.assertIsNone(appwin.read_app(bad, self.root), bad)
@@ -298,6 +340,17 @@ class RealShortcutTest(unittest.TestCase):
         self.assertTrue(self.store.install(APP)["ok"])
         icon = self.read_link(self.base / "桌面" / "单词小游戏.lnk")["icon"]
         self.assertEqual(icon, (str(self.root / APP / "icon.ico"), 0))
+
+    # B139：标题里带 Windows 保留字符时，之前会把它原样传给 IPersistFile.Save，
+    # 真机上报 ERROR_INVALID_NAME（E_INVALIDARG），「装到桌面」直接失败。
+    # 这里用真的 IShellLinkW/IPersistFile 走一遍，确认清洗后的标题真的存得下来。
+    def test_install_with_reserved_characters_in_the_title_saves_on_real_windows(self):
+        self.put(APP, 'bad:name*here?"<>|')
+        out = self.store.install(APP)
+        self.assertTrue(out["ok"], out)
+        saved = self.base / "桌面" / "bad_name_here_____.lnk"
+        self.assertTrue(saved.is_file())
+        self.assertEqual(self.read_link(saved)["target"], str(self.exe))
 
 
 if __name__ == "__main__":
