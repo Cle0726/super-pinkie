@@ -59,50 +59,63 @@ test.after(async () => {
   ctx.installed.cleanup();
 });
 
-// 打开场景 → 等浮标 → （反例时去掉 B97 规则）→ 打开快捷键一览 → 看浮标中心那一点最上层是谁。
-async function probe(t, scene, theme, {dropFix = false} = {}) {
+// 打开场景 → 等浮标 → 打开快捷键一览 → 看浮标中心那一点最上层是谁；alsoDropFix 时同一页里弹窗不关，原地拿掉 B97 规则再看一次（反例）。
+async function probe(t, scene, theme, {alsoDropFix = false} = {}) {
   const c = await setup();
   if (c.skip) { t.skip(c.skip); return null; }
   const {context, page, pageErrors} = await openRealScenePage(c.browser, c.server.origin, scene, theme, {initScript: fakeWork});
+  const look = () => page.evaluate(() => {
+    const panel = document.getElementById('pinkie-work-panel');
+    const mask = document.querySelector('.pinkie-shortcuts')?.closest('.laolao-modal-mask');
+    const pill = panel.querySelector('.pinkie-work__pill') || panel;
+    const r = pill.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return {
+      mode: document.documentElement.getAttribute('data-laolao-mode') || '',
+      pillText: (pill.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+      pillZ: getComputedStyle(panel).zIndex,
+      maskZ: mask ? getComputedStyle(mask).zIndex : '',
+      topIsPanel: Boolean(top && panel.contains(top)),
+      topInMask: Boolean(top && mask && mask.contains(top)),
+    };
+  });
   try {
     await page.setViewportSize({width: 1440, height: 900});
     await page.evaluate(() => window.__pinkieMetreBoard?.close?.()).catch(() => {});
     await page.waitForFunction(() => { const p = document.getElementById('pinkie-work-panel'); if (!p || p.hidden) return false; const r = p.getBoundingClientRect(); return r.width > 0 && r.height > 0; }, null, {timeout: 20_000});
-    if (dropFix) {
-      await page.evaluate(() => {
-        for (const s of document.querySelectorAll('style')) {
-          if (!/laolao-modal-mask/.test(s.textContent || '')) continue;
-          s.textContent = s.textContent.replace(/body:has\(> \.laolao-modal-mask\)[^{]*\{z-index:99997\}/g, '');
-        }
-      });
-    }
     await page.evaluate(() => window.PinkieArtifacts?.openShortcuts?.());
     await page.waitForSelector('.laolao-modal-mask .pinkie-shortcuts', {timeout: 10_000});
     await page.waitForTimeout(400);
-    return await page.evaluate(() => {
-      const panel = document.getElementById('pinkie-work-panel');
-      const mask = document.querySelector('.pinkie-shortcuts')?.closest('.laolao-modal-mask');
-      const pill = panel.querySelector('.pinkie-work__pill') || panel;
-      const r = pill.getBoundingClientRect();
-      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return {
-        mode: document.documentElement.getAttribute('data-laolao-mode') || '',
-        pillText: (pill.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
-        pillZ: getComputedStyle(panel).zIndex,
-        maskZ: mask ? getComputedStyle(mask).zIndex : '',
-        topIsPanel: Boolean(top && panel.contains(top)),
-        topInMask: Boolean(top && mask && mask.contains(top)),
-      };
-    }).then((state) => ({state, errors: pageErrors.map((e) => String(e?.message || e))}));
+    const state = await look();
+    const errors = pageErrors.map((e) => String(e?.message || e));
+    let dropped = null;
+    if (alsoDropFix) {
+      const removed = await page.evaluate(() => {
+        let n = 0;
+        for (const s of document.querySelectorAll('style')) {
+          if (!/laolao-modal-mask/.test(s.textContent || '')) continue;
+          const before = s.textContent;
+          s.textContent = before.replace(/body:has\(> \.laolao-modal-mask\)[^{]*\{z-index:99997\}/g, '');
+          if (s.textContent !== before) n++;
+        }
+        return n;
+      });
+      await page.waitForTimeout(400);
+      dropped = {...(await look()), removed};
+    }
+    return {state, errors, dropped};
   } finally {
     await context.close();
   }
 }
 
+// 反例和 metre-board day 正例共用一个页面上下文（正例先量完，再原地拿掉规则），省掉一次冷启动。
+let negative = null;
 for (const [scene, theme] of [['metre-board', 'day'], ['metre-board', 'night'], ['home-project', 'day'], ['home-project', 'night']]) {
   test(`B97 ${scene} ${theme}：快捷键一览开着时工作浮标在遮罩下面，不压弹窗`, async (t) => {
-    const r = await probe(t, scene, theme);
+    const r = await probe(t, scene, theme, {alsoDropFix: scene === 'metre-board' && theme === 'day'});
     if (!r) return;
+    if (r.dropped) negative = r.dropped;
     assert.equal(r.state.topIsPanel, false, `浮标还压在弹窗上：${JSON.stringify(r.state)}`);
     assert.equal(r.state.topInMask, true, `浮标中心那一点应落在遮罩 / 弹窗里：${JSON.stringify(r.state)}`);
     assert.ok(Number(r.state.pillZ) < Number(r.state.maskZ), `浮标 z-index 应低于遮罩：${JSON.stringify(r.state)}`);
@@ -111,8 +124,9 @@ for (const [scene, theme] of [['metre-board', 'day'], ['metre-board', 'night'], 
 }
 
 test('B97 反例：拿掉那两条规则，浮标照旧压在快捷键一览上', async (t) => {
-  const r = await probe(t, 'metre-board', 'day', {dropFix: true});
-  if (!r) return;
-  assert.equal(r.state.topIsPanel, true, `反例里浮标应在最上层：${JSON.stringify(r.state)}`);
-  assert.ok(Number(r.state.pillZ) > Number(r.state.maskZ), `反例里浮标 z-index 应高于遮罩：${JSON.stringify(r.state)}`);
+  const c = await setup();
+  if (c.skip) { t.skip(c.skip); return; }
+  assert.ok(negative, 'metre-board day 那一页没跑到反例（上面的用例在拿掉规则前就出错了）');
+  assert.equal(negative.topIsPanel, true, `反例里浮标应在最上层：${JSON.stringify(negative)}`);
+  assert.ok(Number(negative.pillZ) > Number(negative.maskZ), `反例里浮标 z-index 应高于遮罩：${JSON.stringify(negative)}`);
 });

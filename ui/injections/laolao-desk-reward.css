@@ -125,7 +125,7 @@
 #pinkie-study-desk .pk-drill-progress{position:relative;flex:1;height:12px;border-radius:99px;background:var(--hair);overflow:hidden}
 #pinkie-study-desk .pk-drill-ink{position:absolute;left:0;top:0;bottom:0;width:100%;border-radius:inherit;background:rgba(244,114,170,.72);transform:scaleX(0);transform-origin:left center}
 #pinkie-study-desk[data-theme="night"] .pk-drill-ink{background:rgba(240,103,159,.78)}
-#pinkie-study-desk .pk-drill-nib{position:absolute;left:0;top:50%;width:12px;height:12px;margin-top:-6px;color:var(--pink)}
+#pinkie-study-desk .pk-drill-nib{position:absolute;left:0;top:50%;width:12px;height:12px;margin-top:-6px;color:var(--pink-ink)}
 #pinkie-study-desk .pk-drill-nib svg{display:block;width:12px;height:12px}
 
 @container drill (max-width:640px){
