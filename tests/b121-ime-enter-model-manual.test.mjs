@@ -1,5 +1,8 @@
 // B121：Windows 中文输入法（微软拼音）组字时按 Enter 上屏，设置页「模型服务 → 添加服务商 → 列表里没有？手动填模型名，回车添加」
-// 不能把这一下当成「添加」。WebView2 / Chromium：keydown（isComposing=true、keyCode 229）先到、compositionend 随后；
+// 不能把这一下当成「添加」。
+// 真窗口实测（B121 探针，WebView2 + 微软拼音，11-28）：上屏那一下 keydown 是 key="Process"、keyCode 229、isComposing=true，
+// 不是 key="Enter"，所以 Windows 上本来就不误触；下面 windows 顺序锁住这个真实形状。守卫防的是 key=Enter 也带组字标记的情况：
+// Chromium 合成：keydown（isComposing=true、keyCode 229）先到、compositionend 随后；
 // WebKit：compositionend 先到、随后的 keydown 是 isComposing=false + keyCode 229。两种顺序都要拦住。
 // Playwright 没有 IME 接口：真浏览器加载真的 laolao-model-setup.js，网关用桩，按两种顺序派发合成事件，数模型行。
 import {test, before, after} from 'node:test';
@@ -41,7 +44,8 @@ window.b121.compose = (steps) => {
 window.b121.commit = (order, data) => {
   const el = input();
   const end = () => el.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true, data}));
-  const down = key(order === 'webkit' ? {isComposing: false, keyCode: 229} : {isComposing: true, keyCode: 229});
+  const down = key(order === 'windows' ? {key: 'Process', isComposing: true, keyCode: 229}
+    : order === 'webkit' ? {isComposing: false, keyCode: 229} : {isComposing: true, keyCode: 229});
   if (order === 'webkit') { end(); el.dispatchEvent(down); } else { el.dispatchEvent(down); end(); }
   return {keyCode: down.keyCode};
 };
@@ -101,7 +105,7 @@ test('B121 前提：手动填模型名框的 Enter 守卫认 isComposing / 229�
 
 test('B121 真浏览器：手动填模型名组字按 Enter 上屏不添加；上屏后再按 Enter 才添加一个', {timeout: 60_000}, async (t) => {
   await withBrowser(t, async (browser) => {
-    for (const order of ['chromium', 'webkit']) {
+    for (const order of ['windows', 'chromium', 'webkit']) {
       const tab = await open(browser);
       const tag = `${engine} / ${order} 顺序`;
       const {down, after} = await composeCommit(tab, order);
