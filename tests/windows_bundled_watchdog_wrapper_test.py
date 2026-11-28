@@ -36,8 +36,24 @@ FAKE_WATCHDOG = (
 DRIVER = r"""
 $ErrorActionPreference = 'Stop'
 $global:calls = @()
-function Unregister-ScheduledTask { [CmdletBinding(SupportsShouldProcess)] param($TaskName) $global:calls += "task:$TaskName" }
-function Remove-ItemProperty { [CmdletBinding()] param($Path, $Name) $global:calls += "run:$Path|$Name" }
+# Simulated state, never the real task / registry. B109_TASK / B109_RUN:
+#   present  - registered, removal works
+#   absent   - not registered (not-found errors, same types as the real cmdlets)
+#   deny     - registered, removal refused (access denied), so it stays
+#   hidden   - even looking it up is refused
+$global:task = if ($env:B109_TASK) { $env:B109_TASK } else { 'present' }
+$global:run = if ($env:B109_RUN) { $env:B109_RUN } else { 'absent' }
+function New-Fail($cmdlet, $category, $target) {
+  $cmdlet.ThrowTerminatingError((New-Object Management.Automation.ErrorRecord((New-Object Exception "simulated $category"), 'B109', $category, $target)))
+}
+function Get-ScheduledTask { [CmdletBinding()] param($TaskName)
+  switch ($global:task) { 'absent' { New-Fail $PSCmdlet 'ObjectNotFound' $TaskName } 'hidden' { New-Fail $PSCmdlet 'PermissionDenied' $TaskName } default { [pscustomobject]@{ TaskName = $TaskName } } } }
+function Unregister-ScheduledTask { [CmdletBinding(SupportsShouldProcess)] param($TaskName) $global:calls += "task:$TaskName"
+  switch ($global:task) { 'present' { $global:task = 'absent' } 'absent' { New-Fail $PSCmdlet 'ObjectNotFound' $TaskName } default { New-Fail $PSCmdlet 'PermissionDenied' $TaskName } } }
+function Get-ItemProperty { [CmdletBinding()] param($Path, $Name)
+  switch ($global:run) { 'absent' { throw (New-Object Management.Automation.PSArgumentException "Property $Name does not exist") } 'hidden' { New-Fail $PSCmdlet 'PermissionDenied' $Path } default { [pscustomobject]@{ $Name = 'x' } } } }
+function Remove-ItemProperty { [CmdletBinding()] param($Path, $Name) $global:calls += "run:$Path|$Name"
+  switch ($global:run) { 'present' { $global:run = 'absent' } 'absent' { throw (New-Object Management.Automation.PSArgumentException "Property $Name does not exist") } default { New-Fail $PSCmdlet 'PermissionDenied' $Path } } }
 . $env:B109_COMMAND
 switch ($env:B109_STEP) {
   'write' {
@@ -46,8 +62,9 @@ switch ($env:B109_STEP) {
     @{ wrapper = $wrapper; args = (New-BundledWatchdogArguments $wrapper) } | ConvertTo-Json -Compress
   }
   'run' {
+    $global:LASTEXITCODE = 0
     & (Get-BundledWatchdogWrapperPath)
-    @{ calls = @($global:calls) } | ConvertTo-Json -Compress
+    @{ calls = @($global:calls); exit = $global:LASTEXITCODE; task = $global:task; run = $global:run } | ConvertTo-Json -Compress
   }
 }
 """
@@ -74,9 +91,9 @@ class BundledWatchdogWrapper(unittest.TestCase):
         self.written = self.ps("write")
         self.wrapper = Path(self.written["wrapper"])
 
-    def ps(self, step):
+    def ps(self, step, task="present", run="absent"):
         env = dict(os.environ, PINKIE_STATE_ROOT=str(self.state), B109_COMMAND=str(COMMAND),
-                   B109_INSTALL=str(self.install), B109_STEP=step)
+                   B109_INSTALL=str(self.install), B109_STEP=step, B109_TASK=task, B109_RUN=run)
         out = subprocess.run(
             [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(self.driver)],
             env=env, capture_output=True, timeout=60,
@@ -104,11 +121,51 @@ class BundledWatchdogWrapper(unittest.TestCase):
 
     def test_app_folder_deleted_removes_task_run_value_and_itself(self):
         shutil.rmtree(self.install)
-        calls = self.ps("run")["calls"]
-        self.assertIn("task:SuperPinkieGatewayWatchdog", calls)
-        self.assertIn("run:HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run|SuperPinkieGatewayWatchdog", calls)
+        out = self.ps("run", task="present", run="present")
+        self.assertIn("task:SuperPinkieGatewayWatchdog", out["calls"])
+        self.assertIn("run:HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run|SuperPinkieGatewayWatchdog", out["calls"])
+        self.assertEqual((out["task"], out["run"]), ("absent", "absent"))
+        self.assertEqual(out["exit"], 0)
         self.assertFalse(self.wrapper.exists())
         self.assertFalse((self.state / "ran.txt").exists())
+
+    def test_only_task_registered_still_removes_itself(self):
+        # The usual case: the task exists, there was never a Run value (not-found is fine).
+        shutil.rmtree(self.install)
+        out = self.ps("run", task="present", run="absent")
+        self.assertEqual(out["exit"], 0)
+        self.assertFalse(self.wrapper.exists())
+
+    def test_task_removal_refused_keeps_the_wrapper_for_a_retry(self):
+        # win-coord on #585: if unregistering fails but the wrapper is deleted, the task
+        # is left pointing at a script that no longer exists, which is what B109 fixes.
+        shutil.rmtree(self.install)
+        out = self.ps("run", task="deny", run="present")
+        self.assertIn("task:SuperPinkieGatewayWatchdog", out["calls"])
+        self.assertEqual(out["task"], "deny")
+        self.assertEqual(out["exit"], 1)
+        self.assertTrue(self.wrapper.is_file(), "the wrapper must stay so the task can retry next minute")
+
+    def test_run_value_removal_refused_keeps_the_wrapper_for_a_retry(self):
+        shutil.rmtree(self.install)
+        out = self.ps("run", task="absent", run="deny")
+        self.assertEqual(out["exit"], 1)
+        self.assertTrue(self.wrapper.is_file(), "the Run value still points at it; keep it for the next sign-in")
+
+    def test_task_lookup_refused_is_not_taken_as_gone(self):
+        # Cannot confirm the task is gone: not the same as not-found.
+        shutil.rmtree(self.install)
+        out = self.ps("run", task="hidden", run="absent")
+        self.assertEqual(out["exit"], 1)
+        self.assertTrue(self.wrapper.is_file())
+
+    def test_retry_after_a_refusal_cleans_up(self):
+        shutil.rmtree(self.install)
+        self.assertEqual(self.ps("run", task="deny", run="absent")["exit"], 1)
+        self.assertTrue(self.wrapper.is_file())
+        out = self.ps("run", task="present", run="absent")
+        self.assertEqual(out["exit"], 0)
+        self.assertFalse(self.wrapper.exists())
 
     def test_folder_still_there_without_watchdog_is_left_alone(self):
         # Mid copy of an update: the folder exists but the file is not in yet.
