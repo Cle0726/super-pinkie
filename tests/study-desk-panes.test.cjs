@@ -4,15 +4,27 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const output=fs.mkdtempSync(path.join(os.tmpdir(),'study-desk-complete-'));
-let h,shared=null;
+let h,shared=null,harness=null,desk=null,currentHandler=()=>({});
 test.before(async()=>h=await import('../tools/study-desk/harness.mjs'));
-// 整个文件只起一个 Chrome：启动的 promise 只建一次，失败会被记住并在每个用例里重抛（不变成跳过）。
-// 每个用例仍各开各的 context（各自的 localStorage、视口和页面错误），用完就关，状态不串。
+// 整个文件只起一个 Chrome、一个 harness：启动的 promise 只建一次，失败会被记住并在每个用例里重抛（不变成跳过）。
+// harness 的 handler 转发给 currentHandler，每个用例进学习台前换成自己的 handler 并清空 server.calls。
+// 前 4 个 1440×900 用例共用一个 context / 页面，每例先回同源空页、清存储和页面错误再进学习台；挂起动画帧那例照旧独立 context。
 function sharedChrome(){
  shared??=h.playwright().chromium.launch({headless:true,channel:'chrome'}).then(browser=>({browser}),error=>({error}));
  return shared.then(got=>{if(got.error)throw got.error;return got.browser;});
 }
-test.after(async()=>{if(!shared)return;const got=await shared;if(got.browser)await got.browser.close();});
+function sharedHarness(){
+ harness??=h.startHarness({handler:(method,p)=>currentHandler(method,p),legacyUI:true}).then(server=>({server}),error=>({error}));
+ return harness.then(got=>{if(got.error)throw got.error;return got.server;});
+}
+test.after(async()=>{
+ try{await desk?.context.close();}
+ finally{
+  try{if(shared){const got=await shared;if(got.browser)await got.browser.close();}}
+  finally{if(harness){const got=await harness;if(got.server)await got.server.close();}}
+ }
+});
+function useHandler(server,custom){currentHandler=custom;server.calls.length=0;}
 function handler(){
  let serial=0;
  const words=[['continue','康听扭','继续；（循环里）跳过本次'],['ambulance','安比鲁冷斯','救护车'],['apply for','额普莱 佛','申请'],['pest','拍斯特','害虫；讨厌的人'],['deadline','待的赖恩','截止日期']].map(([word,homophone,meaning],i)=>({id:'w'+i,word,homophone,meaning,status:'ready',reviewCount:i,reviewLevel:i%4,exams:[{id:'pretco-b',tier:'核心'}],collocations:[{en:['continue working','call an ambulance','apply for a job','','meet the deadline'][i],zh:''}]}));
@@ -34,17 +46,21 @@ function handler(){
   return{};
  };
 }
-async function run(fn,{width=1440,custom=handler()}={}){
- const server=await h.startHarness({handler:custom,legacyUI:true});
+async function deskPage(server){
  const browser=await h.launchWithHarness(server,sharedChrome);
- let context;
- try{
-  context=await browser.newContext({viewport:{width,height:900}});
-  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(server.url);await page.waitForFunction(()=>!!window.__pinkieStudyDesk);
-  await page.evaluate(()=>__pinkieStudyDesk.go('today'));await page.locator('.desk-page .view').first().waitFor();
-  await fn(page,server);assert.deepEqual(errors,[]);
- }finally{try{await context?.close();}finally{await server.close();}}
+ if(!desk){const context=await browser.newContext({viewport:{width:1440,height:900}});await context.route('**/__blank',r=>r.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>blank</title>'}));const d={context,page:await context.newPage(),errors:[]};d.page.on('pageerror',e=>d.errors.push(e.message));desk=d;}
+ return desk;
+}
+async function run(fn,{custom=handler()}={}){
+ const server=await sharedHarness();
+ const {context,page,errors}=await deskPage(server);
+ // 干净复位：先离开学习台到同源空页（context.route 回 200 空文档，无脚本；harness 回 404 时 Chromium 会报 ERR_HTTP_RESPONSE_CODE_FAILURE，about:blank 又读不了 localStorage），上一例的请求随之中止；清掉存储、cookie、视口和页面错误，再换 handler 进学习台。
+ await page.goto(new URL('/__blank',server.url).href);
+ await page.evaluate(()=>{localStorage.clear();sessionStorage.clear();});await context.clearCookies();await page.setViewportSize({width:1440,height:900});
+ useHandler(server,custom);errors.length=0;
+ await page.goto(server.url);await page.waitForFunction(()=>!!window.__pinkieStudyDesk);
+ await page.evaluate(()=>__pinkieStudyDesk.go('today'));await page.locator('.desk-page .view').first().waitFor();
+ await fn(page,server);assert.deepEqual(errors,[]);
 }
 // 11-08：学习台改成一次一页，「两张卡各做一组题」和「对开装订」两条多卡用例随功能删除。
 test('one page at a time: the chat card docks on the right, old multi-card workspaces migrate, and there are no drag handles',{timeout:60000},async()=>{
@@ -103,8 +119,8 @@ test('notes review opens the drill, shows the question before the answer, and fi
 });
 test('paper remains visible when a background WebView suspends its first animation frame',{timeout:45000},async()=>{
  for(const engine of ['chromium','webkit']){
-  const server=await h.startHarness({handler:handler(),legacyUI:true});
-  // Chrome 用文件内共用的那一个；WebKit 只在这一例用到，照旧单独起、用完就关。
+  const server=await sharedHarness();useHandler(server,handler());
+  // Chrome 用文件内共用的那一个；WebKit 只在这一例用到，照旧单独起、用完就关。harness 共用，由文件级 after 关。
   const own=engine!=='chromium';
   const browser=await h.launchWithHarness(server,own?()=>h.playwright()[engine].launch({headless:true}):sharedChrome);
   let context;
@@ -119,6 +135,6 @@ test('paper remains visible when a background WebView suspends its first animati
    await p.evaluate(()=>__pinkieStudyDesk.focusPane(__pinkieStudyDesk.pages().find(x=>x.view==='deskchat').id));
    const marginContent=await p.locator('.side .ln,.side .fig img').evaluateAll(ns=>ns.map(n=>({opacity:getComputedStyle(n).opacity,animation:getComputedStyle(n).animationName})));
    assert.ok(marginContent.length>1);assert.ok(marginContent.every(x=>x.opacity==='1'&&x.animation==='none'),engine+' freezes the page-edge note and sticker in their readable state');
-  }finally{try{try{await context?.close();}finally{if(own)await browser.close();}}finally{await server.close();}}
+  }finally{try{await context?.close();}finally{if(own)await browser.close();}}
  }
 });
