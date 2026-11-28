@@ -37,7 +37,7 @@
 #pinkie-study-desk .pinkie-desk-notes .n-segment button{border:0;background:none;border-radius:99px;height:30px;padding:0 12px;font-size:13px;color:var(--ink-2)}
 #pinkie-study-desk .pinkie-desk-notes .n-segment button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:var(--lift)}
 #pinkie-study-desk .pinkie-desk-notes .n-search{display:flex;align-items:center;gap:8px;width:220px;height:36px;padding:0 12px;border:1px solid var(--hair-2);border-radius:99px;background:var(--card);color:var(--ink-2)}
-#pinkie-study-desk .pinkie-desk-notes .n-search input{min-width:0;width:100%;border:0;background:none;color:var(--ink);font:14px var(--sans);outline:none}
+#pinkie-study-desk .pinkie-desk-notes .n-search input{min-width:0;width:100%;border:0;background:none;color:var(--ink);font:14px var(--sans);outline:none}#pinkie-study-desk .pinkie-desk-notes .n-search input::placeholder{color:var(--ink-2)}
 #pinkie-study-desk .pinkie-desk-notes .n-scroll{flex:1;min-height:0;overflow:auto;padding:0 28px 32px}
 #pinkie-study-desk .pinkie-desk-notes .n-cards{columns:3 300px;column-gap:16px}
 #pinkie-study-desk .pinkie-desk-notes .n-card{break-inside:avoid;margin:0 0 16px;background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:16px 18px 12px;box-shadow:var(--lift);display:flex;flex-direction:column;gap:8px}
