@@ -351,7 +351,14 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                         if found:
                             try:
                                 with open(found[0],'rb'):
-                                    lock_seen.append(found[0]);time.sleep(6)
+                                    lock_seen.append(found[0])
+                                    # Hold until the helper's rename has actually met the lock. A fixed
+                                    # 6 s hold raced the process-stop phase before the rename (about 8 s
+                                    # on a Windows dev box), so the lock was gone before it was tested.
+                                    # The helper retries the swap for 90 s; give up at 60 s.
+                                    log_path=state/'logs/updater.log';text='';held_until=time.monotonic()+60
+                                    while time.monotonic()<held_until and 'unpacked new version is busy, retrying' not in text:
+                                        time.sleep(.2);text=read_updater_log(log_path,text)
                                 return
                             except OSError:pass  # still being written; try again
                         time.sleep(.02)
