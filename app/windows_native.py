@@ -508,6 +508,28 @@ class WindowsNative:
         self.emit({"type": "quickAsk", "mode": self.mode, "text": text})
 
     # ---------- tray thread ----------
+    def quit_app(self):
+        """Tray 「退出碧琪」: close the main window; closing it ends the app.
+
+        When the window cannot be destroyed (already gone, renderer dead), the
+        app still has to go -- but not by a bare os._exit(0): that skips the
+        gateway close, the exit handlers (the FanVPN system-proxy restore: a PAC
+        left pointing at a dead port means no network after the next boot), the
+        tray icon and the WebView2 cleanup, and the log never says why. The
+        desktop hands us its full exit path as `_exit_fallback(reason)`; it runs
+        on its own thread because it stops this tray thread on the way out.
+        """
+        window = getattr(self._bridge, "_window", None)
+        try:
+            window.destroy()
+            return
+        except Exception as error:  # noqa: BLE001 - quitting must not stop here
+            reason = f"tray quit: window destroy failed: {error!r}"
+        fallback = getattr(self._bridge, "_exit_fallback", None)
+        if fallback is None:
+            os._exit(0)
+        threading.Thread(target=fallback, args=(reason,), name="pinkie-quit-fallback").start()
+
     def start(self):
         if os.name != "nt" or self._thread is not None:
             return
@@ -684,11 +706,7 @@ class WindowsNative:
             elif command_id == MENU_SETTINGS:
                 self.show_main(); self.emit({"type": "openSettings"})
             elif command_id == MENU_QUIT:
-                window = getattr(self._bridge, "_window", None)
-                try:
-                    window.destroy()
-                except Exception:
-                    os._exit(0)
+                self.quit_app()
             elif command_id >= MENU_RUNNING_BASE and command_id - MENU_RUNNING_BASE < len(self._running):
                 self.show_main(); self.emit({"type": "openSession", "sessionKey": self._running[command_id - MENU_RUNNING_BASE][0]})
 
