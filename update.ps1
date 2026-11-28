@@ -50,8 +50,18 @@ $before = git rev-parse HEAD 2>$null
 Write-Host "==> 当前版本: $(Get-Content VERSION -ErrorAction SilentlyContinue) ($($before.Substring(0,7)))"
 Write-Host "==> 拉取更新 from origin/$Branch"
 
+# $ErrorActionPreference = "Stop" does not stop on a failed git: a native
+# command only sets $LASTEXITCODE, so every git step below checks it.
 git fetch origin $Branch
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "error: git fetch origin $Branch 失败（退出码 $LASTEXITCODE），请检查网络后重试。"
+  exit 1
+}
 $behind = (git rev-list "HEAD..origin/$Branch" --count 2>$null | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $behind -notmatch '^\d+$') {
+  Write-Host "error: 读不出 origin/$Branch 比本地新几个提交，更新已停止。"
+  exit 1
+}
 if ($behind -eq "0") {
   Write-Host "    已是最新，无需更新。"
   if ($SyncPersonas) {
@@ -61,13 +71,36 @@ if ($behind -eq "0") {
   exit 0
 }
 
-try {
-  git pull --ff-only origin $Branch
-} catch {
+# A failed git pull does not throw, so the old try/catch never reached its
+# stash-and-retry branch. Check the exit code and only stash when there are
+# local changes to tracked files; any other failure stops the update.
+git pull --ff-only origin $Branch
+if ($LASTEXITCODE -ne 0) {
+  $dirty = (git status --porcelain --untracked-files=no 2>$null | Out-String).Trim()
+  if (-not $dirty) {
+    Write-Host "error: git pull --ff-only origin $Branch 失败（退出码 $LASTEXITCODE），本地分支可能和 origin/$Branch 分叉了，更新已停止。"
+    exit 1
+  }
   Write-Host "    本地有未提交改动，暂存后重试"
-  git stash push -m "super-pinkie-update-$(Get-Date -Format 'yyyyMMddHHmmss')" | Out-Null
+  $stashName = "super-pinkie-update-$(Get-Date -Format 'yyyyMMddHHmmss')"
+  git stash push -m $stashName | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "error: 暂存本地改动失败（退出码 $LASTEXITCODE），更新已停止，本地文件没动。"
+    exit 1
+  }
   git pull --ff-only origin $Branch
+  $pullCode = $LASTEXITCODE
   git stash pop | Out-Null
+  $popCode = $LASTEXITCODE
+  if ($pullCode -ne 0) {
+    Write-Host "error: 暂存后 git pull 仍失败（退出码 $pullCode），更新已停止。"
+    if ($popCode -ne 0) { Write-Host "       本地改动还在 git stash 里（$stashName），请手动 git stash pop。" }
+    exit 1
+  }
+  if ($popCode -ne 0) {
+    Write-Host "error: 已拉到最新，但恢复本地改动时冲突（退出码 $popCode）。改动还在 git stash 里（$stashName），请手动处理后再运行 update.ps1。"
+    exit 1
+  }
 }
 
 $after = git rev-parse HEAD 2>$null
