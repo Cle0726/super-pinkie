@@ -510,8 +510,37 @@ class SnapshotStore:
             LOG.warning("快照读取失败 %s: %s", self.path, exc)
             return None
 
-    def clear(self) -> None:
+    # B109: what we wrote, so a later start can tell "still ours" from "someone
+    # else's loopback proxy" (another app on another port / PAC path can keep our
+    # ProxyOverride, and FanVPN itself may have bound a non-default port).
+    @property
+    def applied_path(self) -> Path:
+        return self.path.with_name(self.path.stem + ".applied.json")
+
+    def save_applied(self, values: Dict[str, Any], port: int) -> None:
+        """记下刚写进注册表的受管值和要探的端口。启动时当前值和它逐项相同才算我们的。"""
+        self.applied_path.parent.mkdir(parents=True, exist_ok=True)
+        self.applied_path.write_text(
+            json.dumps({"values": dict(values), "port": int(port)}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def load_applied(self) -> Optional[Dict[str, Any]]:
+        if not self.applied_path.is_file():
+            return None
         try:
-            self.path.unlink()
-        except OSError:
-            pass
+            raw = json.loads(self.applied_path.read_text(encoding="utf-8"))
+            values, port = raw["values"], int(raw["port"])
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            LOG.warning("接管记录读取失败 %s: %s", self.applied_path, exc)
+            return None
+        if not isinstance(values, dict):
+            return None
+        return {"values": values, "port": port}
+
+    def clear(self) -> None:
+        for path in (self.path, self.applied_path):
+            try:
+                path.unlink()
+            except OSError:
+                pass
