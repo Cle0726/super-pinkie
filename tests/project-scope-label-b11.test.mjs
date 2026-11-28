@@ -75,22 +75,28 @@ async function measure(p) {
   });
 }
 
+// 整个文件只开 1 个浏览器、1 个页面：每次 setContent 都整页换掉文档，测试之间不留状态。
 let shared;
-after(async () => { const b = await shared; await b?.close?.(); });
+after(async () => {
+  const s = await shared;
+  try { await s?.page?.close(); } finally { await s?.browser?.close(); }
+});
 async function start() {
   let lib;
   try { lib = playwright(); } catch { return {why: 'Playwright is not installed here'}; }
   for (const options of [{}, {channel: 'chrome'}, {channel: 'msedge'}]) {
-    try { return await lib.chromium.launch({headless: true, ...options}); } catch {}
+    let browser;
+    try { browser = await lib.chromium.launch({headless: true, ...options}); } catch { continue; }
+    try { return {browser, page: await browser.newPage({viewport: {width: 640, height: 200}})}; }
+    catch (error) { await browser.close(); throw error; }
   }
   return {why: 'no Chromium browser here'};
 }
 async function withPage(fn) {
   shared ??= start();
-  const b = await shared;
-  if (b.why) return b.why;
-  const p = await b.newPage({viewport: {width: 640, height: 200}});
-  try { await fn(p); } finally { await p.close(); }
+  const s = await shared;
+  if (s.why) return s.why;
+  await fn(s.page);
   return '';
 }
 

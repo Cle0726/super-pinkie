@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   if (window.__pinkieMetreLock) return;
-
+  const zh = (error, fallback) => { const raw = String(error?.message ?? error ?? ''); globalThis.console?.warn?.('[pinkie-metre-lock]', error); return /[㐀-鿿]/.test(raw) && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}|\n\s+at\s|[{}]|undefined|\[object/.test(raw) ? raw : fallback; }; // P4：英文原文 / 堆栈 / JSON / undefined / [object Object] 不上界面，原文进日志；同一规则另有两份在 laolao-metre-perm.js、laolao-metre-allow.js，改规则三处一起改
   const ACTIVE_MODE_KEY = 'laolao:active-mode';
   let cachedStatus = null;
   let activePrompt = null;
@@ -213,7 +213,7 @@
         }
         input.value = '';
       } catch (err) {
-        errorEl.textContent = err?.message || '验证失败，请再试一次。';
+        errorEl.textContent = zh(err, '验证失败，请再试一次。');
       } finally {
         busy = false;
         submitBtn.textContent = '解锁';
@@ -296,7 +296,7 @@
     try {
       status = await fetchStatus(true);
     } catch (err) {
-      window.__laolaoToast?.(err?.message || '还没连上后台服务，暂时打不开 Metre');
+      window.__laolaoToast?.(zh(err, '还没连上后台服务，暂时打不开 Metre'));
       return false;
     }
     if (!status.required || status.unlocked) return true;

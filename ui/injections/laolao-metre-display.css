@@ -27,26 +27,11 @@ html[data-laolao-mode="metre"] .chat-thread .chat-message-image {
 
 /* B-I6 坏图：只有加载失败的 img 才会画出 ::after */
 html[data-laolao-mode="metre"] .chat-thread .chat-message-image { position: relative; color: transparent; }
-html[data-laolao-mode="metre"] .chat-thread .chat-message-image::after {
-  content: "图片打不开";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  border: 1px dashed var(--metre-line-strong);
-  background: var(--metre-surface);
-  color: var(--metre-muted);
-  font: 400 12px/1.2 var(--metre-sans);
-}
+html[data-laolao-mode="metre"] .chat-thread .chat-message-image::after { content: "图片打不开"; position: absolute; inset: 0; display: grid; place-items: center; border: 1px dashed var(--metre-line-strong); background: var(--metre-surface); color: var(--metre-muted); font: 400 12px/1.2 var(--metre-sans); }
 
 /* B-I2 看图器换成 Metre 的颜色 */
 html[data-laolao-mode="metre"] .laolao-image-viewer { background: color-mix(in srgb, var(--metre-text) 48%, transparent); }
-html[data-laolao-mode="metre"] .laolao-image-viewer__image {
-  border: 1px solid var(--metre-line-strong);
-  border-radius: 4px;
-  background: var(--metre-bg);
-  box-shadow: 0 18px 60px color-mix(in srgb, var(--metre-text) 28%, transparent);
-}
+html[data-laolao-mode="metre"] .laolao-image-viewer__image { border: 1px solid var(--metre-line-strong); border-radius: 4px; background: var(--metre-bg); box-shadow: 0 18px 60px color-mix(in srgb, var(--metre-text) 28%, transparent); }
 html[data-laolao-mode="metre"] .laolao-image-viewer__close {
   border: 1px solid var(--metre-line-strong);
   border-radius: 4px;
@@ -70,3 +55,18 @@ html[data-laolao-mode="metre"] :is(.chat-queue, .chat-queue__item) { animation: 
   from { opacity: 1; }
   to { opacity: 1; }
 }
+
+/* T3#5 复制键重复：碧琪的消息按键行（laolao-message-actions.css）想在有「复制 ▾」时藏掉原生「复制为 Markdown」，
+ * 但 2026.7.1-2 里原生键外面包了一层 openclaw-tooltip，那条 `> .chat-copy-btn` 的规则落空，助手消息底部出现两个复制键。openclaw-tooltip 自己在元素上写了 display: contents（内联），外层藏不掉，所以藏里面的原生按钮。只在 Metre 下生效；其他模式的同一问题交给对话区负责人。 */
+html[data-laolao-mode="metre"] .chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) > openclaw-tooltip > .chat-copy-btn { display: none; }
+
+/* T3#6 用户消息的「复制」「编辑」点不到：Metre 皮肤（laolao-metre-skin.css「11-14 气泡」）把按键行绝对定位到气泡右下角，
+ * 正好落在页脚右端的时间戳上；页脚在 DOM 里靠后，盖在按键上，两个键的中心点都点到时间戳（日夜 × 三宽都这样）。这里：有按键行的用户消息，页脚右边让出按键行的宽度（2 × 26 + 2 间距 + 8 留白 = 62px），时间戳排到按键左边；按键行提一层。 */
+html[data-laolao-mode="metre"] .chat-group.user:has(.pinkie-msg-row) .chat-group-footer { padding-right: 62px; box-sizing: border-box; }
+html[data-laolao-mode="metre"] .chat-group.user .chat-bubble > .pinkie-msg-row { z-index: 1; }
+
+/* T3#6 改了重发的编辑框在 820 宽时出界：碧琪的 .pinkie-msg-edit 固定 min-width: min(520px, 70vw)，
+ * Metre 对话栏 820 宽时只有 752，编辑框 367–887 超出窗口，「发送」键看不见。编辑时这组消息占满对话栏，气泡最宽 520、不超过对话栏。 */
+html[data-laolao-mode="metre"] .chat-group.user:has(.chat-bubble[data-pinkie-editing]) .chat-group-messages { width: 100%; max-width: 100%; }
+html[data-laolao-mode="metre"] .chat-group.user .chat-bubble[data-pinkie-editing] { box-sizing: border-box; width: min(520px, 100%); max-width: 100%; }
+html[data-laolao-mode="metre"] .chat-group.user .chat-bubble[data-pinkie-editing] .pinkie-msg-edit { min-width: 0; width: 100%; }

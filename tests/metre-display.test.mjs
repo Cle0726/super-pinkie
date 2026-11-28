@@ -86,6 +86,84 @@ test(`Metre attachment cards: one per row in a narrow window, unchanged when wid
   } finally { await browser.close(); }
 });
 
+// T3#5：原生「复制为 Markdown」包在 openclaw-tooltip 里，碧琪按键行在的时候 Metre 下要藏掉（改前两个复制键并排）。
+const copyPage = (mode) => `<!doctype html><html${mode ? ` data-laolao-mode="${mode}"` : ''}><head><style>${NATIVE}\n${read('laolao-message-actions.css')}\n${read('laolao-metre-display.css')}</style></head><body>
+<div class="chat-thread"><div class="chat-group assistant"><div class="chat-group-messages"><div class="chat-group-footer"><div class="chat-group-footer-actions">
+<openclaw-tooltip style="display:contents"><button class="btn btn--xs chat-copy-btn" id="native">复制为 Markdown</button></openclaw-tooltip>
+<div class="pinkie-msg-row pinkie-msg-row--assistant"><button class="pinkie-msg-btn" id="ours">复制</button></div>
+</div></div></div></div></div></body></html>`;
+async function copyKeys(browser, mode) {
+  const p = await browser.newPage({viewport: {width: 1440, height: 700}});
+  await p.setContent(copyPage(mode));
+  const r = await p.evaluate(() => ['native', 'ours'].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return b.width > 0 && b.height > 0; }));
+  await p.close();
+  return r;
+}
+
+test(`Metre message footer: one copy key, native Markdown copy hidden when ours is present (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const [native, ours] = await copyKeys(browser, 'metre');
+    assert.deepEqual([native, ours], [false, true], `Metre: native copy hidden, ours shown: ${JSON.stringify([native, ours])}`);
+    const [n2, o2] = await copyKeys(browser, 'chat');
+    assert.deepEqual([n2, o2], [true, true], `other modes untouched by this file: ${JSON.stringify([n2, o2])}`);
+  } finally { await browser.close(); }
+});
+
+// T3#6：用户消息的「复制」「编辑」被页脚时间戳压住、点不到（Metre 皮肤把按键行绝对定位到气泡右下角，正好落在时间戳上）。
+// 下面仿真页面：皮肤那条定位规则 + 原生页脚（时间戳靠右，opacity .72 自成一层，所以盖在按键上）。改后：两个键中心点得到自己，时间戳在按键行左边。
+const SKIN_ROW = 'html[data-laolao-mode="metre"] .chat-group.user .chat-bubble{position:relative}html[data-laolao-mode="metre"] .chat-group.user .pinkie-msg-row{position:absolute;right:0;top:100%;margin-top:4px}';
+const ROW_CSS = '.chat-group{display:flex;flex-direction:column;align-items:flex-end;width:756px}.chat-group-messages{display:flex;flex-direction:column;align-items:flex-end;width:100%}.chat-bubble{padding:10px 14px;border:1px solid #ccc}.pinkie-msg-row{display:flex;gap:2px}.pinkie-msg-btn{width:26px;height:26px;padding:0;border:0}.chat-group-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;width:514px;height:24px}.chat-group-timestamp{font-size:11px;white-space:nowrap;opacity:.72}';
+const userRowPage = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>${ROW_CSS}\n${SKIN_ROW}\n${read('laolao-metre-display.css')}</style></head><body>
+<div class="chat-thread" style="padding:40px"><div class="chat-group user"><div class="chat-group-messages"><div class="chat-bubble">把第三节的截图换掉<div class="pinkie-msg-row pinkie-msg-row--user"><button class="pinkie-msg-btn" id="cp">复</button><button class="pinkie-msg-btn" id="ed">编</button></div></div>
+<div class="chat-group-footer"><div class="chat-group-footer__meta"><time class="chat-group-timestamp" id="ts">2026年11月24日 3:19</time></div></div></div></div></div></body></html>`;
+
+test(`Metre user message: copy / edit keys are clickable, the timestamp sits to their left (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await browser.newPage({viewport: {width: 1000, height: 400}});
+    await p.setContent(userRowPage('metre'));
+    const r = await p.evaluate(() => {
+      const hit = (id) => { const n = document.getElementById(id), b = n.getBoundingClientRect(); return n.contains(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)); };
+      const ts = document.getElementById('ts').getBoundingClientRect(), row = document.querySelector('.pinkie-msg-row').getBoundingClientRect();
+      return {copy: hit('cp'), edit: hit('ed'), tsRight: Math.round(ts.right), rowLeft: Math.round(row.left)};
+    });
+    assert.ok(r.copy && r.edit, `both keys receive their own clicks: ${JSON.stringify(r)}`);
+    assert.ok(r.tsRight <= r.rowLeft, `timestamp ends before the key row starts: ${JSON.stringify(r)}`);
+    await p.close();
+    // 反例：其他模式这份文件不动页脚（不让出右边距）。
+    const q = await browser.newPage({viewport: {width: 1000, height: 400}});
+    await q.setContent(userRowPage('chat'));
+    const pad = await q.evaluate(() => getComputedStyle(document.querySelector('.chat-group-footer')).paddingRight);
+    assert.equal(pad, '0px', `other modes: footer keeps its native padding: ${pad}`);
+    await q.close();
+  } finally { await browser.close(); }
+});
+
+// T3#6：编辑框在 820 宽时出界（碧琪 .pinkie-msg-edit 固定 min-width: min(520px, 70vw)，Metre 对话栏 752 宽、消息列 max 68%）。
+const EDIT_CSS = '.chat-thread{width:752px;margin-left:34px}.chat-group{display:flex;justify-content:flex-end;width:100%}.chat-group-messages{width:100%;max-width:min(900px,68%);display:flex;flex-direction:column;align-items:flex-end}.chat-bubble{max-width:min(85%,600px);padding:9px 16px;border:1px solid #ccc}.pinkie-msg-edit{margin-top:8px;display:flex;flex-direction:column;gap:8px;min-width:min(520px,70vw)}.pinkie-msg-edit textarea{width:100%;box-sizing:border-box}.chat-bubble[data-pinkie-editing] > :not(.pinkie-msg-edit){display:none}';
+const editPage = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>body{margin:0}${EDIT_CSS}\n${read('laolao-metre-display.css')}</style></head><body>
+<div class="chat-thread" id="th"><div class="chat-group user"><div class="chat-group-messages"><div class="chat-bubble" data-pinkie-editing="1"><span>原文</span>
+<div class="pinkie-msg-edit" id="box"><textarea>再把链接都检查一遍</textarea><div><button id="send">发送</button></div></div></div></div></div></div></body></html>`;
+
+test(`Metre edit-and-resend box stays inside the thread at 820 and keeps a usable width (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await browser.newPage({viewport: {width: 820, height: 500}});
+    await p.setContent(editPage('metre'));
+    const r = await p.evaluate(() => { const b = document.getElementById('box').getBoundingClientRect(), t = document.getElementById('th').getBoundingClientRect(); return {l: Math.round(b.left), r: Math.round(b.right), w: Math.round(b.width), thL: Math.round(t.left), thR: Math.round(t.right)}; });
+    assert.ok(r.l >= r.thL && r.r <= r.thR, `edit box inside the thread: ${JSON.stringify(r)}`);
+    assert.ok(r.w >= 440, `edit box is still roomy: ${JSON.stringify(r)}`);
+    await p.close();
+    // 反例：其他模式这份文件不动编辑框（碧琪原来的 min-width 还在）。
+    const q = await browser.newPage({viewport: {width: 820, height: 500}});
+    await q.setContent(editPage('chat'));
+    const mw = await q.evaluate(() => getComputedStyle(document.getElementById('box')).minWidth);
+    assert.notEqual(mw, '0px', `other modes: edit box keeps its native min-width: ${mw}`);
+    await q.close();
+  } finally { await browser.close(); }
+});
+
 test('wiring: laolao-metre-display.css is in the head after the Metre keys and backstage, owned by the Metre region, Metre-only, and adds no !important', () => {
   const head = read('laolao-head.fragment.html');
   assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-keys\.css\?v=@hash">\n<script defer src="\/laolao-metre-backstage\.js\?v=@hash"><\/script>\n<link rel="stylesheet" href="\/laolao-metre-display\.css\?v=@hash">\n/);

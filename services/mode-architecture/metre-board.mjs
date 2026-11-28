@@ -16,6 +16,7 @@ import {agentOf, clipGraphemes, isInternalMessage, messageText, readSessionJson,
 import {isMetreKey} from './session-lineage.mjs';
 import {getActiveMetreLock} from './metre-lock.mjs';
 import {registerEngines} from './engines.mjs';
+import {registerEngineShip} from './pr-flow.mjs';
 
 export const RAW_LIMIT = 200;
 export const TIMELINE_LIMIT = 120;
@@ -447,6 +448,7 @@ export function registerMetreBoard(api, {root, lineage, plans = null, modelHealt
   const board = new MetreBoard({root, lineage, plans, modelHealth, metreRoleCatalog});
   // 外部引擎（T3 Code：Claude Code、Codex、Antigravity），briefs/metre-engines-1122。默认关，用户打开才装才跑。
   if (root) registerEngines(api, {base: path.dirname(root), register: registerSessionMethod, lineage, modelHealth}); // 没有状态目录（测试里）就不建引擎服务
+  if (root) registerEngineShip(api, {register: registerSessionMethod}); // T3 #22：引擎台「改动」面板的提交 / 开 PR（点了按钮、再确认才做）
   const safe = work => (event, ctx) => {
     if (activeLock()?.isLocked?.()) return;
     try { work(event, ctx); } catch { /* 看板记账出错不影响这一轮 */ }

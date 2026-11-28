@@ -68,9 +68,21 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
-  await t.test('H1 [HOTSPOTS #5/#30]: Windows native window controls are unobstructed and do not overlap topbar controls', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'sidebar-expanded', 'day');
+  // 同一 (scene, theme) 的子项共用一个页面：只读的排前面，会导航 / 折叠侧栏 / 往线程里塞节点的排在组末尾。
+  // pageErrors / failedRequests 是整页累计的，后面的子项连前面子项交互引出的错误一起查。
+  const onScenePage = async (sceneId, theme, run) => {
+    const started = Date.now();
+    const ctx = await openRealScenePage(browser, server.origin, sceneId, theme);
     try {
+      await run(ctx);
+    } finally {
+      await ctx.context.close();
+      t.diagnostic(`${sceneId}/${theme}: ${Date.now() - started}ms`);
+    }
+  };
+
+  await onScenePage('sidebar-expanded', 'day', async ({page, pageErrors, failedRequests}) => {
+    await t.test('H1 [HOTSPOTS #5/#30]: Windows native window controls are unobstructed and do not overlap topbar controls', async () => {
       assert.deepEqual(pageErrors, []);
       assert.deepEqual(failedRequests, []);
       await assertRealPageLoaded(page);
@@ -128,14 +140,60 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
           `topbar element ${item.desc} overlaps #pinkie-native-window-controls: item=${JSON.stringify(item.rect)} caption=${JSON.stringify(info.captionRect)}`,
         );
       }
-    } finally {
-      await context.close();
-    }
-  });
+    });
 
-  await t.test('H2 [HOTSPOTS #18/#30]: real sidebar width, session selection, and collapse expand chat-main', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'sidebar-expanded', 'day');
-    try {
+    await t.test('H4 [HOTSPOTS #30/#1]: real composer textarea and send button are unobstructed and accept input', async () => {
+      assert.deepEqual(pageErrors, []);
+      assert.deepEqual(failedRequests, []);
+      await assertRealPageLoaded(page);
+
+      const inputLoc = page.locator('.agent-chat__composer-combobox textarea').first();
+      await inputLoc.waitFor({state: 'visible', timeout: 5_000});
+
+      const beforeGeom = await page.evaluate(() => {
+        const ta = document.querySelector('.agent-chat__composer-combobox textarea');
+        const r = ta.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          rect: {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height},
+          hitMatches: hit === ta || ta.contains(hit),
+          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
+        };
+      });
+      assert.ok(beforeGeom.rect.height >= 24 && beforeGeom.rect.width >= 200, `composer textarea invalid rect: ${JSON.stringify(beforeGeom.rect)}`);
+      assert.ok(beforeGeom.rect.bottom <= VIEWPORT.height, `composer textarea clipped below viewport: ${JSON.stringify(beforeGeom.rect)}`);
+      assert.equal(beforeGeom.hitMatches, true, `composer textarea obscured at center by ${beforeGeom.hitDesc}`);
+
+      await inputLoc.click();
+      await inputLoc.fill('M5 真实页面热点回归输入检查');
+      assert.equal(await inputLoc.inputValue(), 'M5 真实页面热点回归输入检查');
+
+      const sendGeom = await page.evaluate(() => {
+        const btns = [...document.querySelectorAll('.agent-chat__input .chat-send-btn')];
+        const send = btns.find((b) => (
+          !b.classList.contains('chat-send-btn--stop')
+          && !b.classList.contains('chat-send-btn--laolao-dictation')
+          && !b.classList.contains('chat-send-btn--voice')
+          && b.getBoundingClientRect().width > 0
+        )) || btns.find((b) => b.getBoundingClientRect().width > 0);
+        if (!send) return {missing: true};
+        const r = send.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          missing: false,
+          rect: {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height},
+          hitMatches: hit === send || send.contains(hit),
+          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
+        };
+      });
+      assert.equal(sendGeom.missing, false, 'real send button must be present');
+      assert.equal(sendGeom.hitMatches, true, `real send button obscured at center by ${sendGeom.hitDesc}`);
+      // 复位：清空输入框，后面的 H2 切会话时不带草稿。
+      await inputLoc.fill('');
+    });
+
+    // 切会话 + 折叠侧栏会改页面状态，放本组最后。
+    await t.test('H2 [HOTSPOTS #18/#30]: real sidebar width, session selection, and collapse expand chat-main', async () => {
       assert.deepEqual(pageErrors, []);
       assert.deepEqual(failedRequests, []);
       await assertRealPageLoaded(page);
@@ -189,14 +247,11 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         after.mainW > before.mainW + 160,
         `collapsing sidebar must widen .chat-main by >160px: before=${before.mainW}px after=${after.mainW}px`,
       );
-    } finally {
-      await context.close();
-    }
+    });
   });
 
-  await t.test('H3 [HOTSPOTS #23]: real mode switcher opens menu in viewport and switches html[data-laolao-mode]', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'home-chat', 'day');
-    try {
+  await onScenePage('home-chat', 'day', async ({page, pageErrors, failedRequests}) => {
+    await t.test('H3 [HOTSPOTS #23]: real mode switcher opens menu in viewport and switches html[data-laolao-mode]', async () => {
       assert.deepEqual(pageErrors, []);
       assert.deepEqual(failedRequests, []);
       await assertRealPageLoaded(page);
@@ -238,245 +293,12 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         () => document.documentElement.getAttribute('data-laolao-mode') === 'project',
         {timeout: 10_000},
       );
-    } finally {
-      await context.close();
-    }
+    });
   });
 
-  await t.test('H4 [HOTSPOTS #30/#1]: real composer textarea and send button are unobstructed and accept input', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'sidebar-expanded', 'day');
-    try {
-      assert.deepEqual(pageErrors, []);
-      assert.deepEqual(failedRequests, []);
-      await assertRealPageLoaded(page);
-
-      const inputLoc = page.locator('.agent-chat__composer-combobox textarea').first();
-      await inputLoc.waitFor({state: 'visible', timeout: 5_000});
-
-      const beforeGeom = await page.evaluate(() => {
-        const ta = document.querySelector('.agent-chat__composer-combobox textarea');
-        const r = ta.getBoundingClientRect();
-        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        return {
-          rect: {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height},
-          hitMatches: hit === ta || ta.contains(hit),
-          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
-        };
-      });
-      assert.ok(beforeGeom.rect.height >= 24 && beforeGeom.rect.width >= 200, `composer textarea invalid rect: ${JSON.stringify(beforeGeom.rect)}`);
-      assert.ok(beforeGeom.rect.bottom <= VIEWPORT.height, `composer textarea clipped below viewport: ${JSON.stringify(beforeGeom.rect)}`);
-      assert.equal(beforeGeom.hitMatches, true, `composer textarea obscured at center by ${beforeGeom.hitDesc}`);
-
-      await inputLoc.click();
-      await inputLoc.fill('M5 真实页面热点回归输入检查');
-      assert.equal(await inputLoc.inputValue(), 'M5 真实页面热点回归输入检查');
-
-      const sendGeom = await page.evaluate(() => {
-        const btns = [...document.querySelectorAll('.agent-chat__input .chat-send-btn')];
-        const send = btns.find((b) => (
-          !b.classList.contains('chat-send-btn--stop')
-          && !b.classList.contains('chat-send-btn--laolao-dictation')
-          && !b.classList.contains('chat-send-btn--voice')
-          && b.getBoundingClientRect().width > 0
-        )) || btns.find((b) => b.getBoundingClientRect().width > 0);
-        if (!send) return {missing: true};
-        const r = send.getBoundingClientRect();
-        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        return {
-          missing: false,
-          rect: {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height},
-          hitMatches: hit === send || send.contains(hit),
-          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
-        };
-      });
-      assert.equal(sendGeom.missing, false, 'real send button must be present');
-      assert.equal(sendGeom.hitMatches, true, `real send button obscured at center by ${sendGeom.hitDesc}`);
-    } finally {
-      await context.close();
-    }
-  });
-
-  await t.test('H5 [HOTSPOTS #10]: real long conversation in .chat-thread preserves scrollTop across live updates', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'long-conversation', 'day');
-    try {
-      assert.deepEqual(pageErrors, []);
-      assert.deepEqual(failedRequests, []);
-      await assertRealPageLoaded(page);
-
-      const scrollCheck = await page.evaluate(async () => {
-        const thread = document.querySelector('.chat-thread');
-        if (!thread) return {missing: true};
-        // Ensure content exceeds viewport height for scrolling test
-        if (thread.scrollHeight <= thread.clientHeight + 200) {
-          for (let i = 0; i < 6; i += 1) {
-            const group = document.createElement('div');
-            group.className = 'chat-group user';
-            group.innerHTML = `<div class="chat-bubble"><div class="chat-text">长对话滚动保持探针消息 #${i + 1}：验证真实 .chat-thread 在尾部追加内容时不会跳回顶部。</div></div>`;
-            thread.appendChild(group);
-          }
-        }
-        const targetTop = Math.min(220, Math.floor((thread.scrollHeight - thread.clientHeight) / 2));
-        thread.scrollTop = targetTop;
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        const before = thread.scrollTop;
-
-        const tail = document.createElement('div');
-        tail.className = 'chat-group assistant';
-        tail.innerHTML = '<div class="chat-bubble"><div class="chat-text">尾部追加一条更新消息。</div></div>';
-        thread.appendChild(tail);
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        const after = thread.scrollTop;
-        return {
-          missing: false,
-          scrollHeight: thread.scrollHeight,
-          clientHeight: thread.clientHeight,
-          targetTop,
-          before,
-          after,
-        };
-      });
-
-      assert.equal(scrollCheck.missing, false, 'real .chat-thread must exist');
-      assert.ok(scrollCheck.scrollHeight > scrollCheck.clientHeight + 100, `thread must be scrollable: ${JSON.stringify(scrollCheck)}`);
-      assert.ok(Math.abs(scrollCheck.before - scrollCheck.targetTop) <= 4, `initial scrollTop drifted: ${JSON.stringify(scrollCheck)}`);
-      assert.ok(Math.abs(scrollCheck.after - scrollCheck.before) <= 4, `scrollTop jumped across DOM update: ${scrollCheck.before} -> ${scrollCheck.after}`);
-    } finally {
-      await context.close();
-    }
-  });
-
-  await t.test('H6 [HOTSPOTS #17]: real context compact / viewer popover opens inside viewport with clickable action', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'long-conversation', 'day');
-    try {
-      assert.deepEqual(pageErrors, []);
-      assert.deepEqual(failedRequests, []);
-      await assertRealPageLoaded(page);
-
-      const triggerSel = 'details.laolao-context-viewer > summary';
-      const trigger = page.locator(triggerSel).first();
-      await trigger.waitFor({state: 'visible', timeout: 10_000});
-      await trigger.click();
-      // 等弹层挂到 body 上（details 的 toggle 事件是异步的，laolao-context-compact.js 在那里才加 is-floating）
-      // 且它自己的 lcv-pop 入场动画（.18s，带 translate/scale，会影响量到的矩形）放完，再量位置。
-      // 等不到也不在这里报错：下面原有断言会给出原来的失败信息。
-      await page.waitForFunction(() => {
-        const el = document.querySelector('.laolao-context-viewer__popover.is-floating');
-        return Boolean(el) && el.getAnimations().every((a) => a.playState !== 'running');
-      }, null, {timeout: 5_000}).catch(() => {});
-
-      const pop = await page.evaluate(() => {
-        const el = document.querySelector('.laolao-context-viewer__popover.is-floating, details.laolao-context-viewer[open] .laolao-context-viewer__popover');
-        if (!el) return {missing: true};
-        const r = el.getBoundingClientRect();
-        const btn = el.querySelector('.laolao-context-viewer__compact, button');
-        const br = btn ? btn.getBoundingClientRect() : null;
-        const hit = br ? document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2) : null;
-        return {
-          missing: false,
-          rect: {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height},
-          hasButton: Boolean(btn),
-          btnHit: Boolean(btn && (hit === btn || btn.contains(hit))),
-          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
-        };
-      });
-
-      assert.equal(pop.missing, false, 'clicking details.laolao-context-viewer > summary must open context popover on real page');
-      assert.ok(pop.rect.width > 120 && pop.rect.height > 40, `context popover invalid size: ${JSON.stringify(pop.rect)}`);
-      assert.ok(
-        pop.rect.left >= 0 && pop.rect.top >= 0 && pop.rect.right <= VIEWPORT.width && pop.rect.bottom <= VIEWPORT.height,
-        `real context popover clipped outside viewport: ${JSON.stringify(pop.rect)}`,
-      );
-      assert.equal(pop.hasButton, true, 'context popover must contain .laolao-context-viewer__compact button');
-      assert.equal(pop.btnHit, true, `context popover action button obscured by ${pop.hitDesc}`);
-    } finally {
-      await context.close();
-    }
-  });
-
-  await t.test('H7 [HOTSPOTS #29/#28]: real study desk renders non-overlapping quiz options and selects choice on click', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'study-desk', 'day');
-    try {
-      assert.deepEqual(pageErrors, []);
-      assert.deepEqual(failedRequests, []);
-      await assertRealPageLoaded(page);
-
-      const rects = await page.evaluate(() => (
-        [...document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice')].map((el, idx) => {
-          const r = el.getBoundingClientRect();
-          return {idx, text: el.textContent?.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height};
-        })
-      ));
-      assert.equal(rects.length, 4, `real study desk must render 4 options, got ${rects.length}`);
-      for (let i = 0; i < rects.length; i += 1) {
-        assert.ok(rects[i].width > 80 && rects[i].height >= 28, `option ${i} invalid rect: ${JSON.stringify(rects[i])}`);
-        for (let j = i + 1; j < rects.length; j += 1) {
-          assert.equal(rectsOverlap(rects[i], rects[j]), false, `study desk options ${i} and ${j} overlap`);
-        }
-      }
-
-      await page.locator('.pk-drill .pk-drill-options .pk-choice').nth(1).click();
-      const selected = await page.evaluate(() => ({
-        choices: [...document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice')].map((el) => (
-          el.classList.contains('is-on') || el.getAttribute('aria-pressed') === 'true'
-        )),
-        checkDisabled: document.querySelector('.pk-drill-check')?.getAttribute('aria-disabled'),
-      }));
-      assert.equal(selected.choices[1], true, `clicking 2nd real study desk option must select it: ${JSON.stringify(selected)}`);
-      assert.notEqual(selected.checkDisabled, 'true', 'selecting an answer must enable .pk-drill-check');
-    } finally {
-      await context.close();
-    }
-  });
-
-  await t.test('H8 [HOTSPOTS #23/#30]: real Metre skin removes pink cast, mounts .pk-metre-board, and keeps footer buttons clickable', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'metre-board', 'day');
-    try {
-      assert.deepEqual(pageErrors, []);
-      assert.deepEqual(failedRequests, []);
-      await assertRealPageLoaded(page);
-
-      const info = await page.evaluate(() => {
-        const bg = getComputedStyle(document.body).backgroundColor;
-        const board = document.querySelector('.pk-metre-board');
-        const slots = board ? board.querySelectorAll('.pk-metre-board__card[data-metre-slot]').length : 0;
-        const footer = document.querySelector('.sidebar-footer-bar');
-        const settingsBtn = document.querySelector('.sidebar-footer-bar a.sidebar-footer-icon[aria-label="设置"], .sidebar-footer-bar .laolao-footer-more');
-        const sr = settingsBtn?.getBoundingClientRect();
-        const hit = sr ? document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2) : null;
-        return {
-          mode: document.documentElement.getAttribute('data-laolao-mode'),
-          bg,
-          hasBoard: Boolean(board && !board.hidden && board.getBoundingClientRect().height > 120),
-          slots,
-          footerPe: footer ? getComputedStyle(footer).pointerEvents : null,
-          settingsPe: settingsBtn ? getComputedStyle(settingsBtn).pointerEvents : null,
-          settingsHit: Boolean(settingsBtn && (hit === settingsBtn || settingsBtn.contains(hit))),
-          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
-        };
-      });
-
-      assert.equal(info.mode, 'metre');
-      assert.equal(info.hasBoard, true, 'real .pk-metre-board must be rendered with non-zero height');
-      assert.ok(info.slots >= 3, `expected >= 3 Metre board slots, got ${info.slots}`);
-      const rgb = parseRgb(info.bg);
-      assert.ok(rgb, `unable to parse real Metre body background: ${info.bg}`);
-      assert.ok(
-        rgb.r - rgb.b < 25 && Math.abs(rgb.r - rgb.g) < 15,
-        `real Metre body background should be neutral (no pink cast), got ${info.bg}`,
-      );
-      if (info.footerPe !== null) {
-        assert.equal(info.footerPe, 'none', '.sidebar-footer-bar must keep pointer-events: none');
-      }
-      assert.equal(info.settingsPe, 'auto', 'real settings footer button must keep pointer-events: auto');
-      assert.equal(info.settingsHit, true, `real settings button in Metre obscured by ${info.hitDesc}`);
-    } finally {
-      await context.close();
-    }
-  });
-
-  await t.test('H9 [HOTSPOTS #14/#30]: real tool/process cards stay within .chat-thread width and toggle expand/collapse', async () => {
-    const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'long-conversation', 'day');
-    try {
+  // long-conversation/day：H9 自己展开后再收回原高度（有断言兜底），排第一；H5 往 .chat-thread 塞节点，H6 打开浮层，放后面。
+  await onScenePage('long-conversation', 'day', async ({page, pageErrors, failedRequests}) => {
+    await t.test('H9 [HOTSPOTS #14/#30]: real tool/process cards stay within .chat-thread width and toggle expand/collapse', async () => {
       assert.deepEqual(pageErrors, []);
       assert.deepEqual(failedRequests, []);
       await assertRealPageLoaded(page);
@@ -552,11 +374,172 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       assert.equal(await runRow.getAttribute('aria-expanded'), 'false', 'clicking button.cle-run again must fold the group');
       const refoldedH = await groupH();
       assert.ok(Math.abs(refoldedH - foldedH) <= 2, `tool group must fold back: folded=${foldedH}, refolded=${refoldedH}`);
-    } finally {
-      await context.close();
-    }
+    });
+
+    await t.test('H5 [HOTSPOTS #10]: real long conversation in .chat-thread preserves scrollTop across live updates', async () => {
+      assert.deepEqual(pageErrors, []);
+      assert.deepEqual(failedRequests, []);
+      await assertRealPageLoaded(page);
+
+      const scrollCheck = await page.evaluate(async () => {
+        const thread = document.querySelector('.chat-thread');
+        if (!thread) return {missing: true};
+        // Ensure content exceeds viewport height for scrolling test
+        if (thread.scrollHeight <= thread.clientHeight + 200) {
+          for (let i = 0; i < 6; i += 1) {
+            const group = document.createElement('div');
+            group.className = 'chat-group user';
+            group.innerHTML = `<div class="chat-bubble"><div class="chat-text">长对话滚动保持探针消息 #${i + 1}：验证真实 .chat-thread 在尾部追加内容时不会跳回顶部。</div></div>`;
+            thread.appendChild(group);
+          }
+        }
+        const targetTop = Math.min(220, Math.floor((thread.scrollHeight - thread.clientHeight) / 2));
+        thread.scrollTop = targetTop;
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const before = thread.scrollTop;
+
+        const tail = document.createElement('div');
+        tail.className = 'chat-group assistant';
+        tail.innerHTML = '<div class="chat-bubble"><div class="chat-text">尾部追加一条更新消息。</div></div>';
+        thread.appendChild(tail);
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const after = thread.scrollTop;
+        return {
+          missing: false,
+          scrollHeight: thread.scrollHeight,
+          clientHeight: thread.clientHeight,
+          targetTop,
+          before,
+          after,
+        };
+      });
+
+      assert.equal(scrollCheck.missing, false, 'real .chat-thread must exist');
+      assert.ok(scrollCheck.scrollHeight > scrollCheck.clientHeight + 100, `thread must be scrollable: ${JSON.stringify(scrollCheck)}`);
+      assert.ok(Math.abs(scrollCheck.before - scrollCheck.targetTop) <= 4, `initial scrollTop drifted: ${JSON.stringify(scrollCheck)}`);
+      assert.ok(Math.abs(scrollCheck.after - scrollCheck.before) <= 4, `scrollTop jumped across DOM update: ${scrollCheck.before} -> ${scrollCheck.after}`);
+    });
+
+    await t.test('H6 [HOTSPOTS #17]: real context compact / viewer popover opens inside viewport with clickable action', async () => {
+      assert.deepEqual(pageErrors, []);
+      assert.deepEqual(failedRequests, []);
+      await assertRealPageLoaded(page);
+
+      const triggerSel = 'details.laolao-context-viewer > summary';
+      const trigger = page.locator(triggerSel).first();
+      await trigger.waitFor({state: 'visible', timeout: 10_000});
+      await trigger.click();
+      // 等弹层挂到 body 上（details 的 toggle 事件是异步的，laolao-context-compact.js 在那里才加 is-floating）
+      // 且它自己的 lcv-pop 入场动画（.18s，带 translate/scale，会影响量到的矩形）放完，再量位置。
+      // 等不到也不在这里报错：下面原有断言会给出原来的失败信息。
+      await page.waitForFunction(() => {
+        const el = document.querySelector('.laolao-context-viewer__popover.is-floating');
+        return Boolean(el) && el.getAnimations().every((a) => a.playState !== 'running');
+      }, null, {timeout: 5_000}).catch(() => {});
+
+      const pop = await page.evaluate(() => {
+        const el = document.querySelector('.laolao-context-viewer__popover.is-floating, details.laolao-context-viewer[open] .laolao-context-viewer__popover');
+        if (!el) return {missing: true};
+        const r = el.getBoundingClientRect();
+        const btn = el.querySelector('.laolao-context-viewer__compact, button');
+        const br = btn ? btn.getBoundingClientRect() : null;
+        const hit = br ? document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2) : null;
+        return {
+          missing: false,
+          rect: {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height},
+          hasButton: Boolean(btn),
+          btnHit: Boolean(btn && (hit === btn || btn.contains(hit))),
+          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
+        };
+      });
+
+      assert.equal(pop.missing, false, 'clicking details.laolao-context-viewer > summary must open context popover on real page');
+      assert.ok(pop.rect.width > 120 && pop.rect.height > 40, `context popover invalid size: ${JSON.stringify(pop.rect)}`);
+      assert.ok(
+        pop.rect.left >= 0 && pop.rect.top >= 0 && pop.rect.right <= VIEWPORT.width && pop.rect.bottom <= VIEWPORT.height,
+        `real context popover clipped outside viewport: ${JSON.stringify(pop.rect)}`,
+      );
+      assert.equal(pop.hasButton, true, 'context popover must contain .laolao-context-viewer__compact button');
+      assert.equal(pop.btnHit, true, `context popover action button obscured by ${pop.hitDesc}`);
+    });
   });
 
+  await onScenePage('study-desk', 'day', async ({page, pageErrors, failedRequests}) => {
+    await t.test('H7 [HOTSPOTS #29/#28]: real study desk renders non-overlapping quiz options and selects choice on click', async () => {
+      assert.deepEqual(pageErrors, []);
+      assert.deepEqual(failedRequests, []);
+      await assertRealPageLoaded(page);
+
+      const rects = await page.evaluate(() => (
+        [...document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice')].map((el, idx) => {
+          const r = el.getBoundingClientRect();
+          return {idx, text: el.textContent?.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height};
+        })
+      ));
+      assert.equal(rects.length, 4, `real study desk must render 4 options, got ${rects.length}`);
+      for (let i = 0; i < rects.length; i += 1) {
+        assert.ok(rects[i].width > 80 && rects[i].height >= 28, `option ${i} invalid rect: ${JSON.stringify(rects[i])}`);
+        for (let j = i + 1; j < rects.length; j += 1) {
+          assert.equal(rectsOverlap(rects[i], rects[j]), false, `study desk options ${i} and ${j} overlap`);
+        }
+      }
+
+      await page.locator('.pk-drill .pk-drill-options .pk-choice').nth(1).click();
+      const selected = await page.evaluate(() => ({
+        choices: [...document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice')].map((el) => (
+          el.classList.contains('is-on') || el.getAttribute('aria-pressed') === 'true'
+        )),
+        checkDisabled: document.querySelector('.pk-drill-check')?.getAttribute('aria-disabled'),
+      }));
+      assert.equal(selected.choices[1], true, `clicking 2nd real study desk option must select it: ${JSON.stringify(selected)}`);
+      assert.notEqual(selected.checkDisabled, 'true', 'selecting an answer must enable .pk-drill-check');
+    });
+  });
+
+  await onScenePage('metre-board', 'day', async ({page, pageErrors, failedRequests}) => {
+    await t.test('H8 [HOTSPOTS #23/#30]: real Metre skin removes pink cast, mounts .pk-metre-board, and keeps footer buttons clickable', async () => {
+      assert.deepEqual(pageErrors, []);
+      assert.deepEqual(failedRequests, []);
+      await assertRealPageLoaded(page);
+
+      const info = await page.evaluate(() => {
+        const bg = getComputedStyle(document.body).backgroundColor;
+        const board = document.querySelector('.pk-metre-board');
+        const slots = board ? board.querySelectorAll('.pk-metre-board__card[data-metre-slot]').length : 0;
+        const footer = document.querySelector('.sidebar-footer-bar');
+        const settingsBtn = document.querySelector('.sidebar-footer-bar a.sidebar-footer-icon[aria-label="设置"], .sidebar-footer-bar .laolao-footer-more');
+        const sr = settingsBtn?.getBoundingClientRect();
+        const hit = sr ? document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2) : null;
+        return {
+          mode: document.documentElement.getAttribute('data-laolao-mode'),
+          bg,
+          hasBoard: Boolean(board && !board.hidden && board.getBoundingClientRect().height > 120),
+          slots,
+          footerPe: footer ? getComputedStyle(footer).pointerEvents : null,
+          settingsPe: settingsBtn ? getComputedStyle(settingsBtn).pointerEvents : null,
+          settingsHit: Boolean(settingsBtn && (hit === settingsBtn || settingsBtn.contains(hit))),
+          hitDesc: hit ? `${hit.tagName}#${hit.id}.${hit.className}` : null,
+        };
+      });
+
+      assert.equal(info.mode, 'metre');
+      assert.equal(info.hasBoard, true, 'real .pk-metre-board must be rendered with non-zero height');
+      assert.ok(info.slots >= 3, `expected >= 3 Metre board slots, got ${info.slots}`);
+      const rgb = parseRgb(info.bg);
+      assert.ok(rgb, `unable to parse real Metre body background: ${info.bg}`);
+      assert.ok(
+        rgb.r - rgb.b < 25 && Math.abs(rgb.r - rgb.g) < 15,
+        `real Metre body background should be neutral (no pink cast), got ${info.bg}`,
+      );
+      if (info.footerPe !== null) {
+        assert.equal(info.footerPe, 'none', '.sidebar-footer-bar must keep pointer-events: none');
+      }
+      assert.equal(info.settingsPe, 'auto', 'real settings footer button must keep pointer-events: auto');
+      assert.equal(info.settingsHit, true, `real settings button in Metre obscured by ${info.hitDesc}`);
+    });
+  });
+
+  // H10 日 / 夜主题在建上下文时就定了（colorScheme + init script），没法同页切换，仍开两页。
   await t.test('H10 [HOTSPOTS #27/#30]: real night mode drops luminance, mounts pinkie-buddy, and keeps model picker readable in viewport', async () => {
     const dayCtx = await openRealScenePage(browser, server.origin, 'model-picker', 'day');
     let dayLum;

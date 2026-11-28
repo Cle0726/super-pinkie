@@ -1093,7 +1093,7 @@
       const node = button(label, "pinkie-user-settings__choice", group, () => value === "custom" ? show({...proxy, mode: "custom"}) : save(value));
       proxy.buttons.set(value, node);
     }
-    input.addEventListener("keydown", event => { if (event.key === "Enter") save("custom"); });
+    input.addEventListener("keydown", event => { if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) save("custom"); });
     const load = async () => {
       const api = proxyApi();
       if (!api?.browser_proxy_get) return;

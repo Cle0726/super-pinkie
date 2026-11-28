@@ -13,6 +13,7 @@ import {
   installRealControlUi,
   launchRealBrowser,
   openRealScenePage,
+  settleRealPage,
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
 
@@ -62,16 +63,35 @@ const ratio = (a, b) => { const x = lum(nums(a)), y = lum(nums(b)); return (Math
 const pinkish = (s) => { const [r, g, b] = nums(s); return r - g > 25 && b - g > 5; };
 
 test('B23: Windows caption capsule uses the Metre palette in Metre (day and night), stays pink elsewhere; removing the rules brings the pink back', {timeout: 240_000}, async (t) => {
-  let installed, server, browser;
+  let installed, server, browser, context, page;
   // B55: cleanup first, so a browser that fails to launch cannot leave the server open.
-  t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
+  // Reverse order (context → browser → server → install), each layer in try/finally.
+  t.after(async () => {
+    try { await context?.close(); } finally {
+      try { await browser?.close(); } finally {
+        try { await server?.close(); } finally { installed?.cleanup(); }
+      }
+    }
+  });
   installed = installRealControlUi({repoRoot: REPO_ROOT});
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
-  for (const theme of ['day', 'night']) {
-    const {context, page} = await openRealScenePage(browser, server.origin, 'metre-board', theme);
-    try {
+  // macOS WebKit 的 newPage 每次约 10s。Metre 夜间只看属性（[data-pinkie-night] / [data-theme="dark"]），
+  // 所以 metre-board 只开一页：先量夜间，再页内切到日间重新 settle 后量；删规则的反例会污染页面，放在这一页最后。
+  ({context, page} = await openRealScenePage(browser, server.origin, 'metre-board', 'night'));
+  try {
+    for (const theme of ['night', 'day']) {
+      if (theme === 'day') {
+        await page.emulateMedia({colorScheme: 'light'});
+        await settleRealPage(page, 'day');
+        const attrs = await page.evaluate(() => ({
+          night: document.documentElement.hasAttribute('data-pinkie-night'),
+          theme: document.documentElement.getAttribute('data-theme'),
+        }));
+        assert.equal(attrs.night, false, '页内切到日间后 data-pinkie-night 还在，量到的仍是夜间');
+        assert.notEqual(attrs.theme, 'dark', '页内切到日间后 data-theme 仍是 dark，量到的仍是夜间');
+      }
       const m = await page.evaluate(readCaption);
       assert.notEqual(m.missing, true, `${theme}：胶囊没挂上`);
       assert.equal(m.mode, 'metre');
@@ -89,14 +109,15 @@ test('B23: Windows caption capsule uses the Metre palette in Metre (day and nigh
         assert.match(back.bgImage, /gradient/, '反例没生效：删掉后胶囊仍没有粉色渐变底');
         assert.equal(back.star, 'rgb(217, 80, 141)', '反例没生效：删掉后更新星应退回 #d9508d');
       }
-    } finally { await context.close(); }
-  }
+    }
+  } finally { await context.close(); context = undefined; }
 
-  const {context, page} = await openRealScenePage(browser, server.origin, 'sidebar-expanded', 'day');
+  // sidebar-expanded 要另一条 session URL 和场景初始化脚本，openRealScenePage 不接已有页，所以单独开一页。
+  ({context, page} = await openRealScenePage(browser, server.origin, 'sidebar-expanded', 'day'));
   try {
     const m = await page.evaluate(readCaption);
     assert.notEqual(m.mode, 'metre');
     assert.match(m.bgImage, /gradient/, '非 Metre：胶囊应保留原来的粉色渐变底');
     assert.equal(m.star, 'rgb(217, 80, 141)', '非 Metre：更新星保留 #d9508d');
-  } finally { await context.close(); }
+  } finally { await context.close(); context = undefined; }
 });

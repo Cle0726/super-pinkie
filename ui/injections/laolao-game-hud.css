@@ -40,7 +40,7 @@
 #pinkie-study-desk .pkg-cell small{font:600 9.5px/1 var(--pkg-latin);letter-spacing:.24em;color:var(--pkg-ink-3);margin-top:4px}
 #pinkie-study-desk .pkg-glyph{display:inline-flex;width:20px;height:20px}
 #pinkie-study-desk .pkg-glyph svg{width:100%;height:100%}
-#pinkie-study-desk .pkg-glyph[data-kind="stars"]{color:#D99A1E}
+#pinkie-study-desk .pkg-glyph[data-kind="stars"]{color:#946414}
 #pinkie-study-desk .pkg-glyph[data-kind="seals"]{color:var(--pkg-gold)}
 #pinkie-study-desk .pkg-glyph[data-kind="shards"]{color:#6E7FD8}
 #pinkie-study-desk[data-theme="night"] .pkg-glyph[data-kind="stars"]{color:var(--st-glyph,#F2C14E)}
