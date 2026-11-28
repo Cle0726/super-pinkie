@@ -124,31 +124,33 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
     // 可见文字跟着环境变；title 两档一样，断言只看状态，不看字体。
     const band = () => tab.evaluate(() => [...document.querySelectorAll('.pk-metre-backstage:not(.pk-metre-backstage--probe) .pk-bs__seg')].map((n) => n.title).join(' '));
     const hasSync = () => tab.evaluate(() => Boolean(document.querySelector('.pk-metre-backstage .pk-bs__sync')));
+    // 带子自己靠一次性 setTimeout 重渲（3 秒不同步、2 秒已对齐都是真计时器），等的是这份标题文字变成某个值，不是数固定毫秒
+    const bandHas = (text, timeout = 5000) => tab.waitForFunction((t) => [...document.querySelectorAll('.pk-metre-backstage:not(.pk-metre-backstage--probe) .pk-bs__seg')].map((n) => n.title).join(' ').includes(t), text, {timeout});
     await tick(); sw.lap('L109:tick');
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
     // 1. 页面以为在跑、后台空闲：不到 3 秒不喊；过了 3 秒自己变成「不同步」（中间没有任何事件，靠带子自己的一次性复查）
     await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = 'stuck-run'; }); sw.lap('L112:evaluate');
     await tick(); sw.lap('L113:tick');
-    await tab.waitForTimeout(1200); sw.lap('L114:waitForTimeout');
+    await bandHas('页面在等回复'); sw.lap('L114:bandHas');
     assert.match(await band(), /本轮 后台空闲 · 页面在等回复/);
     assert.equal(await hasSync(), false);
-    await tab.waitForTimeout(2400); sw.lap('L117:waitForTimeout');
+    await bandHas('不同步 · 后台空闲 · 页面在等回复'); sw.lap('L117:bandHas');
     assert.match(await band(), /不同步 · 后台空闲 · 页面在等回复/, 'page waiting but the backend is idle is unsynced too');
     assert.equal(await hasSync(), true, 'and offers 同步');
     // 2. 页面自己被清掉（已有代码约 4 秒后会清）：先说「已和后台对齐」，停 2 秒再回常态
     await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = null; }); sw.lap('L121:evaluate');
-    await tab.waitForTimeout(800); sw.lap('L122:waitForTimeout');
+    await bandHas('已和后台对齐'); sw.lap('L122:bandHas');
     assert.match(await band(), /本轮 已和后台对齐/);
-    await tab.waitForTimeout(2000); sw.lap('L124:waitForTimeout');
+    await bandHas('后台空闲 · 页面停着'); sw.lap('L124:bandHas');
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
     // 3. 反方向：后台在跑、页面停着；过了 3 秒「不同步」，点「同步」以后后台这一轮也结束了 → 「已和后台对齐」→ 常态
     await tab.evaluate(() => { window.ACTIVE = true; window.FINISH_ON_REFRESH = false; }); sw.lap('L127:evaluate');
     await tick(); sw.lap('L128:tick');
-    await tab.waitForTimeout(3600); sw.lap('L129:waitForTimeout');
+    await bandHas('不同步 · 后台在跑 · 页面停着'); sw.lap('L129:bandHas');
     assert.match(await band(), /不同步 · 后台在跑 · 页面停着/);
     await tab.evaluate(() => { window.FINISH_ON_REFRESH = true; document.querySelector('.pk-metre-backstage .pk-bs__sync').click(); }); sw.lap('L131:evaluate');
     await tab.waitForFunction(() => /已和后台对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe) [data-seg="run"]')?.title || ''), null, {timeout: 3000}); sw.lap('L132:waitForFunction');
-    await tab.waitForTimeout(2600); sw.lap('L133:waitForTimeout');
+    await bandHas('后台空闲 · 页面停着'); sw.lap('L133:bandHas');
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
   } finally { await context.close(); sw.lap('close'); sw.done(); }
 });
